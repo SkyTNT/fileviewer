@@ -1,6 +1,7 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useFileStore } from './stores/fileStore.js'
+import { useAuthStore } from './stores/authStore.js'
 import { useFileOpener } from './composables/useFileOpener.js'
 import { useAppTheme } from './composables/useAppTheme.js'
 import DirectoryTree from './components/sidebar/DirectoryTree.vue'
@@ -14,8 +15,10 @@ import JsonViewer from './components/viewers/JsonViewer.vue'
 import TextViewer from './components/viewers/TextViewer.vue'
 import MediaPlayer from './components/viewers/MediaPlayer.vue'
 import HexViewer from './components/viewers/HexViewer.vue'
+import LoginPage from './components/LoginPage.vue'
 
-const store = useFileStore()
+const store     = useFileStore()
+const authStore = useAuthStore()
 const { activeViewer, activeFile, openFile, closeViewer } = useFileOpener()
 const appTheme = useAppTheme()
 
@@ -63,11 +66,23 @@ function startResize(e) {
   window.addEventListener('mouseup', onUp)
 }
 
-onMounted(() => {
+onMounted(async () => {
   const saved = localStorage.getItem('fv-sidebar-width')
   if (saved) sidebarWidth.value = parseInt(saved)
   appTheme.init()
-  store.init()
+
+  // Listen for 401s emitted by axios interceptor
+  window.addEventListener('fv:unauthorized', () => {
+    authStore.loggedIn = false
+  })
+
+  await authStore.checkStatus()
+  if (authStore.loggedIn) store.init()
+})
+
+// Once logged in (after login form submit), bootstrap the app
+watch(() => authStore.loggedIn, (v) => {
+  if (v) store.init()
 })
 
 function handleOpenFile(file) {
@@ -137,7 +152,7 @@ function handleOpenFile(file) {
       :width="280"
       @update:model-value="v => { if (!v) store.selectEntry(null) }"
     >
-      <FileDetail />
+      <FileDetail @open-file="handleOpenFile" />
     </v-navigation-drawer>
 
     <!-- Viewers (portals / dialogs) -->
@@ -152,6 +167,9 @@ function handleOpenFile(file) {
       <v-icon class="mr-2">mdi-alert-circle-outline</v-icon>
       {{ snackbarText }}
     </v-snackbar>
+
+    <!-- Login overlay — shown when auth is required and not logged in -->
+    <LoginPage v-if="!authStore.checking && authStore.authRequired && !authStore.loggedIn" />
   </v-app>
 </template>
 

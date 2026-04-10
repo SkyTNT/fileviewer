@@ -1,6 +1,22 @@
 import axios from 'axios'
 
-const http = axios.create({ baseURL: '/api' })
+const http = axios.create({ baseURL: '/api', withCredentials: true })
+
+http.interceptors.response.use(
+  r => r,
+  err => {
+    if (err.response?.status === 401) {
+      window.dispatchEvent(new CustomEvent('fv:unauthorized'))
+    }
+    return Promise.reject(err)
+  }
+)
+
+export const authApi = {
+  status:  ()                   => http.get('/auth/status'),
+  login:   (username, password) => http.post('/auth/login', { username, password }),
+  logout:  ()                   => http.post('/auth/logout'),
+}
 
 export const configApi = {
   getConfig: () => http.get('/config'),

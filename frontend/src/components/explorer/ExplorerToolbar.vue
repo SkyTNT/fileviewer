@@ -1,12 +1,39 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useFileStore } from '../../stores/fileStore.js'
+import { useAuthStore } from '../../stores/authStore.js'
 import { useAppTheme, ACCENT_COLORS } from '../../composables/useAppTheme.js'
 import { writeApi } from '../../services/api.js'
 
 defineEmits(['toggle-sidebar'])
-const store = useFileStore()
+const store     = useFileStore()
+const authStore = useAuthStore()
 const { isDark, accentColor, toggleMode, setAccent } = useAppTheme()
+
+// Abbreviated breadcrumbs for long paths
+const displayCrumbs = computed(() => {
+  const crumbs = store.breadcrumbs
+  if (crumbs.length <= 2) return crumbs
+
+  const root   = crumbs[0]
+  const last   = crumbs[crumbs.length - 1]
+  const middle = crumbs.slice(1, -1)
+
+  const totalLen = crumbs.slice(1).reduce((s, c) => s + c.name.length, 0)
+
+  // Short enough — show full
+  if (totalLen <= 30 && middle.length <= 3) return crumbs
+
+  // Abbreviate middle segments to first letter
+  const abbr = middle.map(c => ({ ...c, displayName: c.name.charAt(0) }))
+
+  if (abbr.length <= 3) {
+    return [root, ...abbr, last]
+  }
+
+  // Too many — collapse oldest to '...' and keep last 2 abbreviated
+  return [root, { name: '...', path: null }, ...abbr.slice(-2), last]
+})
 
 // ── New Folder ────────────────────────────────────────────────────────────────
 const mkdirDialog  = ref(false)
@@ -92,20 +119,29 @@ async function onFilesSelected(e) {
   <!-- Sidebar toggle -->
   <v-app-bar-nav-icon @click="$emit('toggle-sidebar')" />
 
-  <!-- Breadcrumbs -->
-  <v-breadcrumbs :items="store.breadcrumbs" density="compact" class="pa-0">
-    <template #prepend>
-      <v-icon size="16" class="mr-1" color="medium-emphasis">mdi-folder-outline</v-icon>
-    </template>
-    <template #item="{ item }">
-      <v-breadcrumbs-item class="text-body-2" style="cursor:pointer" @click="store.navigate(item.path)">
-        {{ item.name }}
-      </v-breadcrumbs-item>
-    </template>
-    <template #divider>
-      <v-icon size="14" color="medium-emphasis">mdi-chevron-right</v-icon>
-    </template>
-  </v-breadcrumbs>
+  <!-- Breadcrumbs (shrinkable so long paths don't squash buttons) -->
+  <div style="flex-shrink:1; min-width:0; overflow:hidden">
+    <v-breadcrumbs :items="displayCrumbs" density="compact" class="pa-0" style="flex-wrap:nowrap">
+      <template #prepend>
+        <v-icon size="16" class="mr-1" color="medium-emphasis">mdi-folder-outline</v-icon>
+      </template>
+      <template #item="{ item }">
+        <v-breadcrumbs-item
+          class="text-body-2"
+          :style="item.path != null ? { cursor:'pointer' } : { cursor:'default', opacity:0.5 }"
+          @click="item.path != null && store.navigate(item.path)"
+        >
+          {{ item.displayName ?? item.name }}
+          <v-tooltip v-if="item.displayName" activator="parent" location="bottom">
+            {{ item.name }}
+          </v-tooltip>
+        </v-breadcrumbs-item>
+      </template>
+      <template #divider>
+        <v-icon size="14" color="medium-emphasis">mdi-chevron-right</v-icon>
+      </template>
+    </v-breadcrumbs>
+  </div>
 
   <v-spacer />
 
@@ -148,6 +184,12 @@ async function onFilesSelected(e) {
       <v-tooltip activator="parent">List</v-tooltip>
     </v-btn>
   </v-btn-toggle>
+
+  <!-- Logout (only when auth is enabled) -->
+  <v-btn v-if="authStore.authRequired" icon size="small" class="mr-1" @click="authStore.logout">
+    <v-icon size="20">mdi-logout</v-icon>
+    <v-tooltip activator="parent">Logout</v-tooltip>
+  </v-btn>
 
   <!-- Dark / Light toggle -->
   <v-btn icon size="small" class="mr-1" @click="toggleMode">

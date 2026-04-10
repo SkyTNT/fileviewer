@@ -5,8 +5,19 @@ import { imagesApi, filesApi, textApi } from '../../services/api.js'
 import { writeApi } from '../../services/api.js'
 import JsonNode from '../viewers/JsonNode.vue'
 
+const emit  = defineEmits(['open-file'])
 const store = useFileStore()
 const file  = computed(() => store.selectedEntry)
+
+function openEntry() {
+  if (!file.value) return
+  if (file.value.is_dir) {
+    store.navigate(file.value.path)
+    store.selectEntry(null)
+  } else {
+    emit('open-file', file.value)
+  }
+}
 
 const isImage = computed(() => file.value?.type === 'image')
 
@@ -143,12 +154,23 @@ async function confirmDelete() {
 
     <!-- Action buttons -->
     <div class="px-3 pt-3 d-flex flex-column ga-2">
+      <!-- Open -->
+      <v-btn
+        color="primary"
+        variant="tonal"
+        block
+        :prepend-icon="file.is_dir ? 'mdi-folder-open-outline' : 'mdi-open-in-app'"
+        @click="openEntry"
+      >
+        Open
+      </v-btn>
+
       <!-- Download (files only) -->
       <v-btn
         v-if="!file.is_dir"
         :href="filesApi.downloadUrl(file.path)"
         :download="file.name"
-        color="primary"
+        color="secondary"
         variant="tonal"
         block
         prepend-icon="mdi-download"

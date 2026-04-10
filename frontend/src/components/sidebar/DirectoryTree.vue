@@ -1,12 +1,14 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { filesApi } from '../../services/api.js'
 import { useFileStore } from '../../stores/fileStore.js'
+import { useAuthStore } from '../../stores/authStore.js'
 import TreeNode from './TreeNode.vue'
 
-const store      = useFileStore()
-const rootNodes  = ref([])
-const loading    = ref(false)
+const store     = useFileStore()
+const authStore = useAuthStore()
+const rootNodes = ref([])
+const loading   = ref(false)
 
 async function loadRoot() {
   loading.value = true
@@ -17,7 +19,8 @@ async function loadRoot() {
   finally  { loading.value = false }
 }
 
-onMounted(loadRoot)
+onMounted(() => { if (authStore.loggedIn) loadRoot() })
+watch(() => authStore.loggedIn, (v) => { if (v) loadRoot() })
 </script>
 
 <template>
