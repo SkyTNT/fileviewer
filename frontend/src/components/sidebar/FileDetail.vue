@@ -20,6 +20,8 @@ function openEntry() {
 }
 
 const isImage = computed(() => file.value?.type === 'image')
+const imgError = ref(false)
+watch(file, () => { imgError.value = false })
 
 // Same-name .json meta file
 const metaData    = ref(null)
@@ -144,10 +146,11 @@ async function confirmDelete() {
     <!-- Preview -->
     <div class="preview-area pa-4 d-flex align-center justify-center">
       <img
-        v-if="isImage"
+        v-if="isImage && !imgError"
         :src="imagesApi.thumbnailUrl(file.path, 400)"
         class="preview-img"
         :alt="file.name"
+        @error="imgError = true"
       />
       <v-icon v-else :color="typeColor" size="80">{{ typeIcon }}</v-icon>
     </div>

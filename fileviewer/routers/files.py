@@ -1,3 +1,4 @@
+import os
 import re
 from pathlib import Path
 from fastapi import APIRouter, Query, HTTPException
@@ -49,19 +50,24 @@ def list_directory(
         except re.error as e:
             raise HTTPException(status_code=400, detail=f"Invalid regex: {e}")
 
-    all_entries = []
+    # Use scandir so is_dir() / name come from the OS directory cache (no stat per entry)
     try:
-        for p in sorted(dir_path.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
-            if pattern is None or pattern.search(p.name):
-                all_entries.append(entry_info(p))
+        with os.scandir(dir_path) as it:
+            all_entries = sorted(
+                (e for e in it if pattern is None or pattern.search(e.name)),
+                key=lambda e: (not e.is_dir(), e.name.lower()),
+            )
     except PermissionError:
-        pass
+        all_entries = []
 
     total = len(all_entries)
     start = (page - 1) * page_size
+    # stat() is called only for the current page's entries
+    page_entries = [entry_info(Path(e.path)) for e in all_entries[start : start + page_size]]
+
     return {
         "path": to_rel(dir_path),
-        "entries": all_entries[start : start + page_size],
+        "entries": page_entries,
         "total": total,
         "page": page,
         "page_size": page_size,

@@ -15,6 +15,7 @@ const isImage = computed(() => props.file.type === 'image')
 const thumbnailUrl = computed(() =>
   isImage.value ? imagesApi.thumbnailUrl(props.file.path, 400) : null
 )
+const imgError = ref(false)
 
 const TYPE_ICON = {
   directory: 'mdi-folder',
@@ -144,14 +145,15 @@ async function confirmDelete() {
   >
     <!-- Image thumbnail -->
     <img
-      v-if="isImage"
+      v-if="isImage && !imgError"
       :src="thumbnailUrl"
       :alt="file.name"
       loading="lazy"
       class="thumb-img"
+      @error="imgError = true"
     />
 
-    <!-- Non-image icon area -->
+    <!-- Non-image icon area (also used as fallback when image fails to load) -->
     <div v-else class="icon-area d-flex flex-column align-center justify-center">
       <v-icon :color="typeColor" size="48">{{ typeIcon }}</v-icon>
       <v-chip
