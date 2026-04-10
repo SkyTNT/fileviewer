@@ -55,6 +55,7 @@ async function confirmMkdir() {
   try {
     await writeApi.mkdir(store.currentPath, name)
     mkdirDialog.value = false
+    store.invalidateTree()
     store.loadDirectory(store.currentPath)
   } catch (e) {
     mkdirError.value = e.response?.data?.detail || e.message

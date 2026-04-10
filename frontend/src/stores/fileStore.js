@@ -14,6 +14,9 @@ export const useFileStore = defineStore('file', () => {
   const total         = ref(0)
   const selectedEntry = ref(null)
   const writeMode     = ref(false)
+  const treeRevision  = ref(0)
+
+  function invalidateTree() { treeRevision.value++ }
 
   const breadcrumbs = computed(() => {
     const parts = currentPath.value.split('/').filter(Boolean)
@@ -101,7 +104,7 @@ export const useFileStore = defineStore('file', () => {
 
   return {
     rootName, currentPath, entries, loading, error, viewMode, breadcrumbs,
-    page, pageSize, total, selectedEntry, writeMode,
-    init, loadDirectory, goToPage, navigate, selectEntry,
+    page, pageSize, total, selectedEntry, writeMode, treeRevision,
+    init, loadDirectory, goToPage, navigate, selectEntry, invalidateTree,
   }
 })

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, toRef } from 'vue'
 import { filesApi } from '../../services/api.js'
 import { useFileStore } from '../../stores/fileStore.js'
 
@@ -15,8 +15,8 @@ const children = ref([])
 const loading  = ref(false)
 const itemRef  = ref(null)
 
-async function loadChildren() {
-  if (children.value.length > 0 || loading.value) return
+async function loadChildren(force = false) {
+  if (!force && (children.value.length > 0 || loading.value)) return
   loading.value = true
   try {
     const res  = await filesApi.getTree(props.node.path, 1)
@@ -24,6 +24,11 @@ async function loadChildren() {
   } catch { children.value = [] }
   finally  { loading.value = false }
 }
+
+// When the tree is invalidated (write op), refresh children if expanded
+watch(() => store.value.treeRevision, () => {
+  if (expanded.value) loadChildren(true)
+})
 
 async function toggle(e) {
   e.stopPropagation()

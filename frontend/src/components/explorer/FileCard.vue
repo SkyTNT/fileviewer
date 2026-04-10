@@ -97,6 +97,7 @@ async function confirmRename() {
   try {
     await writeApi.rename(props.file.path, newName)
     renameDialog.value = false
+    store.invalidateTree()
     store.loadDirectory(store.currentPath)
   } catch (e) {
     renameError.value = e.response?.data?.detail || e.message
@@ -119,6 +120,7 @@ async function confirmDelete() {
   try {
     await writeApi.delete(props.file.path)
     deleteDialog.value = false
+    store.invalidateTree()
     store.loadDirectory(store.currentPath)
   } catch (e) {
     console.error('Delete failed', e)

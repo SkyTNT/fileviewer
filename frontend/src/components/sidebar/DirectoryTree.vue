@@ -20,7 +20,8 @@ async function loadRoot() {
 }
 
 onMounted(() => { if (authStore.loggedIn) loadRoot() })
-watch(() => authStore.loggedIn, (v) => { if (v) loadRoot() })
+watch(() => authStore.loggedIn,   (v) => { if (v) loadRoot() })
+watch(() => store.treeRevision,   ()  => { loadRoot() })
 </script>
 
 <template>

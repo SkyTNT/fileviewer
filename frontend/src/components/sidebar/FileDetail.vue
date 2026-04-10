@@ -99,6 +99,7 @@ async function confirmRename() {
     await writeApi.rename(file.value.path, newName)
     renameDialog.value = false
     store.selectEntry(null)
+    store.invalidateTree()
     store.loadDirectory(store.currentPath)
   } catch (e) {
     renameError.value = e.response?.data?.detail || e.message
@@ -117,6 +118,7 @@ async function confirmDelete() {
     await writeApi.delete(file.value.path)
     deleteDialog.value = false
     store.selectEntry(null)
+    store.invalidateTree()
     store.loadDirectory(store.currentPath)
   } catch (e) {
     console.error('Delete failed', e)

@@ -97,6 +97,7 @@ async function confirmRename() {
   try {
     await writeApi.rename(ctxTarget.value.path, newName)
     renameDialog.value = false
+    store.invalidateTree()
     store.loadDirectory(store.currentPath)
   } catch (e) {
     renameError.value = e.response?.data?.detail || e.message
@@ -119,6 +120,7 @@ async function confirmDelete() {
   try {
     await writeApi.delete(ctxTarget.value.path)
     deleteDialog.value = false
+    store.invalidateTree()
     store.loadDirectory(store.currentPath)
   } catch (e) {
     console.error('Delete failed', e)
