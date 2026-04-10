@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, nextTick, toRef } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import { filesApi } from '../../services/api.js'
 import { useFileStore } from '../../stores/fileStore.js'
 
@@ -9,7 +9,7 @@ const props = defineProps({
   revealPath: { type: String, default: '' },
 })
 
-const store    = ref(useFileStore())
+const store    = useFileStore()
 const expanded = ref(false)
 const children = ref([])
 const loading  = ref(false)
@@ -26,7 +26,7 @@ async function loadChildren(force = false) {
 }
 
 // When the tree is invalidated (write op), refresh children if expanded
-watch(() => store.value.treeRevision, () => {
+watch(() => store.treeRevision, () => {
   if (expanded.value) loadChildren(true)
 })
 
@@ -37,12 +37,12 @@ async function toggle(e) {
 }
 
 function navigate() {
-  store.value.navigate(props.node.path)
+  store.navigate(props.node.path)
 }
 
 // Scroll into view when this node becomes the active one
 watch(
-  () => store.value.currentPath === props.node.path,
+  () => store.currentPath === props.node.path,
   async (isActive) => {
     if (isActive) {
       await nextTick()

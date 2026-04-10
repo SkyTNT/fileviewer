@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useFileStore } from '../../stores/fileStore.js'
 import { useAuthStore } from '../../stores/authStore.js'
 import { useAppTheme, ACCENT_COLORS } from '../../composables/useAppTheme.js'
@@ -9,6 +9,42 @@ defineEmits(['toggle-sidebar'])
 const store     = useFileStore()
 const authStore = useAuthStore()
 const { isDark, accentColor, toggleMode, setAccent } = useAppTheme()
+
+// ── Filter ────────────────────────────────────────────────────────────────────
+const showFilter  = ref(false)
+const filterInput = ref('')
+const filterError = ref('')
+let filterTimer   = null
+
+watch(filterInput, (v) => {
+  filterError.value = ''
+  clearTimeout(filterTimer)
+  if (v) {
+    try { new RegExp(v) }
+    catch { filterError.value = 'Invalid regex'; return }
+  }
+  filterTimer = setTimeout(() => store.setFilter(v || ''), 300)
+})
+
+// Keep input in sync when store filter is cleared externally (e.g. on navigate)
+watch(() => store.filterPattern, (v) => {
+  if (!v) filterInput.value = ''
+})
+
+function toggleFilter() {
+  showFilter.value = !showFilter.value
+  if (!showFilter.value) {
+    filterInput.value = ''
+    filterError.value = ''
+    store.setFilter('')
+  }
+}
+
+function clearFilter() {
+  filterInput.value = ''
+  filterError.value = ''
+  store.setFilter('')
+}
 
 // Abbreviated breadcrumbs for long paths
 const displayCrumbs = computed(() => {
@@ -147,9 +183,36 @@ async function onFilesSelected(e) {
   <v-spacer />
 
   <!-- Entry count -->
-  <span class="text-caption text-medium-emphasis mr-3">
+  <span class="text-caption text-medium-emphasis mr-2" style="white-space:nowrap">
     {{ store.total }} items
   </span>
+
+  <!-- Filter input -->
+  <v-text-field
+    v-if="showFilter"
+    v-model="filterInput"
+    density="compact"
+    variant="outlined"
+    placeholder="regex filter…"
+    hide-details
+    clearable
+    autofocus
+    :error="!!filterError"
+    style="max-width:200px; font-size:13px"
+    class="mr-1"
+    @click:clear="clearFilter"
+    @keydown.escape="toggleFilter"
+  >
+    <v-tooltip v-if="filterError" activator="parent" location="bottom" color="error">
+      {{ filterError }}
+    </v-tooltip>
+  </v-text-field>
+
+  <!-- Filter toggle button -->
+  <v-btn icon size="small" class="mr-1" :color="showFilter ? 'primary' : undefined" @click="toggleFilter">
+    <v-icon size="20">{{ showFilter ? 'mdi-filter' : 'mdi-filter-outline' }}</v-icon>
+    <v-tooltip activator="parent">{{ showFilter ? 'Close filter' : 'Filter files' }}</v-tooltip>
+  </v-btn>
 
   <!-- Write mode actions -->
   <template v-if="store.writeMode">

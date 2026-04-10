@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import FileResponse
@@ -35,17 +36,27 @@ def list_directory(
     path: str = Query(""),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
+    filter: str | None = Query(None),
 ):
     dir_path = validate_path(path)
     if not dir_path.is_dir():
-        from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Not a directory")
+
+    pattern = None
+    if filter:
+        try:
+            pattern = re.compile(filter)
+        except re.error as e:
+            raise HTTPException(status_code=400, detail=f"Invalid regex: {e}")
+
     all_entries = []
     try:
         for p in sorted(dir_path.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
-            all_entries.append(entry_info(p))
+            if pattern is None or pattern.search(p.name):
+                all_entries.append(entry_info(p))
     except PermissionError:
         pass
+
     total = len(all_entries)
     start = (page - 1) * page_size
     return {

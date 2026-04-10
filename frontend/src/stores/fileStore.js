@@ -15,8 +15,14 @@ export const useFileStore = defineStore('file', () => {
   const selectedEntry = ref(null)
   const writeMode     = ref(false)
   const treeRevision  = ref(0)
+  const filterPattern = ref('')
 
   function invalidateTree() { treeRevision.value++ }
+
+  function setFilter(pattern) {
+    filterPattern.value = pattern
+    loadDirectory(currentPath.value)
+  }
 
   const breadcrumbs = computed(() => {
     const parts = currentPath.value.split('/').filter(Boolean)
@@ -59,7 +65,7 @@ export const useFileStore = defineStore('file', () => {
     loading.value = true
     error.value   = null
     try {
-      const res         = await filesApi.listDirectory(path, p, pageSize.value)
+      const res         = await filesApi.listDirectory(path, p, pageSize.value, filterPattern.value || null)
       currentPath.value = res.data.path
       entries.value     = res.data.entries
       total.value       = res.data.total
@@ -93,6 +99,7 @@ export const useFileStore = defineStore('file', () => {
 
   // Called from UI: add a history entry so back-button works
   function navigate(path) {
+    filterPattern.value = ''
     loadDirectory(path, true)
   }
 
@@ -104,7 +111,7 @@ export const useFileStore = defineStore('file', () => {
 
   return {
     rootName, currentPath, entries, loading, error, viewMode, breadcrumbs,
-    page, pageSize, total, selectedEntry, writeMode, treeRevision,
-    init, loadDirectory, goToPage, navigate, selectEntry, invalidateTree,
+    page, pageSize, total, selectedEntry, writeMode, treeRevision, filterPattern,
+    init, loadDirectory, goToPage, navigate, selectEntry, invalidateTree, setFilter,
   }
 })
