@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useFileStore } from '../../stores/fileStore.js'
 import FileCard from './FileCard.vue'
 
@@ -11,39 +11,105 @@ const sentinelRef    = ref(null)
 const containerRef   = ref(null)
 const colCount       = ref(5)
 
-const cardHeights = reactive({}) // path → actual rendered px height
-const cardROs     = {}           // path → ResizeObserver
+const columns    = ref([])
+const colHeights = []
+
+const cardHeights  = {}  // path → last measured height
+const placedHeight = {}  // path → height used when placed
+const cardColIdx   = {}  // path → column index
+const cardROs      = {}  // path → ResizeObserver
+
+// Cards from the latest page that haven't been re-sorted after image load
+const pendingPaths = new Set()
+let redistributeTimer = null
 
 function estimatedHeight(file) {
   return file.type === 'image' ? 230 : 110
 }
 
-// Reactively redistribute entries into columns using shortest-column algorithm.
-// cardHeights is reactive, so this recomputes whenever any height changes.
-const columns = computed(() => {
-  const n = colCount.value
-  const cols = Array.from({ length: n }, () => [])
-  const heights = new Array(n).fill(0)
-  for (const file of displayEntries.value) {
-    const minCol = heights.indexOf(Math.min(...heights))
-    cols[minCol].push(file)
-    heights[minCol] += (cardHeights[file.path] ?? estimatedHeight(file)) + 8
+function shortestCol() {
+  let min = Infinity, idx = 0
+  for (let i = 0; i < colHeights.length; i++) {
+    if (colHeights[i] < min) { min = colHeights[i]; idx = i }
   }
-  return cols
-})
+  return idx
+}
 
-// Template ref callback for each card wrapper div.
-// When a card is redistributed to a new column, Vue destroys the old element
-// (el = null) and creates a new one (el = element). We reconnect the observer
-// on the new element. We do NOT delete cardHeights on null to prevent a
-// distribution loop (height gone → recompute with estimate → move back → repeat).
+function appendEntries(entries, markPending = false) {
+  for (const file of entries) {
+    const idx = shortestCol()
+    columns.value[idx].push(file)
+    const h = cardHeights[file.path] ?? estimatedHeight(file)
+    placedHeight[file.path] = h
+    cardColIdx[file.path]   = idx
+    colHeights[idx] += h + 8
+    if (markPending && !(file.path in cardHeights)) {
+      pendingPaths.add(file.path)
+    }
+  }
+}
+
+function redistributePending() {
+  if (pendingPaths.size === 0) return
+  const paths = [...pendingPaths]
+  pendingPaths.clear()
+
+  const fileMap = new Map(displayEntries.value.map(f => [f.path, f]))
+
+  // Remove from columns and subtract their placed heights
+  for (const path of paths) {
+    const col = cardColIdx[path]
+    if (col === undefined) continue
+    const arr = columns.value[col]
+    const i = arr.findIndex(f => f.path === path)
+    if (i !== -1) arr.splice(i, 1)
+    colHeights[col] -= (placedHeight[path] ?? 0) + 8
+    delete placedHeight[path]
+    delete cardColIdx[path]
+  }
+
+  // Re-append in original order using actual measured heights
+  const files = paths
+    .map(p => fileMap.get(p))
+    .filter(Boolean)
+    .sort((a, b) => displayEntries.value.indexOf(a) - displayEntries.value.indexOf(b))
+  appendEntries(files)
+}
+
+function schedulePendingRedistribute() {
+  clearTimeout(redistributeTimer)
+  redistributeTimer = setTimeout(redistributePending, 100)
+}
+
+function fullRebuild() {
+  clearTimeout(redistributeTimer)
+  pendingPaths.clear()
+  const n = colCount.value
+  columns.value = Array.from({ length: n }, () => [])
+  colHeights.length = 0
+  for (let i = 0; i < n; i++) colHeights.push(0)
+  for (const k in placedHeight) delete placedHeight[k]
+  for (const k in cardColIdx)   delete cardColIdx[k]
+  appendEntries(displayEntries.value)
+}
+
 function attachCardRef(el, path) {
   if (el) {
     if (!cardROs[path]) {
       const ro = new ResizeObserver(() => {
         const h = el.offsetHeight
-        if (cardHeights[path] !== h) {
-          cardHeights[path] = h
+        if (cardHeights[path] === h) return
+        cardHeights[path] = h
+        if (pendingPaths.has(path)) {
+          // Image loaded for a new-page card — schedule redistribution
+          schedulePendingRedistribute()
+        } else {
+          // Stable card: just adjust column height in place
+          const col = cardColIdx[path]
+          if (col !== undefined) {
+            colHeights[col] += h - (placedHeight[path] ?? 0)
+            placedHeight[path] = h
+          }
         }
       })
       ro.observe(el)
@@ -57,14 +123,19 @@ function attachCardRef(el, path) {
 
 watch(() => store.entries, (newEntries) => {
   if (store.page === 1) {
-    // Directory changed — clear heights that are no longer relevant
     const newPaths = new Set(newEntries.map(e => e.path))
     Object.keys(cardHeights).forEach(k => { if (!newPaths.has(k)) delete cardHeights[k] })
     displayEntries.value = [...newEntries]
+    fullRebuild()
+    // Mark first page as pending too (images may not be loaded yet)
+    newEntries.forEach(f => { if (!(f.path in cardHeights)) pendingPaths.add(f.path) })
   } else {
     displayEntries.value = [...displayEntries.value, ...newEntries]
+    appendEntries(newEntries, true)
   }
 }, { immediate: true })
+
+watch(colCount, () => fullRebuild())
 
 function loadMore() {
   if (store.loading || displayEntries.value.length >= store.total) return
@@ -94,6 +165,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  clearTimeout(redistributeTimer)
   scrollObs?.disconnect()
   containerRO?.disconnect()
   Object.values(cardROs).forEach(ro => ro.disconnect())
