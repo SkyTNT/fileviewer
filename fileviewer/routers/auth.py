@@ -34,7 +34,8 @@ def login(req: LoginRequest, response: Response):
 
 
 @router.post("/logout")
-def logout(response: Response):
-    auth_state.revoke_token()
+def logout(response: Response, fv_token: str | None = Cookie(None)):
+    if fv_token:
+        auth_state.revoke_token(fv_token)
     response.delete_cookie("fv_token")
     return {"ok": True}
