@@ -68,12 +68,13 @@ function redistributePending() {
     delete cardColIdx[path]
   }
 
-  // Re-append in original order using actual measured heights
+  // Re-append in original order using actual measured heights.
+  // Pass markPending=true so cards whose images still haven't loaded stay pending.
   const files = paths
     .map(p => fileMap.get(p))
     .filter(Boolean)
     .sort((a, b) => displayEntries.value.indexOf(a) - displayEntries.value.indexOf(b))
-  appendEntries(files)
+  appendEntries(files, true)
 }
 
 function schedulePendingRedistribute() {
@@ -81,7 +82,7 @@ function schedulePendingRedistribute() {
   redistributeTimer = setTimeout(redistributePending, 100)
 }
 
-function fullRebuild() {
+function fullRebuild(markPending = false) {
   clearTimeout(redistributeTimer)
   pendingPaths.clear()
   const n = colCount.value
@@ -90,7 +91,7 @@ function fullRebuild() {
   for (let i = 0; i < n; i++) colHeights.push(0)
   for (const k in placedHeight) delete placedHeight[k]
   for (const k in cardColIdx)   delete cardColIdx[k]
-  appendEntries(displayEntries.value)
+  appendEntries(displayEntries.value, markPending)
 }
 
 function attachCardRef(el, path) {
@@ -126,9 +127,7 @@ watch(() => store.entries, (newEntries) => {
     const newPaths = new Set(newEntries.map(e => e.path))
     Object.keys(cardHeights).forEach(k => { if (!newPaths.has(k)) delete cardHeights[k] })
     displayEntries.value = [...newEntries]
-    fullRebuild()
-    // Mark first page as pending too (images may not be loaded yet)
-    newEntries.forEach(f => { if (!(f.path in cardHeights)) pendingPaths.add(f.path) })
+    fullRebuild(true)
   } else {
     displayEntries.value = [...displayEntries.value, ...newEntries]
     appendEntries(newEntries, true)
