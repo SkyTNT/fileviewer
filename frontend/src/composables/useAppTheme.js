@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useTheme } from 'vuetify'
 
 export const ACCENT_COLORS = [
@@ -14,7 +14,7 @@ export const ACCENT_COLORS = [
 export function useAppTheme() {
   const vuetifyTheme = useTheme()
 
-  const isDark      = ref(vuetifyTheme.global.current.value.dark)
+  const isDark      = computed(() => vuetifyTheme.global.current.value.dark)
   const accentColor = ref(localStorage.getItem('fv-accent') || ACCENT_COLORS[0].value)
 
   function _applyColor(color) {
@@ -27,7 +27,6 @@ export function useAppTheme() {
   function toggleMode() {
     const next = isDark.value ? 'light' : 'dark'
     vuetifyTheme.change(next)
-    isDark.value = !isDark.value
     localStorage.setItem('fv-mode', next)
   }
 
@@ -39,7 +38,6 @@ export function useAppTheme() {
     const mode  = localStorage.getItem('fv-mode')  || 'dark'
     const color = localStorage.getItem('fv-accent') || ACCENT_COLORS[0].value
     vuetifyTheme.change(mode)
-    isDark.value = mode === 'dark'
     _applyColor(color)
   }
 

@@ -1,6 +1,6 @@
 <script setup>
-import { computed } from 'vue'
-import { imagesApi } from '../../services/api.js'
+import { computed, ref } from 'vue'
+import { imagesApi, writeApi, filesApi } from '../../services/api.js'
 import { useFileStore } from '../../stores/fileStore.js'
 
 const props = defineProps({
@@ -23,6 +23,8 @@ const TYPE_ICON = {
   json:      'mdi-code-json',
   jsonl:     'mdi-code-json',
   text:      'mdi-file-document-outline',
+  video:     'mdi-play-circle-outline',
+  audio:     'mdi-music-note',
   unknown:   'mdi-file-outline',
 }
 const TYPE_COLOR = {
@@ -32,6 +34,8 @@ const TYPE_COLOR = {
   json:      'secondary',
   jsonl:     'secondary',
   text:      'info',
+  video:     'deep-purple',
+  audio:     'pink',
 }
 
 const typeIcon  = computed(() => TYPE_ICON[props.file.type]  || 'mdi-file-outline')
@@ -57,6 +61,71 @@ function onDblClick() {
   if (props.file.is_dir) emit('navigate', props.file.path)
   else emit('open', props.file)
 }
+
+// ── Context menu ──────────────────────────────────────────────────────────────
+const ctxMenu = ref(false)
+const ctxX    = ref(0)
+const ctxY    = ref(0)
+
+function onContextMenu(e) {
+  if (!store.writeMode && props.file.is_dir) return
+  e.preventDefault()
+  ctxX.value = e.clientX
+  ctxY.value = e.clientY
+  ctxMenu.value = false
+  setTimeout(() => { ctxMenu.value = true }, 10)
+}
+
+// ── Rename ────────────────────────────────────────────────────────────────────
+const renameDialog  = ref(false)
+const renameName    = ref('')
+const renameLoading = ref(false)
+const renameError   = ref('')
+
+function openRename() {
+  ctxMenu.value     = false
+  renameName.value  = props.file.name
+  renameError.value = ''
+  renameDialog.value = true
+}
+
+async function confirmRename() {
+  const newName = renameName.value.trim()
+  if (!newName || newName === props.file.name) { renameDialog.value = false; return }
+  renameLoading.value = true
+  renameError.value   = ''
+  try {
+    await writeApi.rename(props.file.path, newName)
+    renameDialog.value = false
+    store.loadDirectory(store.currentPath)
+  } catch (e) {
+    renameError.value = e.response?.data?.detail || e.message
+  } finally {
+    renameLoading.value = false
+  }
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+const deleteDialog  = ref(false)
+const deleteLoading = ref(false)
+
+function openDelete() {
+  ctxMenu.value      = false
+  deleteDialog.value = true
+}
+
+async function confirmDelete() {
+  deleteLoading.value = true
+  try {
+    await writeApi.delete(props.file.path)
+    deleteDialog.value = false
+    store.loadDirectory(store.currentPath)
+  } catch (e) {
+    console.error('Delete failed', e)
+  } finally {
+    deleteLoading.value = false
+  }
+}
 </script>
 
 <template>
@@ -69,6 +138,7 @@ function onDblClick() {
     hover
     @click="onClick"
     @dblclick="onDblClick"
+    @contextmenu="onContextMenu"
   >
     <!-- Image thumbnail -->
     <img
@@ -104,6 +174,67 @@ function onDblClick() {
       </div>
     </v-card-text>
   </v-card>
+
+  <!-- Right-click context menu -->
+  <v-menu
+    v-model="ctxMenu"
+    :style="{ position: 'fixed', left: ctxX + 'px', top: ctxY + 'px' }"
+    :close-on-content-click="true"
+  >
+    <v-list density="compact" min-width="160">
+      <v-list-item
+        v-if="!file.is_dir"
+        prepend-icon="mdi-download-outline"
+        title="Download"
+        :href="filesApi.downloadUrl(file.path)"
+        :download="file.name"
+      />
+      <template v-if="store.writeMode">
+        <v-divider v-if="!file.is_dir" />
+        <v-list-item prepend-icon="mdi-pencil-outline" title="Rename" @click="openRename" />
+        <v-list-item prepend-icon="mdi-delete-outline" title="Delete" base-color="error" @click="openDelete" />
+      </template>
+    </v-list>
+  </v-menu>
+
+  <!-- Rename dialog -->
+  <v-dialog v-model="renameDialog" max-width="360">
+    <v-card>
+      <v-card-title class="pa-4">Rename</v-card-title>
+      <v-card-text class="pt-0">
+        <v-text-field
+          v-model="renameName"
+          label="New name"
+          autofocus
+          :error-messages="renameError"
+          @keydown.enter="confirmRename"
+        />
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn variant="text" @click="renameDialog = false">Cancel</v-btn>
+        <v-btn color="primary" :loading="renameLoading" @click="confirmRename">Rename</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- Delete confirm dialog -->
+  <v-dialog v-model="deleteDialog" max-width="360">
+    <v-card>
+      <v-card-title class="pa-4">Delete</v-card-title>
+      <v-card-text class="pt-0">
+        Are you sure you want to delete <strong>{{ file.name }}</strong>?
+        <span v-if="file.is_dir" class="text-error d-block mt-1 text-body-2">
+          This will delete the folder and all its contents.
+        </span>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
+        <v-btn color="error" :loading="deleteLoading" @click="confirmDelete">Delete</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <style scoped>

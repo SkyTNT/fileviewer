@@ -2,6 +2,10 @@ import axios from 'axios'
 
 const http = axios.create({ baseURL: '/api' })
 
+export const configApi = {
+  getConfig: () => http.get('/config'),
+}
+
 export const filesApi = {
   getRoot: () => http.get('/root'),
   listDirectory: (path, page = 1, pageSize = 50) =>
@@ -25,4 +29,26 @@ export const parquetApi = {
 
 export const textApi = {
   getContent: (path) => http.get('/text/content', { params: { path } }),
+}
+
+export const hexApi = {
+  getDump: (path, page = 1) => http.get('/hex/dump', { params: { path, page } }),
+}
+
+export const mediaApi = {
+  streamUrl: (path) => `/api/media/stream?path=${encodeURIComponent(path)}`,
+}
+
+export const writeApi = {
+  mkdir:  (parent, name)       => http.post('/write/mkdir', { parent, name }),
+  touch:  (parent, name)       => http.post('/write/touch', { parent, name }),
+  rename: (path, new_name)     => http.post('/write/rename', { path, new_name }),
+  delete: (path)               => http.delete('/write/delete', { params: { path } }),
+  save:   (path, content)      => http.post('/write/save', { path, content }),
+  upload: (parent, files)      => {
+    const fd = new FormData()
+    fd.append('parent', parent)
+    for (const f of files) fd.append('files', f)
+    return http.post('/write/upload', fd)
+  },
 }

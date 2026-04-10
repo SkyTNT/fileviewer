@@ -10,7 +10,7 @@ from pathlib import Path
 def main():
     parser = argparse.ArgumentParser(
         prog="fileviewer",
-        description="Read-only file browser with web UI",
+        description="File browser with web UI",
     )
     parser.add_argument(
         "path",
@@ -21,6 +21,7 @@ def main():
     parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8000, help="Bind port (default: 8000)")
     parser.add_argument("--no-browser", action="store_true", help="Don't open browser automatically")
+    parser.add_argument("--write", action="store_true", help="Enable write mode (create, rename, delete, upload)")
     args = parser.parse_args()
 
     root = Path(args.path).resolve()
@@ -32,10 +33,14 @@ def main():
         sys.exit(1)
 
     os.environ["FILE_VIEWER_ROOT"] = str(root)
+    if args.write:
+        os.environ["FILE_VIEWER_WRITE"] = "1"
 
     url = f"http://{args.host}:{args.port}"
     print(f"File Viewer  →  {url}")
     print(f"Browsing     →  {root}")
+    if args.write:
+        print(f"Write mode   →  enabled")
 
     if not args.no_browser:
         def _open():

@@ -12,6 +12,8 @@ import ImageViewer from './components/viewers/ImageViewer.vue'
 import DataFrameViewer from './components/viewers/DataFrameViewer.vue'
 import JsonViewer from './components/viewers/JsonViewer.vue'
 import TextViewer from './components/viewers/TextViewer.vue'
+import MediaPlayer from './components/viewers/MediaPlayer.vue'
+import HexViewer from './components/viewers/HexViewer.vue'
 
 const store = useFileStore()
 const { activeViewer, activeFile, openFile, closeViewer } = useFileOpener()
@@ -21,6 +23,8 @@ const imageViewerRef = ref(null)
 const dfViewerRef = ref(null)
 const jsonViewerRef = ref(null)
 const textViewerRef = ref(null)
+const mediaPlayerRef = ref(null)
+const hexViewerRef   = ref(null)
 
 const sidebarWidth   = ref(260)
 const sidebarVisible = ref(true)
@@ -72,12 +76,16 @@ function handleOpenFile(file) {
   const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.tif', '.svg'])
   const PARQUET_EXT = new Set(['.parquet'])
   const JSON_EXT = new Set(['.json', '.jsonl'])
+  const VIDEO_EXT = new Set(['.mp4', '.webm', '.ogv', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.m4v', '.ts'])
+  const AUDIO_EXT = new Set(['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.opus', '.wma'])
   if (IMAGE_EXT.has(ext)) {
     imageViewerRef.value?.open(file)
   } else if (PARQUET_EXT.has(ext)) {
     dfViewerRef.value?.open(file)
   } else if (JSON_EXT.has(ext)) {
     jsonViewerRef.value?.open(file)
+  } else if (VIDEO_EXT.has(ext) || AUDIO_EXT.has(ext)) {
+    mediaPlayerRef.value?.open(file)
   } else {
     textViewerRef.value?.open(file)
   }
@@ -136,7 +144,9 @@ function handleOpenFile(file) {
     <ImageViewer ref="imageViewerRef" />
     <DataFrameViewer ref="dfViewerRef" />
     <JsonViewer ref="jsonViewerRef" @open-dataframe="dfViewerRef?.open($event, 'jsonl')" />
-    <TextViewer ref="textViewerRef" :file="activeFile" @error="showError" />
+    <TextViewer ref="textViewerRef" :file="activeFile" @error="showError" @open-hex="hexViewerRef?.open($event)" />
+    <MediaPlayer ref="mediaPlayerRef" />
+    <HexViewer ref="hexViewerRef" />
 
     <v-snackbar v-model="snackbar" color="error" timeout="4000" location="bottom">
       <v-icon class="mr-2">mdi-alert-circle-outline</v-icon>

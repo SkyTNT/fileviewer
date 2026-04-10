@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { filesApi } from '../services/api.js'
+import { filesApi, configApi } from '../services/api.js'
 
 export const useFileStore = defineStore('file', () => {
   const rootName    = ref('Root')
@@ -13,6 +13,7 @@ export const useFileStore = defineStore('file', () => {
   const pageSize      = ref(50)
   const total         = ref(0)
   const selectedEntry = ref(null)
+  const writeMode     = ref(false)
 
   const breadcrumbs = computed(() => {
     const parts = currentPath.value.split('/').filter(Boolean)
@@ -42,8 +43,9 @@ export const useFileStore = defineStore('file', () => {
   // ── Core ─────────────────────────────────────────────────────────────────────
   async function init() {
     try {
-      const res = await filesApi.getRoot()
-      rootName.value = res.data.name || 'Root'
+      const [rootRes, cfgRes] = await Promise.all([filesApi.getRoot(), configApi.getConfig()])
+      rootName.value  = rootRes.data.name || 'Root'
+      writeMode.value = cfgRes.data.write_mode ?? false
       await loadDirectory(getHashPath())
     } catch (e) {
       error.value = e.message
@@ -99,7 +101,7 @@ export const useFileStore = defineStore('file', () => {
 
   return {
     rootName, currentPath, entries, loading, error, viewMode, breadcrumbs,
-    page, pageSize, total, selectedEntry,
+    page, pageSize, total, selectedEntry, writeMode,
     init, loadDirectory, goToPage, navigate, selectEntry,
   }
 })

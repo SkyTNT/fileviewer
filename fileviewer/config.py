@@ -5,9 +5,25 @@ IMAGE_EXTENSIONS   = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff",
 PARQUET_EXTENSIONS = {".parquet"}
 JSON_EXTENSIONS    = {".json"}
 JSONL_EXTENSIONS   = {".jsonl"}
-TEXT_EXTENSIONS    = {".txt", ".yaml", ".yml", ".toml", ".md", ".ini", ".conf", ".log",
-                      ".xml", ".html", ".css", ".js", ".ts", ".py", ".sh", ".csv",
-                      ".rst", ".cfg", ".env", ".tex", ".r", ".sql"}
+TEXT_EXTENSIONS    = {
+    ".txt", ".md", ".rst", ".tex", ".csv", ".log", ".ini", ".conf", ".cfg", ".env",
+    ".yaml", ".yml", ".toml",
+    ".xml", ".html", ".htm", ".css",
+    ".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx",
+    ".py", ".sh", ".bash", ".zsh", ".fish",
+    ".sql", ".r",
+    ".c", ".h", ".cpp", ".hpp", ".cc", ".cxx",
+    ".java", ".kt", ".kts", ".scala",
+    ".go", ".rs", ".swift",
+    ".cs", ".vb", ".fs",
+    ".rb", ".php", ".pl", ".lua",
+    ".dart", ".ex", ".exs", ".erl",
+    ".cmake", ".makefile", ".mk", ".dockerfile",
+    ".gitignore", ".gitattributes", ".editorconfig",
+    ".vue", ".svelte",
+}
+VIDEO_EXTENSIONS   = {".mp4", ".webm", ".ogv", ".avi", ".mov", ".mkv", ".flv", ".wmv", ".m4v", ".ts"}
+AUDIO_EXTENSIONS   = {".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".opus", ".wma"}
 
 
 def get_root() -> Path:
@@ -23,7 +39,8 @@ def validate_path(rel_path: str) -> Path:
         normalized = Path(os.path.normpath(root / rel_path.lstrip("/")))
         root_str = str(root)
         norm_str = str(normalized)
-        if not (norm_str == root_str or norm_str.startswith(root_str + os.sep)):
+        prefix = root_str if root_str.endswith(os.sep) else root_str + os.sep
+        if not (norm_str == root_str.rstrip(os.sep) or norm_str.startswith(prefix)):
             raise HTTPException(status_code=403, detail="Access denied")
         return normalized
     except HTTPException:
@@ -67,4 +84,6 @@ def get_file_type(path: Path) -> str:
     if suffix in JSON_EXTENSIONS:     return "json"
     if suffix in JSONL_EXTENSIONS:    return "jsonl"
     if suffix in TEXT_EXTENSIONS:     return "text"
+    if suffix in VIDEO_EXTENSIONS:    return "video"
+    if suffix in AUDIO_EXTENSIONS:    return "audio"
     return "unknown"
