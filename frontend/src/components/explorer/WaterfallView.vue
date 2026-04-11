@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
 import { useFileStore } from '../../stores/fileStore.js'
 import FileCard from './FileCard.vue'
 
@@ -10,23 +10,23 @@ const displayEntries = ref([])
 const sentinelRef    = ref(null)
 const containerRef   = ref(null)
 
+const GAP = 8
+
 function widthToColCount(w) {
   return w < 300 ? 1 : w < 480 ? 2 : w < 720 ? 3 : w < 960 ? 4 : w < 1280 ? 5 : 6
 }
 
 const colCount = ref(widthToColCount(window.innerWidth))
+const colWidth  = ref(0)
 
 function estimatedHeight(file) {
   return file.type === 'image' ? 220 : 150
 }
 
 // ── Height tracking ──────────────────────────────────────────────────────────
-// Plain object (non-reactive) so individual card measurements don't cascade.
 const cardHeights = {}
 const cardROs     = {}
 
-// Called by each card wrapper's :ref. On null we keep cardHeights intact to
-// avoid a redistribution loop (stale estimate → card moves → remount → repeat).
 function attachCardRef(el, path) {
   if (el) {
     if (!cardROs[path]) {
@@ -43,54 +43,71 @@ function attachCardRef(el, path) {
   }
 }
 
-// ── Column layout ────────────────────────────────────────────────────────────
-const columns = ref([])
-let savedColHeights = []  // Column heights after last layout (for incremental append)
+// ── Absolute position layout ─────────────────────────────────────────────────
+// All cards live in one flat v-for. Column reassignment only changes CSS
+// transform — no component destroy/create cycle ever happens.
+const cardPositions   = reactive({})  // path → { x, y }，Vue 按 key 单独追踪
+const containerHeight = ref(0)
+let savedColHeights   = []
 let rafId = null
 
 function runLayout() {
-  const n = colCount.value
-  const cols = Array.from({ length: n }, () => [])
+  const n  = colCount.value
+  const cw = colWidth.value
+  if (cw === 0) return
   const heights = new Array(n).fill(0)
   for (const file of displayEntries.value) {
     const minIdx = heights.indexOf(Math.min(...heights))
-    cols[minIdx].push(file)
-    heights[minIdx] += (cardHeights[file.path] ?? estimatedHeight(file)) + 8
+    cardPositions[file.path] = { x: minIdx * (cw + GAP), y: heights[minIdx] }
+    heights[minIdx] += (cardHeights[file.path] ?? estimatedHeight(file)) + GAP
   }
-  savedColHeights = heights
-  columns.value = cols
+  savedColHeights       = heights
+  containerHeight.value = heights.length ? Math.max(...heights) : 0
 }
 
-// RAF debounce: batches all height changes within the same frame into one layout.
+// RAF debounce：同一帧内的多次高度变化只触发一次 runLayout。
 function scheduleLayout() {
   if (rafId) cancelAnimationFrame(rafId)
   rafId = requestAnimationFrame(() => { rafId = null; runLayout() })
 }
 
-// Incremental: append new entries without redistributing existing ones.
+// 翻页追加：只计算新条目的位置，已有卡片的 transform 完全不动。
 function appendLayout(prevCount) {
-  if (columns.value.length !== colCount.value || prevCount === 0) {
+  const n  = colCount.value
+  const cw = colWidth.value
+  if (cw === 0 || prevCount === 0 || savedColHeights.length !== n) {
     runLayout()
     return
   }
-  const cols = columns.value.map(col => [...col])
   const heights = [...savedColHeights]
   for (let i = prevCount; i < displayEntries.value.length; i++) {
     const file = displayEntries.value[i]
     const minIdx = heights.indexOf(Math.min(...heights))
-    cols[minIdx].push(file)
-    heights[minIdx] += (cardHeights[file.path] ?? estimatedHeight(file)) + 8
+    cardPositions[file.path] = { x: minIdx * (cw + GAP), y: heights[minIdx] }
+    heights[minIdx] += (cardHeights[file.path] ?? estimatedHeight(file)) + GAP
   }
-  savedColHeights = heights
-  columns.value = cols
+  savedColHeights       = heights
+  containerHeight.value = Math.max(...heights)
+}
+
+function cardStyle(file) {
+  const pos = cardPositions[file.path]
+  if (!pos) return { position: 'absolute', visibility: 'hidden' }
+  return {
+    position: 'absolute',
+    top: '0',
+    left: '0',
+    width: colWidth.value + 'px',
+    transform: `translate(${pos.x}px, ${pos.y}px)`,
+  }
 }
 
 // ── Entries ──────────────────────────────────────────────────────────────────
 watch(() => store.entries, (newEntries) => {
   if (store.page === 1) {
-    // Evict heights for paths no longer present
     const keep = new Set(newEntries.map(e => e.path))
-    for (const p of Object.keys(cardHeights)) if (!keep.has(p)) delete cardHeights[p]
+    for (const p of Object.keys(cardHeights))   if (!keep.has(p)) delete cardHeights[p]
+    for (const p of Object.keys(cardPositions)) if (!keep.has(p)) delete cardPositions[p]
     displayEntries.value = [...newEntries]
     if (rafId) { cancelAnimationFrame(rafId); rafId = null }
     runLayout()
@@ -116,13 +133,22 @@ function loadMore() {
 let scrollObs   = null
 let containerRO = null
 
-// Re-bind when masonry mounts/unmounts during navigation loading state
+function updateContainerMetrics(w) {
+  if (w === 0) return
+  const n  = widthToColCount(w)
+  const cw = Math.floor((w - GAP * (n - 1)) / n)
+  const colCountChanged = n  !== colCount.value
+  const colWidthChanged = cw !== colWidth.value
+  colWidth.value = cw
+  if (colCountChanged)      colCount.value = n  // watch(colCount) 触发 runLayout
+  else if (colWidthChanged) runLayout()          // 列数不变但宽度变了（如侧边栏收起）
+}
+
 watch(containerRef, (el, oldEl) => {
   if (!containerRO) return
   if (oldEl) containerRO.unobserve(oldEl)
   if (el) {
-    const w = el.clientWidth
-    if (w > 0) colCount.value = widthToColCount(w)
+    updateContainerMetrics(el.clientWidth)
     containerRO.observe(el)
   }
 })
@@ -140,14 +166,10 @@ onMounted(() => {
   if (sentinelRef.value) scrollObs.observe(sentinelRef.value)
 
   containerRO = new ResizeObserver(([entry]) => {
-    const w = entry.contentRect.width
-    if (w === 0) return
-    const next = widthToColCount(w)
-    if (next !== colCount.value) colCount.value = next
+    updateContainerMetrics(entry.contentRect.width)
   })
   if (containerRef.value) {
-    const w = containerRef.value.clientWidth
-    if (w > 0) colCount.value = widthToColCount(w)
+    updateContainerMetrics(containerRef.value.clientWidth)
     containerRO.observe(containerRef.value)
   }
 })
@@ -174,19 +196,18 @@ onUnmounted(() => {
     </div>
 
     <template v-else>
-      <div ref="containerRef" class="masonry">
-        <div v-for="(col, i) in columns" :key="i" class="masonry-col">
-          <div
-            v-for="file in col"
-            :key="file.path"
-            :ref="el => attachCardRef(el, file.path)"
-          >
-            <FileCard
-              :file="file"
-              @open="emit('open-file', $event)"
-              @navigate="store.navigate"
-            />
-          </div>
+      <div ref="containerRef" class="masonry" :style="{ height: containerHeight + 'px' }">
+        <div
+          v-for="file in displayEntries"
+          :key="file.path"
+          :ref="el => attachCardRef(el, file.path)"
+          :style="cardStyle(file)"
+        >
+          <FileCard
+            :file="file"
+            @open="emit('open-file', $event)"
+            @navigate="store.navigate"
+          />
         </div>
       </div>
 
@@ -206,15 +227,6 @@ onUnmounted(() => {
 
 <style scoped>
 .masonry {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-}
-.masonry-col {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  position: relative;
 }
 </style>
