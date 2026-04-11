@@ -86,14 +86,12 @@ function loadMore() {
 // ── Observers ────────────────────────────────────────────────────────────────
 let scrollObs   = null
 let containerRO = null
-let colTimer    = null
 
 // Re-bind when masonry mounts/unmounts during navigation loading state
 watch(containerRef, (el, oldEl) => {
   if (!containerRO) return
   if (oldEl) containerRO.unobserve(oldEl)
   if (el) {
-    clearTimeout(colTimer)
     const w = el.clientWidth
     if (w > 0) colCount.value = widthToColCount(w)
     containerRO.observe(el)
@@ -116,9 +114,7 @@ onMounted(() => {
     const w = entry.contentRect.width
     if (w === 0) return
     const next = widthToColCount(w)
-    if (next === colCount.value) return
-    clearTimeout(colTimer)
-    colTimer = setTimeout(() => { colCount.value = next }, 80)
+    if (next !== colCount.value) colCount.value = next
   })
   if (containerRef.value) {
     const w = containerRef.value.clientWidth
@@ -129,7 +125,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (rafId) cancelAnimationFrame(rafId)
-  clearTimeout(colTimer)
   scrollObs?.disconnect()
   containerRO?.disconnect()
   for (const ro of Object.values(cardROs)) ro.disconnect()
@@ -181,10 +176,6 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.waterfall-scroll {
-  height: 100%;
-  overflow-y: auto;
-}
 .masonry {
   display: flex;
   gap: 8px;
