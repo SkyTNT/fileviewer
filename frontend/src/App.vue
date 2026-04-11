@@ -153,10 +153,12 @@ function handleOpenFile(file) {
       <WaterfallView
         v-if="store.viewMode === 'waterfall'"
         @open-file="handleOpenFile"
+        @error="showError"
       />
       <ListView
         v-else
         @open-file="handleOpenFile"
+        @error="showError"
       />
     </v-main>
 

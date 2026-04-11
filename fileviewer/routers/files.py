@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import FileResponse
-from fileviewer.config import validate_path, get_file_type, to_rel
+from fileviewer.config import validate_path, get_file_type, to_rel, get_roots, is_multi_root
 
 router = APIRouter()
 
@@ -13,7 +13,7 @@ def entry_info(p: Path) -> dict:
         stat = p.stat()
         return {
             "name": p.name,
-            "path": to_rel(p),          # relative path
+            "path": to_rel(p),
             "type": get_file_type(p),
             "size": stat.st_size if p.is_file() else None,
             "modified": stat.st_mtime,
@@ -32,6 +32,20 @@ def entry_info(p: Path) -> dict:
         }
 
 
+def build_tree(p: Path, remaining: int) -> dict:
+    node = entry_info(p)
+    if p.is_dir() and remaining > 0:
+        children = []
+        try:
+            for child in sorted(p.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
+                if child.is_dir():
+                    children.append(build_tree(child, remaining - 1))
+        except PermissionError:
+            pass
+        node["children"] = children
+    return node
+
+
 @router.get("/list")
 def list_directory(
     path: str = Query(""),
@@ -39,6 +53,26 @@ def list_directory(
     page_size: int = Query(50, ge=1, le=500),
     filter: str | None = Query(None),
 ):
+    # Multi-root virtual root listing
+    if is_multi_root() and not path:
+        entries = []
+        for slug, display_name, abs_path in get_roots():
+            try:
+                stat = abs_path.stat()
+                modified = stat.st_mtime
+            except Exception:
+                modified = None
+            entries.append({
+                "name": display_name,
+                "path": slug,
+                "type": "directory",
+                "size": None,
+                "modified": modified,
+                "is_dir": True,
+                "extension": None,
+            })
+        return {"path": "", "entries": entries, "total": len(entries), "page": 1, "page_size": len(entries)}
+
     dir_path = validate_path(path)
     if not dir_path.is_dir():
         raise HTTPException(status_code=400, detail="Not a directory")
@@ -50,7 +84,6 @@ def list_directory(
         except re.error as e:
             raise HTTPException(status_code=400, detail=f"Invalid regex: {e}")
 
-    # Use scandir so is_dir() / name come from the OS directory cache (no stat per entry)
     try:
         with os.scandir(dir_path) as it:
             all_entries = sorted(
@@ -62,7 +95,6 @@ def list_directory(
 
     total = len(all_entries)
     start = (page - 1) * page_size
-    # stat() is called only for the current page's entries
     page_entries = [entry_info(Path(e.path)) for e in all_entries[start : start + page_size]]
 
     return {
@@ -76,24 +108,22 @@ def list_directory(
 
 @router.get("/tree")
 def get_tree(path: str = Query(""), depth: int = Query(1)):
+    # Multi-root virtual root tree
+    if is_multi_root() and not path:
+        children = []
+        for slug, display_name, abs_path in get_roots():
+            node = build_tree(abs_path, depth - 1)
+            node["name"] = display_name  # use custom display name
+            children.append(node)
+        return {
+            "name": "Home", "path": "", "type": "directory",
+            "size": None, "modified": None, "is_dir": True, "extension": None,
+            "children": children,
+        }
+
     dir_path = validate_path(path)
     if not dir_path.is_dir():
-        from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Not a directory")
-
-    def build_tree(p: Path, remaining: int) -> dict:
-        node = entry_info(p)
-        if p.is_dir() and remaining > 0:
-            children = []
-            try:
-                for child in sorted(p.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
-                    if child.is_dir():
-                        children.append(build_tree(child, remaining - 1))
-            except PermissionError:
-                pass
-            node["children"] = children
-        return node
-
     return build_tree(dir_path, depth)
 
 

@@ -2,9 +2,38 @@
 import { computed, ref } from 'vue'
 import { useFileStore } from '../../stores/fileStore.js'
 import { writeApi, filesApi } from '../../services/api.js'
+import { useWriteActions } from '../../composables/useWriteActions.js'
+import ContextMenu from './ContextMenu.vue'
 
-const emit  = defineEmits(['open-file'])
+const emit  = defineEmits(['open-file', 'error'])
 const store = useFileStore()
+
+const {
+  mkdirDialog, mkdirName, mkdirLoading, mkdirError, openMkdir, confirmMkdir,
+  touchDialog, touchName, touchLoading, touchError, openTouch, confirmTouch,
+  pasteLoading, doPaste: _doPaste,
+} = useWriteActions((msg) => emit('error', msg))
+
+// ── Single shared context menu ────────────────────────────────────────────────
+const menuOpen   = ref(false)
+const menuX      = ref(0)
+const menuY      = ref(0)
+const menuTarget = ref(null)   // null = background, object = file
+
+function showMenu(x, y, file = null) {
+  menuTarget.value = file
+  menuX.value = x
+  menuY.value = y
+  menuOpen.value = false
+  setTimeout(() => { menuOpen.value = true }, 10)
+}
+
+function onBgContextMenu(e) {
+  const canShow = store.writeMode && !(store.multiRoot && store.currentPath === '')
+  if (!canShow && !store.clipboard) return
+  e.preventDefault()
+  showMenu(e.clientX, e.clientY, null)
+}
 
 const totalPages = computed(() => Math.ceil(store.total / store.pageSize))
 
@@ -59,21 +88,14 @@ function onDblClick(file) {
   else emit('open-file', file)
 }
 
-// ── Context menu (write mode) ─────────────────────────────────────────────────
-const ctxMenu    = ref(false)
-const ctxX       = ref(0)
-const ctxY       = ref(0)
-const ctxTarget  = ref(null)
+async function doPaste() { await _doPaste() }
 
 function onContextMenu(e, file) {
-  if (store.writeMode === false && file.is_dir) return
+  e.stopPropagation()
+  const hasMenu = store.writeMode || store.clipboard || !file.is_dir
+  if (!hasMenu) return
   e.preventDefault()
-  ctxTarget.value = file
-  ctxX.value = e.clientX
-  ctxY.value = e.clientY
-  ctxMenu.value = false
-  // wait a tick so v-menu repositions correctly
-  setTimeout(() => { ctxMenu.value = true }, 10)
+  showMenu(e.clientX, e.clientY, file)
 }
 
 // ── Rename ────────────────────────────────────────────────────────────────────
@@ -83,19 +105,18 @@ const renameLoading = ref(false)
 const renameError   = ref('')
 
 function openRename() {
-  ctxMenu.value    = false
-  renameName.value  = ctxTarget.value?.name || ''
+  renameName.value  = menuTarget.value?.name || ''
   renameError.value = ''
   renameDialog.value = true
 }
 
 async function confirmRename() {
   const newName = renameName.value.trim()
-  if (!newName || newName === ctxTarget.value?.name) { renameDialog.value = false; return }
+  if (!newName || newName === menuTarget.value?.name) { renameDialog.value = false; return }
   renameLoading.value = true
   renameError.value   = ''
   try {
-    await writeApi.rename(ctxTarget.value.path, newName)
+    await writeApi.rename(menuTarget.value.path, newName)
     renameDialog.value = false
     store.invalidateTree()
     store.loadDirectory(store.currentPath)
@@ -110,15 +131,11 @@ async function confirmRename() {
 const deleteDialog  = ref(false)
 const deleteLoading = ref(false)
 
-function openDelete() {
-  ctxMenu.value = false
-  deleteDialog.value = true
-}
 
 async function confirmDelete() {
   deleteLoading.value = true
   try {
-    await writeApi.delete(ctxTarget.value.path)
+    await writeApi.delete(menuTarget.value.path)
     deleteDialog.value = false
     store.invalidateTree()
     store.loadDirectory(store.currentPath)
@@ -131,7 +148,7 @@ async function confirmDelete() {
 </script>
 
 <template>
-  <div class="list-scroll">
+  <div class="list-scroll" @contextmenu="onBgContextMenu">
     <v-progress-linear v-if="store.loading" indeterminate color="primary" height="2" />
 
     <div v-if="!store.loading && store.total === 0" class="text-center text-grey pa-12">
@@ -183,27 +200,17 @@ async function confirmDelete() {
     </div>
   </div>
 
-  <!-- Right-click context menu -->
-  <v-menu
-    v-model="ctxMenu"
-    :style="{ position: 'fixed', left: ctxX + 'px', top: ctxY + 'px' }"
-    :close-on-content-click="true"
-  >
-    <v-list density="compact" min-width="160">
-      <v-list-item
-        v-if="!ctxTarget?.is_dir"
-        prepend-icon="mdi-download-outline"
-        title="Download"
-        :href="filesApi.downloadUrl(ctxTarget?.path ?? '')"
-        :download="ctxTarget?.name"
-      />
-      <template v-if="store.writeMode">
-        <v-divider v-if="!ctxTarget?.is_dir" />
-        <v-list-item prepend-icon="mdi-pencil-outline" title="Rename" @click="openRename" />
-        <v-list-item prepend-icon="mdi-delete-outline" title="Delete" base-color="error" @click="openDelete" />
-      </template>
-    </v-list>
-  </v-menu>
+  <!-- Single shared context menu -->
+  <ContextMenu
+    v-model="menuOpen"
+    :x="menuX" :y="menuY"
+    :file="menuTarget"
+    @rename="openRename"
+    @delete="deleteDialog = true"
+    @mkdir="openMkdir"
+    @touch="openTouch"
+    @paste="doPaste"
+  />
 
   <!-- Rename dialog -->
   <v-dialog v-model="renameDialog" max-width="360">
@@ -231,8 +238,8 @@ async function confirmDelete() {
     <v-card>
       <v-card-title class="pa-4">Delete</v-card-title>
       <v-card-text class="pt-0">
-        Are you sure you want to delete <strong>{{ ctxTarget?.name }}</strong>?
-        <span v-if="ctxTarget?.is_dir" class="text-error d-block mt-1 text-body-2">
+        Are you sure you want to delete <strong>{{ menuTarget?.name }}</strong>?
+        <span v-if="menuTarget?.is_dir" class="text-error d-block mt-1 text-body-2">
           This will delete the folder and all its contents.
         </span>
       </v-card-text>
@@ -240,6 +247,37 @@ async function confirmDelete() {
         <v-spacer />
         <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
         <v-btn color="error" :loading="deleteLoading" @click="confirmDelete">Delete</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+
+  <!-- New Folder dialog -->
+  <v-dialog v-model="mkdirDialog" max-width="360" @keydown.enter="confirmMkdir">
+    <v-card>
+      <v-card-title class="pa-4">New Folder</v-card-title>
+      <v-card-text class="pt-0">
+        <v-text-field v-model="mkdirName" label="Folder name" autofocus :error-messages="mkdirError" @keydown.enter="confirmMkdir" />
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn variant="text" @click="mkdirDialog = false">Cancel</v-btn>
+        <v-btn color="primary" :loading="mkdirLoading" @click="confirmMkdir">Create</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- New File dialog -->
+  <v-dialog v-model="touchDialog" max-width="360">
+    <v-card>
+      <v-card-title class="pa-4">New File</v-card-title>
+      <v-card-text class="pt-0">
+        <v-text-field v-model="touchName" label="File name" autofocus :error-messages="touchError" @keydown.enter="confirmTouch" />
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn variant="text" @click="touchDialog = false">Cancel</v-btn>
+        <v-btn color="primary" :loading="touchLoading" @click="confirmTouch">Create</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>

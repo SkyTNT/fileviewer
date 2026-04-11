@@ -57,7 +57,10 @@ def make_directory(req: MkdirRequest):
     new_dir = parent / req.name
     if new_dir.exists():
         raise HTTPException(status_code=409, detail="Already exists")
-    new_dir.mkdir()
+    try:
+        new_dir.mkdir()
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True}
 
 
@@ -70,7 +73,10 @@ def touch_file(req: TouchRequest):
     new_file = parent / req.name
     if new_file.exists():
         raise HTTPException(status_code=409, detail="Already exists")
-    new_file.touch()
+    try:
+        new_file.touch()
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True}
 
 
@@ -80,7 +86,10 @@ def save_file(req: SaveRequest):
     file_path = validate_path(req.path)
     if file_path.is_dir():
         raise HTTPException(status_code=400, detail="Path is a directory")
-    file_path.write_text(req.content, encoding="utf-8")
+    try:
+        file_path.write_text(req.content, encoding="utf-8")
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True}
 
 
@@ -93,7 +102,10 @@ def rename(req: RenameRequest):
     dst = src.parent / req.new_name
     if dst.exists():
         raise HTTPException(status_code=409, detail="Target name already exists")
-    src.rename(dst)
+    try:
+        src.rename(dst)
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True}
 
 
@@ -103,10 +115,13 @@ def delete(path: str = Query(...)):
     target = validate_path(path)
     if not target.exists():
         raise HTTPException(status_code=404, detail="Not found")
-    if target.is_dir():
-        shutil.rmtree(target)
-    else:
-        target.unlink()
+    try:
+        if target.is_dir():
+            shutil.rmtree(target)
+        else:
+            target.unlink()
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True}
 
 
@@ -131,10 +146,13 @@ def copy_entry(req: CopyRequest):
         raise HTTPException(status_code=400, detail="Destination is not a directory")
     dest_name = _unique_copy_name(dest_dir, src.name)
     dest = dest_dir / dest_name
-    if src.is_dir():
-        shutil.copytree(src, dest)
-    else:
-        shutil.copy2(src, dest)
+    try:
+        if src.is_dir():
+            shutil.copytree(src, dest)
+        else:
+            shutil.copy2(src, dest)
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True, "name": dest_name}
 
 
@@ -150,7 +168,10 @@ def move_entry(req: MoveRequest):
     dest = dest_dir / src.name
     if dest.exists():
         raise HTTPException(status_code=409, detail="A file with that name already exists in the destination")
-    shutil.move(str(src), str(dest))
+    try:
+        shutil.move(str(src), str(dest))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True}
 
 

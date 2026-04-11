@@ -235,8 +235,8 @@ async function onFilesSelected(e) {
       <v-tooltip activator="parent">{{ showFilter ? 'Close filter' : 'Filter files' }}</v-tooltip>
     </v-btn>
 
-    <!-- Write mode actions -->
-    <template v-if="store.writeMode">
+    <!-- Write mode actions (hidden at multi-root virtual root) -->
+    <template v-if="store.writeMode && !(store.multiRoot && store.currentPath === '')">
       <v-chip size="x-small" color="warning" variant="tonal" class="mr-2 font-weight-bold">
         WRITE
       </v-chip>
@@ -254,8 +254,8 @@ async function onFilesSelected(e) {
       </v-btn>
     </template>
 
-    <!-- Clipboard paste -->
-    <template v-if="store.writeMode && store.clipboard">
+    <!-- Clipboard paste (hidden at multi-root virtual root) -->
+    <template v-if="store.writeMode && store.clipboard && !(store.multiRoot && store.currentPath === '')">
       <v-chip
         size="x-small"
         :color="store.clipboard.action === 'cut' ? 'warning' : 'info'"
@@ -371,8 +371,8 @@ async function onFilesSelected(e) {
         </v-btn-toggle>
       </div>
 
-      <!-- Write mode actions -->
-      <template v-if="store.writeMode">
+      <!-- Write mode actions (hidden at multi-root virtual root) -->
+      <template v-if="store.writeMode && !(store.multiRoot && store.currentPath === '')">
         <v-divider />
         <div class="px-3 py-1 d-flex align-center ga-2">
           <v-chip size="x-small" color="warning" variant="tonal" class="font-weight-bold">WRITE</v-chip>
@@ -398,7 +398,7 @@ async function onFilesSelected(e) {
           rounded="lg"
           @click="openMkdir"
         />
-        <template v-if="store.clipboard">
+        <template v-if="store.clipboard && !(store.multiRoot && store.currentPath === '')">
           <v-list-item
             :prepend-icon="store.clipboard.action === 'cut' ? 'mdi-content-cut' : 'mdi-content-copy'"
             :title="'Paste ' + store.clipboard.entry.name"

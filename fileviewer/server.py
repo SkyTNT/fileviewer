@@ -46,14 +46,22 @@ app.include_router(hex_reader.router,     prefix="/api/hex",     tags=["hex"])
 
 @app.get("/api/root")
 def get_root_info():
-    """Return only the display name of the root directory, not its real path."""
-    root = Path(os.environ.get("FILE_VIEWER_ROOT", ".")).resolve()
-    return {"name": root.name or "/"}
+    """Return the display name of the root (or 'Home' for multi-root)."""
+    from fileviewer.config import get_roots, is_multi_root
+    if is_multi_root():
+        return {"name": "Home"}
+    _, display_name, _ = get_roots()[0]
+    return {"name": display_name}
 
 
 @app.get("/api/config")
 def get_config():
-    return {"write_mode": bool(os.environ.get("FILE_VIEWER_WRITE"))}
+    from fileviewer.config import get_roots
+    roots = get_roots()
+    return {
+        "write_mode": bool(os.environ.get("FILE_VIEWER_WRITE")),
+        "roots": [{"slug": slug, "name": display_name} for slug, display_name, _ in roots],
+    }
 
 
 if STATIC_DIR.exists() and any(STATIC_DIR.iterdir()):

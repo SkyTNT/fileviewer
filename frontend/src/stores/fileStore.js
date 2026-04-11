@@ -14,6 +14,7 @@ export const useFileStore = defineStore('file', () => {
   const total         = ref(0)
   const selectedEntry = ref(null)
   const writeMode     = ref(false)
+  const multiRoot     = ref(false)
   const treeRevision  = ref(0)
   const filterPattern = ref('')
   const clipboard     = ref(null) // { entry, action: 'copy' | 'cut' }
@@ -73,6 +74,7 @@ export const useFileStore = defineStore('file', () => {
       const [rootRes, cfgRes] = await Promise.all([filesApi.getRoot(), configApi.getConfig()])
       rootName.value  = rootRes.data.name || 'Root'
       writeMode.value = cfgRes.data.write_mode ?? false
+      multiRoot.value = (cfgRes.data.roots?.length ?? 1) > 1
       await loadDirectory(getHashPath())
     } catch (e) {
       error.value = e.message
@@ -129,7 +131,7 @@ export const useFileStore = defineStore('file', () => {
 
   return {
     rootName, currentPath, entries, loading, error, viewMode, breadcrumbs,
-    page, pageSize, total, selectedEntry, writeMode, treeRevision, filterPattern,
+    page, pageSize, total, selectedEntry, writeMode, multiRoot, treeRevision, filterPattern,
     clipboard,
     init, loadDirectory, goToPage, navigate, selectEntry, invalidateTree, setFilter,
     setCopy, setCut, clearClipboard, paste,

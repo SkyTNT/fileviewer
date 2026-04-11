@@ -1,10 +1,92 @@
 <script setup>
 import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
 import { useFileStore } from '../../stores/fileStore.js'
+import { useWriteActions } from '../../composables/useWriteActions.js'
+import { writeApi } from '../../services/api.js'
 import FileCard from './FileCard.vue'
+import ContextMenu from './ContextMenu.vue'
 
-const emit = defineEmits(['open-file'])
+const emit = defineEmits(['open-file', 'error'])
 const store = useFileStore()
+
+const {
+  mkdirDialog, mkdirName, mkdirLoading, mkdirError, openMkdir, confirmMkdir,
+  touchDialog, touchName, touchLoading, touchError, openTouch, confirmTouch,
+  doPaste,
+} = useWriteActions((msg) => emit('error', msg))
+
+// ── Single context menu (shared between cards and background) ─────────────────
+const menuOpen   = ref(false)
+const menuX      = ref(0)
+const menuY      = ref(0)
+const menuTarget = ref(null)   // null = background, object = file
+
+function showMenu(x, y, file = null) {
+  menuTarget.value = file
+  menuX.value = x
+  menuY.value = y
+  menuOpen.value = false
+  setTimeout(() => { menuOpen.value = true }, 10)
+}
+
+function onCardContextMenu({ file, x, y }) {
+  showMenu(x, y, file)
+}
+
+// ── Rename ────────────────────────────────────────────────────────────────────
+const renameDialog  = ref(false)
+const renameName    = ref('')
+const renameLoading = ref(false)
+const renameError   = ref('')
+
+function openRename() {
+  renameName.value  = menuTarget.value?.name || ''
+  renameError.value = ''
+  renameDialog.value = true
+}
+
+async function confirmRename() {
+  const newName = renameName.value.trim()
+  if (!newName || newName === menuTarget.value?.name) { renameDialog.value = false; return }
+  renameLoading.value = true
+  renameError.value   = ''
+  try {
+    await writeApi.rename(menuTarget.value.path, newName)
+    renameDialog.value = false
+    store.invalidateTree()
+    store.loadDirectory(store.currentPath)
+  } catch (e) {
+    renameError.value = e.response?.data?.detail || e.message
+  } finally {
+    renameLoading.value = false
+  }
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+const deleteDialog  = ref(false)
+const deleteLoading = ref(false)
+
+async function confirmDelete() {
+  deleteLoading.value = true
+  try {
+    await writeApi.delete(menuTarget.value.path)
+    deleteDialog.value = false
+    store.invalidateTree()
+    store.loadDirectory(store.currentPath)
+  } catch (e) {
+    emit('error', e.response?.data?.detail || e.message)
+  } finally {
+    deleteLoading.value = false
+  }
+}
+
+// ── Background context menu ───────────────────────────────────────────────────
+function onBgContextMenu(e) {
+  const canShow = store.writeMode && !(store.multiRoot && store.currentPath === '')
+  if (!canShow && !store.clipboard) return
+  e.preventDefault()
+  showMenu(e.clientX, e.clientY, null)
+}
 
 const displayEntries = ref([])
 const sentinelRef    = ref(null)
@@ -183,7 +265,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="waterfall-scroll pa-3">
+  <div class="waterfall-scroll pa-3" @contextmenu="onBgContextMenu">
     <div v-if="store.loading && displayEntries.length === 0"
          class="d-flex justify-center align-center" style="height:200px">
       <v-progress-circular indeterminate />
@@ -207,6 +289,7 @@ onUnmounted(() => {
             :file="file"
             @open="emit('open-file', $event)"
             @navigate="store.navigate"
+            @context-menu="onCardContextMenu"
           />
         </div>
       </div>
@@ -223,9 +306,87 @@ onUnmounted(() => {
       </div>
     </template>
   </div>
+
+  <!-- Single shared context menu for cards and background -->
+  <ContextMenu
+    v-model="menuOpen"
+    :x="menuX" :y="menuY"
+    :file="menuTarget"
+    @rename="openRename"
+    @delete="deleteDialog = true"
+    @mkdir="openMkdir"
+    @touch="openTouch"
+    @paste="doPaste"
+  />
+
+  <!-- Rename dialog -->
+  <v-dialog v-model="renameDialog" max-width="360">
+    <v-card>
+      <v-card-title class="pa-4">Rename</v-card-title>
+      <v-card-text class="pt-0">
+        <v-text-field v-model="renameName" label="New name" autofocus :error-messages="renameError" @keydown.enter="confirmRename" />
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn variant="text" @click="renameDialog = false">Cancel</v-btn>
+        <v-btn color="primary" :loading="renameLoading" @click="confirmRename">Rename</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- Delete dialog -->
+  <v-dialog v-model="deleteDialog" max-width="360">
+    <v-card>
+      <v-card-title class="pa-4">Delete</v-card-title>
+      <v-card-text class="pt-0">
+        Are you sure you want to delete <strong>{{ menuTarget?.name }}</strong>?
+        <span v-if="menuTarget?.is_dir" class="text-error d-block mt-1 text-body-2">
+          This will delete the folder and all its contents.
+        </span>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
+        <v-btn color="error" :loading="deleteLoading" @click="confirmDelete">Delete</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- New Folder dialog -->
+  <v-dialog v-model="mkdirDialog" max-width="360" @keydown.enter="confirmMkdir">
+    <v-card>
+      <v-card-title class="pa-4">New Folder</v-card-title>
+      <v-card-text class="pt-0">
+        <v-text-field v-model="mkdirName" label="Folder name" autofocus :error-messages="mkdirError" @keydown.enter="confirmMkdir" />
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn variant="text" @click="mkdirDialog = false">Cancel</v-btn>
+        <v-btn color="primary" :loading="mkdirLoading" @click="confirmMkdir">Create</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- New File dialog -->
+  <v-dialog v-model="touchDialog" max-width="360">
+    <v-card>
+      <v-card-title class="pa-4">New File</v-card-title>
+      <v-card-text class="pt-0">
+        <v-text-field v-model="touchName" label="File name" autofocus :error-messages="touchError" @keydown.enter="confirmTouch" />
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn variant="text" @click="touchDialog = false">Cancel</v-btn>
+        <v-btn color="primary" :loading="touchLoading" @click="confirmTouch">Create</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <style scoped>
+.waterfall-scroll {
+  min-height: 100%;
+}
 .masonry {
   position: relative;
 }
