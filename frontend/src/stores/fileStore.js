@@ -12,12 +12,13 @@ export const useFileStore = defineStore('file', () => {
   const page          = ref(1)
   const pageSize      = ref(50)
   const total         = ref(0)
-  const selectedEntries = ref([])   // all selected file objects
-  const selectedEntry   = computed(() =>   // single-select compat
+  const selectedEntries  = ref([])   // all selected file objects
+  const selectionAnchor  = ref(null) // last non-shift-clicked item, for range select
+  const selectedEntry    = computed(() =>   // single-select compat
     selectedEntries.value.length === 1 ? selectedEntries.value[0] : null
   )
   const writeMode     = ref(false)
-  const multiRoot     = ref(false)
+  const roots         = ref([])   // [{ slug, name, disk: {total,used,free}|null }]
   const treeRevision  = ref(0)
   const filterPattern = ref('')
   const clipboard      = ref(null)  // { entries: [...], action: 'copy' | 'cut' }
@@ -28,19 +29,38 @@ export const useFileStore = defineStore('file', () => {
   function invalidateTree() { treeRevision.value++ }
 
   function selectEntry(entry) {
-    if (!entry) { selectedEntries.value = []; return }
+    if (!entry) { selectedEntries.value = []; selectionAnchor.value = null; return }
     const isSame = selectedEntries.value.length === 1 && selectedEntries.value[0].path === entry.path
     selectedEntries.value = isSame ? [] : [entry]
+    selectionAnchor.value = isSame ? null : entry
   }
 
   function toggleEntry(entry) {
     const idx = selectedEntries.value.findIndex(e => e.path === entry.path)
     if (idx >= 0) selectedEntries.value = selectedEntries.value.filter((_, i) => i !== idx)
-    else          selectedEntries.value = [...selectedEntries.value, entry]
+    else        { selectedEntries.value = [...selectedEntries.value, entry]; selectionAnchor.value = entry }
   }
 
-  function clearSelection()        { selectedEntries.value = [] }
-  function setSelection(entries)  { selectedEntries.value = [...entries] }
+  // Range select from anchor to entry within visibleEntries (current page / loaded items)
+  function shiftSelectTo(entry, visibleEntries) {
+    if (!selectionAnchor.value) { selectEntry(entry); return }
+    const anchorIdx = visibleEntries.findIndex(e => e.path === selectionAnchor.value.path)
+    const targetIdx = visibleEntries.findIndex(e => e.path === entry.path)
+    if (anchorIdx === -1) { selectEntry(entry); return }
+    const [from, to] = anchorIdx <= targetIdx ? [anchorIdx, targetIdx] : [targetIdx, anchorIdx]
+    selectedEntries.value = visibleEntries.slice(from, to + 1)
+    // anchor does not change on shift-click
+  }
+
+  // Additive: merge new items into selection without clearing existing (Ctrl+rubber-band)
+  function addToSelection(newEntries) {
+    const existing = new Set(selectedEntries.value.map(e => e.path))
+    const toAdd = newEntries.filter(e => !existing.has(e.path))
+    if (toAdd.length) selectedEntries.value = [...selectedEntries.value, ...toAdd]
+  }
+
+  function clearSelection()       { selectedEntries.value = []; selectionAnchor.value = null }
+  function setSelection(entries)  { selectedEntries.value = [...entries]; selectionAnchor.value = entries.at(-1) ?? null }
 
   function setCopy(entry) {
     const all = selectedEntries.value
@@ -133,13 +153,22 @@ export const useFileStore = defineStore('file', () => {
     loadDirectory(currentPath.value)
   }
 
+  const isAtHome = computed(() => currentPath.value === '')
+
   const breadcrumbs = computed(() => {
     const parts = currentPath.value.split('/').filter(Boolean)
     const crumbs = [{ name: rootName.value, path: '' }]
     let cum = ''
-    for (const part of parts) {
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i]
       cum = cum ? cum + '/' + part : part
-      crumbs.push({ name: part, path: cum })
+      // First segment is always the root slug — show its display name
+      let name = part
+      if (i === 0) {
+        const root = roots.value.find(r => r.slug === part)
+        if (root) name = root.name
+      }
+      crumbs.push({ name, path: cum })
     }
     return crumbs
   })
@@ -161,10 +190,10 @@ export const useFileStore = defineStore('file', () => {
   // ── Core ─────────────────────────────────────────────────────────────────────
   async function init() {
     try {
-      const [rootRes, cfgRes] = await Promise.all([filesApi.getRoot(), configApi.getConfig()])
-      rootName.value  = rootRes.data.name || 'Root'
-      writeMode.value = cfgRes.data.write_mode ?? false
-      multiRoot.value = (cfgRes.data.roots?.length ?? 1) > 1
+      const res = await configApi.getConfig()
+      rootName.value  = 'Home'
+      writeMode.value = res.data.write_mode ?? false
+      roots.value     = res.data.roots
       await loadDirectory(getHashPath())
     } catch (e) {
       error.value = e.message
@@ -191,11 +220,18 @@ export const useFileStore = defineStore('file', () => {
 
 
   async function loadDirectory(path, push = false) {
-    // Clear immediately so views can detect a fresh load
     entries.value         = []
     total.value           = 0
     page.value            = 1
     selectedEntries.value = []
+    selectionAnchor.value = null
+    // Home page has no real directory — RootsView handles the display.
+    if (path === '') {
+      loading.value     = false
+      currentPath.value = ''
+      writeHash('', push)
+      return
+    }
     await _fetchPage(path, 1, push)
   }
 
@@ -217,9 +253,9 @@ export const useFileStore = defineStore('file', () => {
 
   return {
     rootName, currentPath, entries, loading, error, viewMode, breadcrumbs,
-    page, pageSize, total, selectedEntry, selectedEntries, writeMode, multiRoot, treeRevision, filterPattern,
+    page, pageSize, total, selectedEntry, selectedEntries, writeMode, roots, isAtHome, treeRevision, filterPattern,
     clipboard, pasteProgress, deleteProgress, pasteConflicts,
-    init, loadDirectory, goToPage, navigate, selectEntry, toggleEntry, clearSelection, setSelection, invalidateTree, setFilter,
+    init, loadDirectory, goToPage, navigate, selectEntry, toggleEntry, shiftSelectTo, addToSelection, clearSelection, setSelection, invalidateTree, setFilter,
     setCopy, setCut, clearClipboard, paste, resolvePaste, deleteEntries,
   }
 })

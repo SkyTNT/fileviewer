@@ -88,57 +88,68 @@ def get_roots() -> list[tuple[str, str, Path]]:
     ]
 
 
-def is_multi_root() -> bool:
-    return len(get_roots()) > 1
+def parse_path(rel_path: str) -> tuple[Path, str, Path]:
+    """Resolve rel_path and return ``(abs_path, slug, root_abs)``.
 
-
-def get_root() -> Path:
-    """Return the single root path (backward-compat helper)."""
-    return get_roots()[0][2]
-
-
-def validate_path(rel_path: str) -> Path:
-    """Resolve a relative path against the appropriate root; block traversal.
-
-    Single-root: path is relative to the one root.
-    Multi-root:  first segment is the slug; remainder is the sub-path.
+    The first path segment is always the root slug; the remainder is the
+    sub-path within that root.  An empty rel_path refers to the virtual home
+    page and raises 400 — there is no real directory to open there.
     """
     from fastapi import HTTPException
 
     roots = get_roots()
-
     try:
-        if len(roots) == 1:
-            _, _, root = roots[0]
-            normalized = Path(os.path.normpath(root / rel_path.lstrip("/")))
-            _check_under(normalized, root)
-            return normalized
-        else:
-            stripped = rel_path.lstrip("/")
-            if not stripped:
-                raise HTTPException(status_code=400, detail="Path refers to virtual root")
-            parts = stripped.split("/", 1)
-            slug = parts[0]
-            subpath = parts[1] if len(parts) > 1 else ""
-            root = next((p for s, _, p in roots if s == slug), None)
-            if root is None:
-                raise HTTPException(status_code=404, detail=f"Root '{slug}' not found")
-            normalized = Path(os.path.normpath(root / subpath))
-            _check_under(normalized, root)
-            return normalized
-
+        stripped = rel_path.lstrip("/")
+        if not stripped:
+            raise HTTPException(status_code=400, detail="Path refers to virtual root")
+        parts = stripped.split("/", 1)
+        slug = parts[0]
+        subpath = parts[1] if len(parts) > 1 else ""
+        root = next((p for s, _, p in roots if s == slug), None)
+        if root is None:
+            raise HTTPException(status_code=404, detail=f"Root '{slug}' not found")
+        normalized = Path(os.path.normpath(root / subpath))
+        _check_under(normalized, root)
+        return normalized, slug, root
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
+def validate_path(rel_path: str) -> Path:
+    """Resolve rel_path to an absolute path (convenience wrapper)."""
+    abs_path, _, _ = parse_path(rel_path)
+    return abs_path
+
+
+def build_entry_path(p: Path, slug: "str | None", root: Path) -> str:
+    """Build the API path string for *p* using its known root context.
+
+    Using the caller-supplied slug+root avoids searching all roots, which
+    would give wrong results when one root is nested inside another.
+    """
+    rel = str(p.relative_to(root)).replace(os.sep, "/")
+    if rel == ".":
+        return slug or ""
+    return f"{slug}/{rel}" if slug else rel
+
+
+def get_disk_usage(path: Path) -> "dict | None":
+    """Return ``{total, used, free}`` bytes for the partition containing *path*."""
+    import shutil
+    try:
+        u = shutil.disk_usage(path)
+        return {"total": u.total, "used": u.used, "free": u.free}
+    except Exception:
+        return None
+
+
 def _check_under(normalized: Path, root: Path) -> None:
     from fastapi import HTTPException
-    root_str = str(root)
-    norm_str = str(normalized)
-    prefix = root_str if root_str.endswith(os.sep) else root_str + os.sep
-    if not (norm_str == root_str.rstrip(os.sep) or norm_str.startswith(prefix)):
+    try:
+        normalized.relative_to(root)
+    except ValueError:
         raise HTTPException(status_code=403, detail="Access denied")
 
 

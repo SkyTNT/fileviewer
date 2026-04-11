@@ -3,43 +3,44 @@ import re
 from pathlib import Path
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import FileResponse
-from fileviewer.config import validate_path, get_file_type, to_rel, get_roots, is_multi_root
+from fileviewer.config import parse_path, build_entry_path, get_file_type, get_roots
 
 router = APIRouter()
 
 
-def entry_info(p: Path) -> dict:
+def entry_info(p: Path, slug: "str | None", root: Path) -> dict:
+    path_str = build_entry_path(p, slug, root)
     try:
         stat = p.stat()
         return {
             "name": p.name,
-            "path": to_rel(p),
+            "path": path_str,
             "type": get_file_type(p),
             "size": stat.st_size if p.is_file() else None,
             "modified": stat.st_mtime,
             "is_dir": p.is_dir(),
             "extension": p.suffix.lower() if p.is_file() else None,
         }
-    except PermissionError:
+    except (PermissionError, OSError):
         return {
             "name": p.name,
-            "path": to_rel(p),
+            "path": path_str,
             "type": "unknown",
             "size": None,
             "modified": None,
-            "is_dir": p.is_dir(),
-            "extension": p.suffix.lower() if p.is_file() else None,
+            "is_dir": False,
+            "extension": p.suffix.lower(),
         }
 
 
-def build_tree(p: Path, remaining: int) -> dict:
-    node = entry_info(p)
+def build_tree(p: Path, remaining: int, slug: "str | None", root: Path) -> dict:
+    node = entry_info(p, slug, root)
     if p.is_dir() and remaining > 0:
         children = []
         try:
             for child in sorted(p.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
                 if child.is_dir():
-                    children.append(build_tree(child, remaining - 1))
+                    children.append(build_tree(child, remaining - 1, slug, root))
         except PermissionError:
             pass
         node["children"] = children
@@ -53,28 +54,12 @@ def list_directory(
     page_size: int = Query(50, ge=1, le=500),
     filter: str | None = Query(None),
 ):
-    # Multi-root virtual root listing
-    if is_multi_root() and not path:
-        entries = []
-        for slug, display_name, abs_path in get_roots():
-            try:
-                stat = abs_path.stat()
-                modified = stat.st_mtime
-            except Exception:
-                modified = None
-            entries.append({
-                "name": display_name,
-                "path": slug,
-                "type": "directory",
-                "size": None,
-                "modified": modified,
-                "is_dir": True,
-                "extension": None,
-            })
-        return {"path": "", "entries": entries, "total": len(entries), "page": 1, "page_size": len(entries)}
+    # Home page — RootsView handles display, no file listing needed.
+    if not path:
+        return {"path": "", "entries": [], "total": 0, "page": 1, "page_size": 0}
 
-    dir_path = validate_path(path)
-    if not dir_path.is_dir():
+    abs_path, slug, root = parse_path(path)
+    if not abs_path.is_dir():
         raise HTTPException(status_code=400, detail="Not a directory")
 
     pattern = None
@@ -85,7 +70,7 @@ def list_directory(
             raise HTTPException(status_code=400, detail=f"Invalid regex: {e}")
 
     try:
-        with os.scandir(dir_path) as it:
+        with os.scandir(abs_path) as it:
             all_entries = sorted(
                 (e for e in it if pattern is None or pattern.search(e.name)),
                 key=lambda e: (not e.is_dir(), e.name.lower()),
@@ -95,10 +80,10 @@ def list_directory(
 
     total = len(all_entries)
     start = (page - 1) * page_size
-    page_entries = [entry_info(Path(e.path)) for e in all_entries[start : start + page_size]]
+    page_entries = [entry_info(Path(e.path), slug, root) for e in all_entries[start: start + page_size]]
 
     return {
-        "path": to_rel(dir_path),
+        "path": build_entry_path(abs_path, slug, root),
         "entries": page_entries,
         "total": total,
         "page": page,
@@ -108,12 +93,11 @@ def list_directory(
 
 @router.get("/tree")
 def get_tree(path: str = Query(""), depth: int = Query(1)):
-    # Multi-root virtual root tree
-    if is_multi_root() and not path:
+    if not path:
         children = []
         for slug, display_name, abs_path in get_roots():
-            node = build_tree(abs_path, depth - 1)
-            node["name"] = display_name  # use custom display name
+            node = build_tree(abs_path, depth - 1, slug, abs_path)
+            node["name"] = display_name
             children.append(node)
         return {
             "name": "Home", "path": "", "type": "directory",
@@ -121,15 +105,15 @@ def get_tree(path: str = Query(""), depth: int = Query(1)):
             "children": children,
         }
 
-    dir_path = validate_path(path)
-    if not dir_path.is_dir():
+    abs_path, slug, root = parse_path(path)
+    if not abs_path.is_dir():
         raise HTTPException(status_code=400, detail="Not a directory")
-    return build_tree(dir_path, depth)
+    return build_tree(abs_path, depth, slug, root)
 
 
 @router.get("/download")
 def download_file(path: str = Query(...)):
-    file_path = validate_path(path)
+    file_path, _, _ = parse_path(path)
     if not file_path.is_file():
         raise HTTPException(status_code=400, detail="Not a file")
     return FileResponse(
@@ -137,4 +121,3 @@ def download_file(path: str = Query(...)):
         filename=file_path.name,
         media_type="application/octet-stream",
     )
-

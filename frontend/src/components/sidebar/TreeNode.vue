@@ -7,6 +7,7 @@ const props = defineProps({
   node:       { type: Object, required: true },
   depth:      { type: Number, default: 0 },
   revealPath: { type: String, default: '' },
+  isRoot:     { type: Boolean, default: false },
 })
 
 const store    = useFileStore()
@@ -87,9 +88,9 @@ watch(() => props.revealPath, async (target) => {
                          'mdi-chevron-right'
           }}
         </v-icon>
-        <!-- folder icon -->
+        <!-- folder / device icon -->
         <v-icon size="20" color="primary" class="mr-2">
-          {{ expanded ? 'mdi-folder-open' : 'mdi-folder' }}
+          {{ isRoot ? 'mdi-harddisk' : (expanded ? 'mdi-folder-open' : 'mdi-folder') }}
         </v-icon>
       </template>
 

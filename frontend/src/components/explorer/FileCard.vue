@@ -6,7 +6,7 @@ import { useFileStore } from '../../stores/fileStore.js'
 const props = defineProps({
   file: { type: Object, required: true },
 })
-const emit  = defineEmits(['open', 'navigate', 'context-menu'])
+const emit  = defineEmits(['open', 'navigate', 'context-menu', 'select'])
 const store = useFileStore()
 
 const isSelected   = computed(() => store.selectedEntries.some(e => e.path === props.file.path))
@@ -53,10 +53,7 @@ let clickTimer = null
 
 function onClick(e) {
   clearTimeout(clickTimer)
-  clickTimer = setTimeout(() => {
-    if (e.ctrlKey || e.metaKey) store.toggleEntry(props.file)
-    else store.selectEntry(props.file)
-  }, 250)
+  clickTimer = setTimeout(() => { emit('select', { file: props.file, event: e }) }, 250)
 }
 
 function onDblClick() {

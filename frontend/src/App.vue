@@ -10,6 +10,7 @@ import FileDetail from './components/sidebar/FileDetail.vue'
 import ExplorerToolbar from './components/explorer/ExplorerToolbar.vue'
 import WaterfallView from './components/explorer/WaterfallView.vue'
 import ListView from './components/explorer/ListView.vue'
+import RootsView from './components/explorer/RootsView.vue'
 import ImageViewer from './components/viewers/ImageViewer.vue'
 import DataFrameViewer from './components/viewers/DataFrameViewer.vue'
 import JsonViewer from './components/viewers/JsonViewer.vue'
@@ -150,8 +151,9 @@ function handleOpenFile(file) {
     </v-app-bar>
 
     <v-main>
+      <RootsView v-if="store.isAtHome" />
       <WaterfallView
-        v-if="store.viewMode === 'waterfall'"
+        v-else-if="store.viewMode === 'waterfall'"
         @open-file="handleOpenFile"
         @error="showError"
       />
@@ -164,7 +166,7 @@ function handleOpenFile(file) {
 
     <!-- Right detail drawer -->
     <v-navigation-drawer
-      :model-value="store.selectedEntries.length > 0"
+      :model-value="store.selectedEntries.length > 0 && !store.isAtHome"
       location="end"
       :width="280"
       @update:model-value="v => { if (!v) store.selectEntry(null) }"

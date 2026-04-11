@@ -34,7 +34,7 @@ function showMenu(x, y, file = null) {
 }
 
 function onBgContextMenu(e) {
-  const canShow = store.writeMode && !(store.multiRoot && store.currentPath === '')
+  const canShow = store.writeMode && !store.isAtHome
   if (!canShow && !store.clipboard) return
   e.preventDefault()
   showMenu(e.clientX, e.clientY, null)
@@ -85,8 +85,9 @@ let clickTimer = null
 function onClick(e, file) {
   clearTimeout(clickTimer)
   clickTimer = setTimeout(() => {
-    if (e.ctrlKey || e.metaKey) store.toggleEntry(file)
-    else store.selectEntry(file)
+    if (e.shiftKey)               store.shiftSelectTo(file, store.entries)
+    else if (e.ctrlKey || e.metaKey) store.toggleEntry(file)
+    else                          store.selectEntry(file)
   }, 250)
 }
 
@@ -147,10 +148,12 @@ async function confirmDelete() {
 // ── Rubber-band selection ─────────────────────────────────────────────────────
 const scrollRef = ref(null)
 
-function onRubberSelect(paths) {
-  if (!paths.length) { store.clearSelection(); return }
+function onRubberSelect(paths, ctrlHeld) {
+  if (!paths.length) { if (!ctrlHeld) store.clearSelection(); return }
   const pathSet = new Set(paths)
-  store.setSelection(store.entries.filter(e => pathSet.has(e.path)))
+  const items = store.entries.filter(e => pathSet.has(e.path))
+  if (ctrlHeld) store.addToSelection(items)
+  else          store.setSelection(items)
 }
 
 const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
@@ -180,7 +183,7 @@ function onKeyDown(e) {
       }
       break
     case 'v':
-      if (store.writeMode && store.clipboard && !(store.multiRoot && store.currentPath === '')) {
+      if (store.writeMode && store.clipboard && !store.isAtHome) {
         e.preventDefault()
         store.paste()
       }

@@ -77,7 +77,7 @@ async function confirmDelete() {
 
 // ── Background context menu ───────────────────────────────────────────────────
 function onBgContextMenu(e) {
-  const canShow = store.writeMode && !(store.multiRoot && store.currentPath === '')
+  const canShow = store.writeMode && !store.isAtHome
   if (!canShow && !store.clipboard) return
   e.preventDefault()
   showMenu(e.clientX, e.clientY, null)
@@ -259,7 +259,7 @@ function onKeyDown(e) {
       }
       break
     case 'v':
-      if (store.writeMode && store.clipboard && !(store.multiRoot && store.currentPath === '')) {
+      if (store.writeMode && store.clipboard && !store.isAtHome) {
         e.preventDefault()
         store.paste()
       }
@@ -295,10 +295,18 @@ onUnmounted(() => {
 // ── Rubber-band selection ─────────────────────────────────────────────────────
 const scrollRef = ref(null)
 
-function onRubberSelect(paths) {
-  if (!paths.length) { store.clearSelection(); return }
+function onRubberSelect(paths, ctrlHeld) {
+  if (!paths.length) { if (!ctrlHeld) store.clearSelection(); return }
   const pathSet = new Set(paths)
-  store.setSelection(displayEntries.value.filter(e => pathSet.has(e.path)))
+  const items = displayEntries.value.filter(e => pathSet.has(e.path))
+  if (ctrlHeld) store.addToSelection(items)
+  else          store.setSelection(items)
+}
+
+function onCardSelect({ file, event }) {
+  if (event.shiftKey)               store.shiftSelectTo(file, displayEntries.value)
+  else if (event.ctrlKey || event.metaKey) store.toggleEntry(file)
+  else                              store.selectEntry(file)
 }
 
 const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
@@ -332,6 +340,7 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
             @open="emit('open-file', $event)"
             @navigate="store.navigate"
             @context-menu="onCardContextMenu"
+            @select="onCardSelect"
           />
         </div>
       </div>

@@ -236,7 +236,7 @@ async function onFilesSelected(e) {
     </v-btn>
 
     <!-- Write mode actions (hidden at multi-root virtual root) -->
-    <template v-if="store.writeMode && !(store.multiRoot && store.currentPath === '')">
+    <template v-if="store.writeMode && !store.isAtHome">
       <v-chip size="x-small" color="warning" variant="tonal" class="mr-2 font-weight-bold">
         WRITE
       </v-chip>
@@ -255,7 +255,7 @@ async function onFilesSelected(e) {
     </template>
 
     <!-- Clipboard paste (hidden at multi-root virtual root) -->
-    <template v-if="store.writeMode && store.clipboard && !(store.multiRoot && store.currentPath === '')">
+    <template v-if="store.writeMode && store.clipboard && !store.isAtHome">
       <v-chip
         size="x-small"
         :color="store.clipboard.action === 'cut' ? 'warning' : 'info'"
@@ -372,7 +372,7 @@ async function onFilesSelected(e) {
       </div>
 
       <!-- Write mode actions (hidden at multi-root virtual root) -->
-      <template v-if="store.writeMode && !(store.multiRoot && store.currentPath === '')">
+      <template v-if="store.writeMode && !store.isAtHome">
         <v-divider />
         <div class="px-3 py-1 d-flex align-center ga-2">
           <v-chip size="x-small" color="warning" variant="tonal" class="font-weight-bold">WRITE</v-chip>
@@ -398,7 +398,7 @@ async function onFilesSelected(e) {
           rounded="lg"
           @click="openMkdir"
         />
-        <template v-if="store.clipboard && !(store.multiRoot && store.currentPath === '')">
+        <template v-if="store.clipboard && !store.isAtHome">
           <v-list-item
             :prepend-icon="store.clipboard.action === 'cut' ? 'mdi-content-cut' : 'mdi-content-copy'"
             :title="'Paste ' + (store.clipboard.entries.length > 1 ? store.clipboard.entries.length + ' items' : store.clipboard.entries[0].name)"

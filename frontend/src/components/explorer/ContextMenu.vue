@@ -14,7 +14,7 @@ const props = defineProps({
 const emit  = defineEmits(['update:modelValue', 'rename', 'delete', 'delete-multi', 'mkdir', 'touch', 'paste', 'error'])
 const store = useFileStore()
 
-const canWrite = () => store.writeMode && !(store.multiRoot && store.currentPath === '')
+const canWrite = () => store.writeMode && !store.isAtHome
 
 // Is the right-clicked file part of a multi-selection?
 const isMultiTarget = computed(() =>

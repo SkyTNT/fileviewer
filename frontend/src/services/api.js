@@ -23,7 +23,6 @@ export const configApi = {
 }
 
 export const filesApi = {
-  getRoot: () => http.get('/root'),
   listDirectory: (path, page = 1, pageSize = 50, filter = null) =>
     http.get('/files/list', { params: { path, page, page_size: pageSize, ...(filter ? { filter } : {}) } }),
   getTree: (path, depth = 1) => http.get('/files/tree', { params: { path, depth } }),

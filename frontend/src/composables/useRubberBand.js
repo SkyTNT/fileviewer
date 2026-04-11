@@ -4,7 +4,7 @@ export function useRubberBand(containerRef, onSelect) {
   const isDragging = ref(false)
   const selRect    = reactive({ left: 0, top: 0, width: 0, height: 0 })
 
-  let startX = 0, startY = 0, startedOnItem = false
+  let startX = 0, startY = 0, startedOnItem = false, ctrlHeld = false
 
   function updateRect(clientX, clientY) {
     selRect.left   = Math.min(startX, clientX)
@@ -42,22 +42,24 @@ export function useRubberBand(containerRef, onSelect) {
       document.body.style.userSelect = 'none'
     }
     updateRect(e.clientX, e.clientY)
-    onSelect(hitTest())
+    onSelect(hitTest(), ctrlHeld)
   }
 
   function onMouseUp() {
     document.body.style.userSelect = ''
     window.removeEventListener('mousemove', onMouseMove)
     window.removeEventListener('mouseup',   onMouseUp)
-    // Plain click on background (no drag, not on an item) → clear selection
-    if (!isDragging.value && !startedOnItem) onSelect([])
+    if (!isDragging.value && !startedOnItem) onSelect([], ctrlHeld)
     isDragging.value = false
   }
 
   function onMouseDown(e) {
     if (e.button !== 0) return
-    e.preventDefault()  // block browser text/element selection on any left-drag
+    // Let native controls (pagination, buttons, links) handle their own clicks
+    if (e.target.closest('button, a, input, select, [role="button"]')) return
+    e.preventDefault()
     startedOnItem = !!e.target.closest('[data-path]')
+    ctrlHeld = e.ctrlKey || e.metaKey
     startX = e.clientX
     startY = e.clientY
     updateRect(startX, startY)
