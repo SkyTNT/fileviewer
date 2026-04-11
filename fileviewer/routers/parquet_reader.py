@@ -1,19 +1,23 @@
+from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 from fastapi import APIRouter, Query, HTTPException
 import polars as pl
 from fileviewer.config import validate_path, schema_to_tree
 
 router = APIRouter()
-_lf_cache: dict[str, pl.LazyFrame] = {}
+
+
+@lru_cache(maxsize=32)
+def _load_lazy_frame(abs_path: str, mtime: float) -> pl.LazyFrame:
+    if abs_path.lower().endswith(('.jsonl', '.ndjson')):
+        return pl.scan_ndjson(abs_path)
+    return pl.scan_parquet(abs_path)
 
 
 def get_lazy_frame(abs_path: str) -> pl.LazyFrame:
-    if abs_path not in _lf_cache:
-        if abs_path.lower().endswith(('.jsonl', '.ndjson')):
-            _lf_cache[abs_path] = pl.scan_ndjson(abs_path)
-        else:
-            _lf_cache[abs_path] = pl.scan_parquet(abs_path)
-    return _lf_cache[abs_path]
+    mtime = Path(abs_path).stat().st_mtime
+    return _load_lazy_frame(abs_path, mtime)
 
 
 @router.get("/schema")
