@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { useDisplay } from 'vuetify'
 import { useFileStore } from '../../stores/fileStore.js'
 import { useAuthStore } from '../../stores/authStore.js'
 import { useAppTheme, ACCENT_COLORS } from '../../composables/useAppTheme.js'
@@ -9,6 +10,7 @@ defineEmits(['toggle-sidebar'])
 const store     = useFileStore()
 const authStore = useAuthStore()
 const { isDark, accentColor, toggleMode, setAccent } = useAppTheme()
+const { mobile } = useDisplay()
 
 // ── Filter ────────────────────────────────────────────────────────────────────
 const showFilter  = ref(false)
@@ -182,109 +184,230 @@ async function onFilesSelected(e) {
 
   <v-spacer />
 
-  <!-- Entry count -->
-  <span class="text-caption text-medium-emphasis mr-2" style="white-space:nowrap">
-    {{ store.total }} items
-  </span>
+  <!-- Hidden upload input (always present) -->
+  <input ref="uploadInput" type="file" multiple style="display:none" @change="onFilesSelected" />
 
-  <!-- Filter input -->
-  <v-text-field
-    v-if="showFilter"
-    v-model="filterInput"
-    density="compact"
-    variant="outlined"
-    placeholder="regex filter…"
-    hide-details
-    clearable
-    autofocus
-    :error="!!filterError"
-    style="max-width:200px; font-size:13px"
-    class="mr-1"
-    @click:clear="clearFilter"
-    @keydown.escape="toggleFilter"
-  >
-    <v-tooltip v-if="filterError" activator="parent" location="bottom" color="error">
-      {{ filterError }}
-    </v-tooltip>
-  </v-text-field>
+  <!-- ── Desktop controls ─────────────────────────────────────────────── -->
+  <template v-if="!mobile">
+    <!-- Entry count -->
+    <span class="text-caption text-medium-emphasis mr-2" style="white-space:nowrap">
+      {{ store.total }} items
+    </span>
 
-  <!-- Filter toggle button -->
-  <v-btn icon size="small" class="mr-1" :color="showFilter ? 'primary' : undefined" @click="toggleFilter">
-    <v-icon size="20">{{ showFilter ? 'mdi-filter' : 'mdi-filter-outline' }}</v-icon>
-    <v-tooltip activator="parent">{{ showFilter ? 'Close filter' : 'Filter files' }}</v-tooltip>
-  </v-btn>
+    <!-- Filter input -->
+    <v-text-field
+      v-if="showFilter"
+      v-model="filterInput"
+      density="compact"
+      variant="outlined"
+      placeholder="regex filter…"
+      hide-details
+      clearable
+      autofocus
+      :error="!!filterError"
+      style="max-width:200px; font-size:13px"
+      class="mr-1"
+      @click:clear="clearFilter"
+      @keydown.escape="toggleFilter"
+    >
+      <v-tooltip v-if="filterError" activator="parent" location="bottom" color="error">
+        {{ filterError }}
+      </v-tooltip>
+    </v-text-field>
 
-  <!-- Write mode actions -->
-  <template v-if="store.writeMode">
-    <v-chip size="x-small" color="warning" variant="tonal" class="mr-2 font-weight-bold">
-      WRITE
-    </v-chip>
-
-    <v-btn icon size="small" class="mr-1" :loading="uploadLoading" @click="openUpload">
-      <v-icon size="20">mdi-upload-outline</v-icon>
-      <v-tooltip activator="parent">Upload files</v-tooltip>
-    </v-btn>
-    <input ref="uploadInput" type="file" multiple style="display:none" @change="onFilesSelected" />
-
-    <v-btn icon size="small" class="mr-1" @click="openTouch">
-      <v-icon size="20">mdi-file-plus-outline</v-icon>
-      <v-tooltip activator="parent">New file</v-tooltip>
+    <!-- Filter toggle button -->
+    <v-btn icon size="small" class="mr-1" :color="showFilter ? 'primary' : undefined" @click="toggleFilter">
+      <v-icon size="20">{{ showFilter ? 'mdi-filter' : 'mdi-filter-outline' }}</v-icon>
+      <v-tooltip activator="parent">{{ showFilter ? 'Close filter' : 'Filter files' }}</v-tooltip>
     </v-btn>
 
-    <v-btn icon size="small" class="mr-1" @click="openMkdir">
-      <v-icon size="20">mdi-folder-plus-outline</v-icon>
-      <v-tooltip activator="parent">New folder</v-tooltip>
-    </v-btn>
-  </template>
-
-  <!-- View toggle -->
-  <v-btn-toggle v-model="store.viewMode" mandatory density="compact" rounded="lg" class="mr-2" color="primary">
-    <v-btn value="waterfall" size="small">
-      <v-icon size="18">mdi-view-dashboard-outline</v-icon>
-      <v-tooltip activator="parent">Waterfall</v-tooltip>
-    </v-btn>
-    <v-btn value="list" size="small">
-      <v-icon size="18">mdi-view-list-outline</v-icon>
-      <v-tooltip activator="parent">List</v-tooltip>
-    </v-btn>
-  </v-btn-toggle>
-
-  <!-- Logout (only when auth is enabled) -->
-  <v-btn v-if="authStore.authRequired" icon size="small" class="mr-1" @click="authStore.logout">
-    <v-icon size="20">mdi-logout</v-icon>
-    <v-tooltip activator="parent">Logout</v-tooltip>
-  </v-btn>
-
-  <!-- Dark / Light toggle -->
-  <v-btn icon size="small" class="mr-1" @click="toggleMode">
-    <v-icon size="20">{{ isDark ? 'mdi-weather-sunny' : 'mdi-weather-night' }}</v-icon>
-    <v-tooltip activator="parent">{{ isDark ? 'Light mode' : 'Dark mode' }}</v-tooltip>
-  </v-btn>
-
-  <!-- Accent color picker -->
-  <v-menu :close-on-content-click="false" location="bottom end">
-    <template #activator="{ props }">
-      <v-btn icon size="small" v-bind="props">
-        <v-icon size="20" :color="accentColor">mdi-palette-outline</v-icon>
-        <v-tooltip activator="parent">Accent color</v-tooltip>
+    <!-- Write mode actions -->
+    <template v-if="store.writeMode">
+      <v-chip size="x-small" color="warning" variant="tonal" class="mr-2 font-weight-bold">
+        WRITE
+      </v-chip>
+      <v-btn icon size="small" class="mr-1" :loading="uploadLoading" @click="openUpload">
+        <v-icon size="20">mdi-upload-outline</v-icon>
+        <v-tooltip activator="parent">Upload files</v-tooltip>
+      </v-btn>
+      <v-btn icon size="small" class="mr-1" @click="openTouch">
+        <v-icon size="20">mdi-file-plus-outline</v-icon>
+        <v-tooltip activator="parent">New file</v-tooltip>
+      </v-btn>
+      <v-btn icon size="small" class="mr-1" @click="openMkdir">
+        <v-icon size="20">mdi-folder-plus-outline</v-icon>
+        <v-tooltip activator="parent">New folder</v-tooltip>
       </v-btn>
     </template>
-    <v-card min-width="180" class="pa-3">
-      <div class="text-caption text-medium-emphasis mb-2">Accent color</div>
-      <div class="d-flex flex-wrap ga-2">
-        <v-btn
-          v-for="c in ACCENT_COLORS"
-          :key="c.value"
-          icon
-          size="28"
-          :style="{ backgroundColor: c.value }"
-          :elevation="accentColor === c.value ? 4 : 0"
-          @click="setAccent(c.value)"
-        >
-          <v-icon v-if="accentColor === c.value" size="16" color="white">mdi-check</v-icon>
-          <v-tooltip activator="parent">{{ c.label }}</v-tooltip>
+
+    <!-- View toggle -->
+    <v-btn-toggle v-model="store.viewMode" mandatory density="compact" rounded="lg" class="mr-2" color="primary">
+      <v-btn value="waterfall" size="small">
+        <v-icon size="18">mdi-view-dashboard-outline</v-icon>
+        <v-tooltip activator="parent">Waterfall</v-tooltip>
+      </v-btn>
+      <v-btn value="list" size="small">
+        <v-icon size="18">mdi-view-list-outline</v-icon>
+        <v-tooltip activator="parent">List</v-tooltip>
+      </v-btn>
+    </v-btn-toggle>
+
+    <!-- Logout -->
+    <v-btn v-if="authStore.authRequired" icon size="small" class="mr-1" @click="authStore.logout">
+      <v-icon size="20">mdi-logout</v-icon>
+      <v-tooltip activator="parent">Logout</v-tooltip>
+    </v-btn>
+
+    <!-- Dark / Light toggle -->
+    <v-btn icon size="small" class="mr-1" @click="toggleMode">
+      <v-icon size="20">{{ isDark ? 'mdi-weather-sunny' : 'mdi-weather-night' }}</v-icon>
+      <v-tooltip activator="parent">{{ isDark ? 'Light mode' : 'Dark mode' }}</v-tooltip>
+    </v-btn>
+
+    <!-- Accent color picker -->
+    <v-menu :close-on-content-click="false" location="bottom end">
+      <template #activator="{ props }">
+        <v-btn icon size="small" v-bind="props">
+          <v-icon size="20" :color="accentColor">mdi-palette-outline</v-icon>
+          <v-tooltip activator="parent">Accent color</v-tooltip>
         </v-btn>
+      </template>
+      <v-card min-width="180" class="pa-3">
+        <div class="text-caption text-medium-emphasis mb-2">Accent color</div>
+        <div class="d-flex flex-wrap ga-2">
+          <v-btn
+            v-for="c in ACCENT_COLORS"
+            :key="c.value"
+            icon
+            size="28"
+            :style="{ backgroundColor: c.value }"
+            :elevation="accentColor === c.value ? 4 : 0"
+            @click="setAccent(c.value)"
+          >
+            <v-icon v-if="accentColor === c.value" size="16" color="white">mdi-check</v-icon>
+            <v-tooltip activator="parent">{{ c.label }}</v-tooltip>
+          </v-btn>
+        </div>
+      </v-card>
+    </v-menu>
+  </template>
+
+  <!-- ── Mobile overflow menu ─────────────────────────────────────────── -->
+  <v-menu v-else :close-on-content-click="false" location="bottom end">
+    <template #activator="{ props }">
+      <v-btn icon size="small" v-bind="props">
+        <v-icon size="20">mdi-dots-vertical</v-icon>
+      </v-btn>
+    </template>
+    <v-card min-width="240" class="pa-1">
+
+      <!-- Entry count + filter -->
+      <div class="text-caption text-medium-emphasis px-3 pt-2 pb-1">{{ store.total }} items</div>
+      <div class="px-2 pb-2">
+        <v-text-field
+          v-model="filterInput"
+          density="compact"
+          variant="outlined"
+          placeholder="regex filter…"
+          hide-details
+          clearable
+          :error="!!filterError"
+          prepend-inner-icon="mdi-filter-outline"
+          style="font-size:13px"
+          @click:clear="clearFilter"
+        >
+          <v-tooltip v-if="filterError" activator="parent" location="bottom" color="error">
+            {{ filterError }}
+          </v-tooltip>
+        </v-text-field>
       </div>
+
+      <v-divider />
+
+      <!-- View toggle -->
+      <div class="px-2 py-2">
+        <v-btn-toggle v-model="store.viewMode" mandatory density="compact" rounded="lg" color="primary" style="width:100%">
+          <v-btn value="waterfall" size="small" style="flex:1">
+            <v-icon size="18" class="mr-1">mdi-view-dashboard-outline</v-icon>
+            Waterfall
+          </v-btn>
+          <v-btn value="list" size="small" style="flex:1">
+            <v-icon size="18" class="mr-1">mdi-view-list-outline</v-icon>
+            List
+          </v-btn>
+        </v-btn-toggle>
+      </div>
+
+      <!-- Write mode actions -->
+      <template v-if="store.writeMode">
+        <v-divider />
+        <div class="px-3 py-1">
+          <v-chip size="x-small" color="warning" variant="tonal" class="font-weight-bold">WRITE</v-chip>
+        </div>
+        <v-list-item
+          prepend-icon="mdi-upload-outline"
+          title="Upload files"
+          density="compact"
+          rounded="lg"
+          @click="openUpload"
+        />
+        <v-list-item
+          prepend-icon="mdi-file-plus-outline"
+          title="New file"
+          density="compact"
+          rounded="lg"
+          @click="openTouch"
+        />
+        <v-list-item
+          prepend-icon="mdi-folder-plus-outline"
+          title="New folder"
+          density="compact"
+          rounded="lg"
+          @click="openMkdir"
+        />
+      </template>
+
+      <v-divider />
+
+      <!-- Dark / Light -->
+      <v-list-item
+        :prepend-icon="isDark ? 'mdi-weather-sunny' : 'mdi-weather-night'"
+        :title="isDark ? 'Light mode' : 'Dark mode'"
+        density="compact"
+        rounded="lg"
+        @click="toggleMode"
+      />
+
+      <!-- Accent color -->
+      <v-list-item density="compact" class="pa-2">
+        <div class="text-caption text-medium-emphasis mb-1 ml-1">Accent color</div>
+        <div class="d-flex flex-wrap ga-2">
+          <v-btn
+            v-for="c in ACCENT_COLORS"
+            :key="c.value"
+            icon
+            size="28"
+            :style="{ backgroundColor: c.value }"
+            :elevation="accentColor === c.value ? 4 : 0"
+            @click="setAccent(c.value)"
+          >
+            <v-icon v-if="accentColor === c.value" size="16" color="white">mdi-check</v-icon>
+          </v-btn>
+        </div>
+      </v-list-item>
+
+      <!-- Logout -->
+      <template v-if="authStore.authRequired">
+        <v-divider />
+        <v-list-item
+          prepend-icon="mdi-logout"
+          title="Logout"
+          density="compact"
+          rounded="lg"
+          base-color="error"
+          @click="authStore.logout"
+        />
+      </template>
     </v-card>
   </v-menu>
 

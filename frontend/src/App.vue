@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
+import { useDisplay } from 'vuetify'
 import { useFileStore } from './stores/fileStore.js'
 import { useAuthStore } from './stores/authStore.js'
 import { useFileOpener } from './composables/useFileOpener.js'
@@ -21,6 +22,7 @@ const store     = useFileStore()
 const authStore = useAuthStore()
 const { activeViewer, activeFile, openFile, closeViewer } = useFileOpener()
 const appTheme = useAppTheme()
+const { mobile } = useDisplay()
 
 const imageViewerRef = ref(null)
 const dfViewerRef = ref(null)
@@ -66,9 +68,15 @@ function startResize(e) {
   window.addEventListener('mouseup', onUp)
 }
 
+// Auto-close sidebar when navigating on mobile
+watch(() => store.currentPath, () => {
+  if (mobile.value) sidebarVisible.value = false
+})
+
 onMounted(async () => {
   const saved = localStorage.getItem('fv-sidebar-width')
-  if (saved) sidebarWidth.value = parseInt(saved)
+  if (saved && !mobile.value) sidebarWidth.value = parseInt(saved)
+  sidebarVisible.value = !mobile.value
   appTheme.init()
 
   // Listen for 401s emitted by axios interceptor
@@ -112,13 +120,19 @@ function handleOpenFile(file) {
     <v-navigation-drawer
       v-model="sidebarVisible"
       :width="sidebarWidth"
-      permanent
+      :permanent="!mobile"
     >
       <v-list-item
         prepend-icon="mdi-folder-multiple-outline"
         title="File Viewer"
         nav
-      />
+      >
+        <template v-if="mobile" #append>
+          <v-btn icon size="small" variant="text" @click="sidebarVisible = false">
+            <v-icon size="20">mdi-close</v-icon>
+          </v-btn>
+        </template>
+      </v-list-item>
       <v-divider />
       <DirectoryTree />
 

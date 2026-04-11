@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useFileStore } from '../../stores/fileStore.js'
 import FileCard from './FileCard.vue'
 
@@ -9,42 +9,38 @@ const store = useFileStore()
 const displayEntries = ref([])
 const sentinelRef    = ref(null)
 const containerRef   = ref(null)
-const colCount       = ref(5)
 
-const cardHeights = reactive({}) // path → actual rendered px height
-const cardROs     = {}           // path → ResizeObserver
-
-function estimatedHeight(file) {
-  return file.type === 'image' ? 230 : 110
+function widthToColCount(w) {
+  return w < 300 ? 1 : w < 480 ? 2 : w < 720 ? 3 : w < 960 ? 4 : w < 1280 ? 5 : 6
 }
 
-// Reactively redistribute entries into columns using shortest-column algorithm.
-// cardHeights is reactive, so this recomputes whenever any height changes.
-const columns = computed(() => {
-  const n = colCount.value
-  const cols = Array.from({ length: n }, () => [])
-  const heights = new Array(n).fill(0)
-  for (const file of displayEntries.value) {
-    const minCol = heights.indexOf(Math.min(...heights))
-    cols[minCol].push(file)
-    heights[minCol] += (cardHeights[file.path] ?? estimatedHeight(file)) + 8
-  }
-  return cols
-})
+const colCount = ref(widthToColCount(window.innerWidth))
 
-// Template ref callback for each card wrapper div.
-// When a card is redistributed to a new column, Vue destroys the old element
-// (el = null) and creates a new one (el = element). We reconnect the observer
-// on the new element. We do NOT delete cardHeights on null to prevent a
-// distribution loop (height gone → recompute with estimate → move back → repeat).
+function estimatedHeight(file) {
+  return file.type === 'image' ? 220 : 150
+}
+
+// ── Height tracking ──────────────────────────────────────────────────────────
+// Plain object (non-reactive) so individual card measurements don't cascade.
+// layoutVersion is the single reactive trigger that batches all updates.
+const cardHeights = {}
+const cardROs     = {}
+const layoutVersion = ref(0)
+let rafId = null
+
+function scheduleLayout() {
+  if (rafId) cancelAnimationFrame(rafId)
+  rafId = requestAnimationFrame(() => { rafId = null; layoutVersion.value++ })
+}
+
+// Called by each card wrapper's :ref. On null we keep cardHeights intact to
+// avoid a redistribution loop (stale estimate → card moves → remount → repeat).
 function attachCardRef(el, path) {
   if (el) {
     if (!cardROs[path]) {
       const ro = new ResizeObserver(() => {
         const h = el.offsetHeight
-        if (cardHeights[path] !== h) {
-          cardHeights[path] = h
-        }
+        if (cardHeights[path] !== h) { cardHeights[path] = h; scheduleLayout() }
       })
       ro.observe(el)
       cardROs[path] = ro
@@ -55,11 +51,27 @@ function attachCardRef(el, path) {
   }
 }
 
+// ── Column distribution ──────────────────────────────────────────────────────
+// Recomputes only when entries, colCount, or the batched height version changes.
+const columns = computed(() => {
+  layoutVersion.value          // batched height updates
+  const n   = colCount.value
+  const cols    = Array.from({ length: n }, () => [])
+  const heights = new Array(n).fill(0)
+  for (const file of displayEntries.value) {
+    const minIdx = heights.indexOf(Math.min(...heights))
+    cols[minIdx].push(file)
+    heights[minIdx] += (cardHeights[file.path] ?? estimatedHeight(file)) + 8
+  }
+  return cols
+})
+
+// ── Entries ──────────────────────────────────────────────────────────────────
 watch(() => store.entries, (newEntries) => {
   if (store.page === 1) {
-    // Directory changed — clear heights that are no longer relevant
-    const newPaths = new Set(newEntries.map(e => e.path))
-    Object.keys(cardHeights).forEach(k => { if (!newPaths.has(k)) delete cardHeights[k] })
+    // Evict heights for paths no longer present
+    const keep = new Set(newEntries.map(e => e.path))
+    for (const p of Object.keys(cardHeights)) if (!keep.has(p)) delete cardHeights[p]
     displayEntries.value = [...newEntries]
   } else {
     displayEntries.value = [...displayEntries.value, ...newEntries]
@@ -71,8 +83,22 @@ function loadMore() {
   store.goToPage(store.page + 1)
 }
 
+// ── Observers ────────────────────────────────────────────────────────────────
 let scrollObs   = null
 let containerRO = null
+let colTimer    = null
+
+// Re-bind when masonry mounts/unmounts during navigation loading state
+watch(containerRef, (el, oldEl) => {
+  if (!containerRO) return
+  if (oldEl) containerRO.unobserve(oldEl)
+  if (el) {
+    clearTimeout(colTimer)
+    const w = el.clientWidth
+    if (w > 0) colCount.value = widthToColCount(w)
+    containerRO.observe(el)
+  }
+})
 
 watch(sentinelRef, (el, oldEl) => {
   if (oldEl) scrollObs?.unobserve(oldEl)
@@ -88,15 +114,25 @@ onMounted(() => {
 
   containerRO = new ResizeObserver(([entry]) => {
     const w = entry.contentRect.width
-    colCount.value = w < 480 ? 2 : w < 720 ? 3 : w < 960 ? 4 : w < 1280 ? 5 : 6
+    if (w === 0) return
+    const next = widthToColCount(w)
+    if (next === colCount.value) return
+    clearTimeout(colTimer)
+    colTimer = setTimeout(() => { colCount.value = next }, 80)
   })
-  if (containerRef.value) containerRO.observe(containerRef.value)
+  if (containerRef.value) {
+    const w = containerRef.value.clientWidth
+    if (w > 0) colCount.value = widthToColCount(w)
+    containerRO.observe(containerRef.value)
+  }
 })
 
 onUnmounted(() => {
+  if (rafId) cancelAnimationFrame(rafId)
+  clearTimeout(colTimer)
   scrollObs?.disconnect()
   containerRO?.disconnect()
-  Object.values(cardROs).forEach(ro => ro.disconnect())
+  for (const ro of Object.values(cardROs)) ro.disconnect()
 })
 </script>
 
