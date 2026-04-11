@@ -2,9 +2,12 @@
 import { computed, ref, watch } from 'vue'
 import { useFileStore } from '../../stores/fileStore.js'
 import { imagesApi, filesApi, textApi } from '../../services/api.js'
-import { writeApi } from '../../services/api.js'
 import { useCopyToClipboard } from '../../composables/useCopyToClipboard.js'
+import { useWriteActions } from '../../composables/useWriteActions.js'
+import { TYPE_ICON, TYPE_COLOR, formatBytes } from '../../utils/fileTypes.js'
 import JsonNode from '../viewers/JsonNode.vue'
+import DialogRename from '../dialogs/DialogRename.vue'
+import DialogConfirmDelete from '../dialogs/DialogConfirmDelete.vue'
 
 const emit  = defineEmits(['open-file'])
 const store = useFileStore()
@@ -46,10 +49,10 @@ function openEntry() {
 const isImage = computed(() => file.value?.type === 'image')
 const imgError = ref(false)
 
-const { copyLoading, copiedOk, copyError, copyToClipboard: _copyToClipboard } = useCopyToClipboard()
+const { copyLoading, copyToClipboard: _copyToClipboard } = useCopyToClipboard()
 const copyToClipboard = () => _copyToClipboard(file.value)
 
-watch(file, () => { imgError.value = false; copiedOk.value = false; copyError.value = '' })
+watch(file, () => { imgError.value = false })
 
 // Same-name .json meta file
 const metaData    = ref(null)
@@ -70,94 +73,19 @@ watch(file, async (f) => {
   }
 }, { immediate: true })
 
-const TYPE_ICON = {
-  directory: 'mdi-folder',
-  image:     'mdi-image-outline',
-  parquet:   'mdi-table-large',
-  json:      'mdi-code-json',
-  jsonl:     'mdi-code-json',
-  text:      'mdi-file-document-outline',
-  video:     'mdi-play-circle-outline',
-  audio:     'mdi-music-note',
-  unknown:   'mdi-file-outline',
-}
-const TYPE_COLOR = {
-  directory: 'primary',
-  image:     'success',
-  parquet:   'warning',
-  json:      'secondary',
-  jsonl:     'secondary',
-  text:      'info',
-  video:     'deep-purple',
-  audio:     'pink',
-}
-
 const typeIcon  = computed(() => TYPE_ICON[file.value?.type] || 'mdi-file-outline')
 const typeColor = computed(() => TYPE_COLOR[file.value?.type] || 'surface-variant')
-
-function formatSize(bytes) {
-  if (bytes == null) return '—'
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB'
-  if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB'
-  return (bytes / 1073741824).toFixed(1) + ' GB'
-}
+const formatSize = (bytes) => formatBytes(bytes, '—')
 
 function formatDate(ts) {
   if (!ts) return '—'
   return new Date(ts * 1000).toLocaleString()
 }
 
-// ── Rename ────────────────────────────────────────────────────────────────────
-const renameDialog  = ref(false)
-const renameName    = ref('')
-const renameLoading = ref(false)
-const renameError   = ref('')
-
-function openRename() {
-  renameName.value  = file.value?.name || ''
-  renameError.value = ''
-  renameDialog.value = true
-}
-
-async function confirmRename() {
-  const newName = renameName.value.trim()
-  if (!newName || newName === file.value?.name) { renameDialog.value = false; return }
-  renameLoading.value = true
-  renameError.value   = ''
-  try {
-    await writeApi.rename(file.value.path, newName)
-    renameDialog.value = false
-    store.selectEntry(null)
-    store.invalidateTree()
-    store.loadDirectory(store.currentPath)
-  } catch (e) {
-    renameError.value = e.response?.data?.detail || e.message
-  } finally {
-    renameLoading.value = false
-  }
-}
-
-// ── Multi-delete ──────────────────────────────────────────────────────────────
-const multiDeleteDialog = ref(false)
-
-async function confirmMultiDelete() {
-  const targets = [...store.selectedEntries]
-  multiDeleteDialog.value = false
-  try {
-    await store.deleteEntries(targets)
-  } catch (e) {
-    console.error('Multi-delete failed', e)
-  }
-}
-
-// ── Delete ────────────────────────────────────────────────────────────────────
-const deleteDialog = ref(false)
-
-async function confirmDelete() {
-  deleteDialog.value = false
-  await store.deleteEntries([file.value])
-}
+const {
+  renameDialog, renameName, renameLoading, renameError, openRename, confirmRename,
+  deleteDialog, deleteTargets, openDelete, confirmDelete,
+} = useWriteActions()
 </script>
 
 <template>
@@ -219,7 +147,7 @@ async function confirmDelete() {
           variant="tonal"
           block
           prepend-icon="mdi-delete-outline"
-          @click="multiDeleteDialog = true"
+          @click="openDelete(store.selectedEntries)"
         >
           Delete {{ store.selectedEntries.length }} items
         </v-btn>
@@ -318,13 +246,13 @@ async function confirmDelete() {
       <v-btn
         v-if="!file.is_dir"
         :loading="copyLoading"
-        :color="copyError ? 'error' : copiedOk ? 'success' : 'secondary'"
+        color="secondary"
         variant="tonal"
         block
-        :prepend-icon="copyError ? 'mdi-alert-circle-outline' : copiedOk ? 'mdi-check' : 'mdi-clipboard-outline'"
+        prepend-icon="mdi-clipboard-outline"
         @click="copyToClipboard"
       >
-        {{ copyError || (copiedOk ? 'Copied!' : 'Copy to clipboard') }}
+        Copy to clipboard
       </v-btn>
 
       <!-- Write mode actions -->
@@ -354,7 +282,7 @@ async function confirmDelete() {
           variant="tonal"
           block
           prepend-icon="mdi-pencil-outline"
-          @click="openRename"
+          @click="openRename(file, () => store.selectEntry(null))"
         >
           Rename
         </v-btn>
@@ -363,7 +291,7 @@ async function confirmDelete() {
           variant="tonal"
           block
           prepend-icon="mdi-delete-outline"
-          @click="deleteDialog = true"
+          @click="openDelete(file)"
         >
           Delete
         </v-btn>
@@ -419,59 +347,14 @@ async function confirmDelete() {
     </template>
   </div>
 
-  <!-- Multi-delete confirm dialog -->
-  <v-dialog v-model="multiDeleteDialog" max-width="400">
-    <v-card>
-      <v-card-title class="pa-4">Delete {{ store.selectedEntries.length }} items</v-card-title>
-      <v-card-text class="pt-0">
-        Are you sure you want to delete {{ store.selectedEntries.length }} items? This cannot be undone.
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="text" @click="multiDeleteDialog = false">Cancel</v-btn>
-        <v-btn color="error" @click="confirmMultiDelete">Delete</v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
-
-  <!-- Rename dialog -->
-  <v-dialog v-model="renameDialog" max-width="360">
-    <v-card>
-      <v-card-title class="pa-4">Rename</v-card-title>
-      <v-card-text class="pt-0">
-        <v-text-field
-          v-model="renameName"
-          label="New name"
-          autofocus
-          :error-messages="renameError"
-          @keydown.enter="confirmRename"
-        />
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="text" @click="renameDialog = false">Cancel</v-btn>
-        <v-btn color="primary" :loading="renameLoading" @click="confirmRename">Rename</v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
-
-  <!-- Delete confirm dialog -->
-  <v-dialog v-model="deleteDialog" max-width="360">
-    <v-card>
-      <v-card-title class="pa-4">Delete</v-card-title>
-      <v-card-text class="pt-0">
-        Are you sure you want to delete <strong>{{ file?.name }}</strong>?
-        <span v-if="file?.is_dir" class="text-error d-block mt-1 text-body-2">
-          This will delete the folder and all its contents.
-        </span>
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
-        <v-btn color="error" @click="confirmDelete">Delete</v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+  <DialogRename
+    v-model="renameDialog"
+    v-model:name="renameName"
+    :loading="renameLoading"
+    :error="renameError"
+    @confirm="confirmRename"
+  />
+  <DialogConfirmDelete v-model="deleteDialog" :targets="deleteTargets" @confirm="confirmDelete" />
 </template>
 
 <style scoped>

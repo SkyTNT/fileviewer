@@ -156,7 +156,7 @@ async function loadSchema() {
     const res    = await parquetApi.getSchema(filePath.value)
     schema.value = res.data.columns.map((c, i) => ({ name: c, dtype: res.data.dtypes[i] }))
     schemaTree.value = res.data.schema_tree ?? []
-  } catch {}
+  } catch {} // schema is supplementary — data loads independently via loadParquet
 }
 
 async function loadParquet() {

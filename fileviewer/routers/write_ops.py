@@ -2,17 +2,17 @@ import os
 import json
 import shutil
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from fileviewer.config import validate_path, get_roots
 
-router = APIRouter()
-
-
 def require_write():
     if os.environ.get("FILE_VIEWER_WRITE", "").lower() in ("", "0", "false", "no"):
         raise HTTPException(status_code=403, detail="Write mode not enabled")
+
+
+router = APIRouter(dependencies=[Depends(require_write)])
 
 
 def _is_root(path: Path) -> bool:
@@ -56,7 +56,7 @@ class SaveRequest(BaseModel):
 
 @router.post("/mkdir")
 def make_directory(req: MkdirRequest):
-    require_write()
+
     parent = validate_path(req.parent)
     if not parent.is_dir():
         raise HTTPException(status_code=400, detail="Parent is not a directory")
@@ -65,14 +65,14 @@ def make_directory(req: MkdirRequest):
         raise HTTPException(status_code=409, detail="Already exists")
     try:
         new_dir.mkdir()
-    except PermissionError as e:
+    except PermissionError:
         raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True}
 
 
 @router.post("/touch")
 def touch_file(req: TouchRequest):
-    require_write()
+
     parent = validate_path(req.parent)
     if not parent.is_dir():
         raise HTTPException(status_code=400, detail="Parent is not a directory")
@@ -81,27 +81,27 @@ def touch_file(req: TouchRequest):
         raise HTTPException(status_code=409, detail="Already exists")
     try:
         new_file.touch()
-    except PermissionError as e:
+    except PermissionError:
         raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True}
 
 
 @router.post("/save")
 def save_file(req: SaveRequest):
-    require_write()
+
     file_path = validate_path(req.path)
     if file_path.is_dir():
         raise HTTPException(status_code=400, detail="Path is a directory")
     try:
         file_path.write_text(req.content, encoding="utf-8")
-    except PermissionError as e:
+    except PermissionError:
         raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True}
 
 
 @router.post("/rename")
 def rename(req: RenameRequest):
-    require_write()
+
     src = validate_path(req.path)
     if _is_root(src):
         raise HTTPException(status_code=403, detail="Cannot rename a root directory")
@@ -112,7 +112,7 @@ def rename(req: RenameRequest):
         raise HTTPException(status_code=409, detail="Target name already exists")
     try:
         src.rename(dst)
-    except PermissionError as e:
+    except PermissionError:
         raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True}
 
@@ -141,7 +141,7 @@ class BatchDeleteRequest(BaseModel):
 
 @router.post("/check-conflicts")
 def check_conflicts(req: CheckConflictsRequest):
-    require_write()
+
     conflicts = []
     for entry in req.entries:
         src = validate_path(entry.src)
@@ -155,7 +155,7 @@ def check_conflicts(req: CheckConflictsRequest):
 
 @router.post("/paste")
 def paste(req: BatchPasteRequest):
-    require_write()
+
 
     def generate():
         total = len(req.entries)
@@ -195,7 +195,7 @@ def paste(req: BatchPasteRequest):
 
 @router.post("/delete")
 def delete_entries(req: BatchDeleteRequest):
-    require_write()
+
 
     def generate():
         total = len(req.paths)
@@ -224,7 +224,7 @@ async def upload(
     parent: str = Form(...),
     files: list[UploadFile] = File(...),
 ):
-    require_write()
+
     dir_path = validate_path(parent)
     if not dir_path.is_dir():
         raise HTTPException(status_code=400, detail="Not a directory")

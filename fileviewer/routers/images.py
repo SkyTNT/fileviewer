@@ -1,5 +1,5 @@
 import io
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response, FileResponse
 from PIL import Image
 from fileviewer.config import validate_path
@@ -35,7 +35,6 @@ def get_thumbnail(path: str = Query(...), size: int = Query(300)):
             _thumb_cache[cache_key] = data
             return Response(content=data, media_type="image/jpeg")
     except Exception as e:
-        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -60,5 +59,4 @@ def get_dimensions(path: str = Query(...)):
         with Image.open(file_path) as img:
             return {"width": img.width, "height": img.height}
     except Exception as e:
-        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=str(e))

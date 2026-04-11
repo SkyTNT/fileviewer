@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { imagesApi } from '../../services/api.js'
 import { useFileStore } from '../../stores/fileStore.js'
+import { TYPE_ICON, TYPE_COLOR, formatBytes } from '../../utils/fileTypes.js'
 
 const props = defineProps({
   file: { type: Object, required: true },
@@ -16,38 +17,9 @@ const thumbnailUrl = computed(() =>
 )
 const imgError = ref(false)
 
-const TYPE_ICON = {
-  directory: 'mdi-folder',
-  image:     'mdi-image-outline',
-  parquet:   'mdi-table-large',
-  json:      'mdi-code-json',
-  jsonl:     'mdi-code-json',
-  text:      'mdi-file-document-outline',
-  video:     'mdi-play-circle-outline',
-  audio:     'mdi-music-note',
-  unknown:   'mdi-file-outline',
-}
-const TYPE_COLOR = {
-  directory: 'primary',
-  image:     'success',
-  parquet:   'warning',
-  json:      'secondary',
-  jsonl:     'secondary',
-  text:      'info',
-  video:     'deep-purple',
-  audio:     'pink',
-}
-
 const typeIcon  = computed(() => TYPE_ICON[props.file.type]  || 'mdi-file-outline')
 const typeColor = computed(() => TYPE_COLOR[props.file.type] || 'surface-variant')
-
-function formatSize(bytes) {
-  if (bytes == null) return ''
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB'
-  if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB'
-  return (bytes / 1073741824).toFixed(1) + ' GB'
-}
+const formatSize = (bytes) => formatBytes(bytes)
 
 let clickTimer = null
 

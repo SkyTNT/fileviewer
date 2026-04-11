@@ -4,13 +4,17 @@ import { useDisplay } from 'vuetify'
 import { useFileStore } from '../../stores/fileStore.js'
 import { useAuthStore } from '../../stores/authStore.js'
 import { useAppTheme, ACCENT_COLORS } from '../../composables/useAppTheme.js'
+import { useWriteActions } from '../../composables/useWriteActions.js'
 import { writeApi } from '../../services/api.js'
+import { useNotification } from '../../composables/useNotification.js'
+import DialogNewItem from '../dialogs/DialogNewItem.vue'
 
-const emit = defineEmits(['toggle-sidebar', 'error'])
+const emit = defineEmits(['toggle-sidebar'])
 const store     = useFileStore()
 const authStore = useAuthStore()
 const { isDark, accentColor, toggleMode, setAccent } = useAppTheme()
 const { mobile } = useDisplay()
+const { showError } = useNotification()
 
 // ── Filter ────────────────────────────────────────────────────────────────────
 const showFilter  = ref(false)
@@ -73,76 +77,12 @@ const displayCrumbs = computed(() => {
   return [root, { name: '...', path: null }, ...abbr.slice(-2), last]
 })
 
-// ── New Folder ────────────────────────────────────────────────────────────────
-const mkdirDialog  = ref(false)
-const mkdirName    = ref('')
-const mkdirLoading = ref(false)
-const mkdirError   = ref('')
-
-function openMkdir() {
-  mkdirName.value  = ''
-  mkdirError.value = ''
-  mkdirDialog.value = true
-}
-
-async function confirmMkdir() {
-  const name = mkdirName.value.trim()
-  if (!name) return
-  mkdirLoading.value = true
-  mkdirError.value   = ''
-  try {
-    await writeApi.mkdir(store.currentPath, name)
-    mkdirDialog.value = false
-    store.invalidateTree()
-    store.loadDirectory(store.currentPath)
-  } catch (e) {
-    mkdirError.value = e.response?.data?.detail || e.message
-  } finally {
-    mkdirLoading.value = false
-  }
-}
-
-// ── New File ──────────────────────────────────────────────────────────────────
-const touchDialog  = ref(false)
-const touchName    = ref('')
-const touchLoading = ref(false)
-const touchError   = ref('')
-
-function openTouch() {
-  touchName.value  = ''
-  touchError.value = ''
-  touchDialog.value = true
-}
-
-async function confirmTouch() {
-  const name = touchName.value.trim()
-  if (!name) return
-  touchLoading.value = true
-  touchError.value   = ''
-  try {
-    await writeApi.touch(store.currentPath, name)
-    touchDialog.value = false
-    store.loadDirectory(store.currentPath)
-  } catch (e) {
-    touchError.value = e.response?.data?.detail || e.message
-  } finally {
-    touchLoading.value = false
-  }
-}
-
-// ── Paste ─────────────────────────────────────────────────────────────────────
-const pasteLoading = ref(false)
-
-async function doPaste() {
-  pasteLoading.value = true
-  try {
-    await store.paste()
-  } catch (e) {
-    emit('error', e.response?.data?.detail || e.message)
-  } finally {
-    pasteLoading.value = false
-  }
-}
+// ── mkdir / touch / paste (via shared composable) ─────────────────────────────
+const {
+  mkdirDialog, mkdirName, mkdirLoading, mkdirError, openMkdir, confirmMkdir,
+  touchDialog, touchName, touchLoading, touchError, openTouch, confirmTouch,
+  pasteLoading, doPaste,
+} = useWriteActions()
 
 // ── Upload ────────────────────────────────────────────────────────────────────
 const uploadInput   = ref(null)
@@ -161,7 +101,7 @@ async function onFilesSelected(e) {
     await writeApi.upload(store.currentPath, files)
     store.loadDirectory(store.currentPath)
   } catch (err) {
-    console.error('Upload failed', err)
+    showError(err.response?.data?.detail || err.message)
   } finally {
     uploadLoading.value = false
   }
@@ -462,45 +402,22 @@ async function onFilesSelected(e) {
     </v-card>
   </v-menu>
 
-  <!-- New File dialog -->
-  <v-dialog v-model="touchDialog" max-width="360">
-    <v-card>
-      <v-card-title class="pa-4">New File</v-card-title>
-      <v-card-text class="pt-0">
-        <v-text-field
-          v-model="touchName"
-          label="File name"
-          autofocus
-          :error-messages="touchError"
-          @keydown.enter="confirmTouch"
-        />
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="text" @click="touchDialog = false">Cancel</v-btn>
-        <v-btn color="primary" :loading="touchLoading" @click="confirmTouch">Create</v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
-
-  <!-- New Folder dialog -->
-  <v-dialog v-model="mkdirDialog" max-width="360" @keydown.enter="confirmMkdir">
-    <v-card>
-      <v-card-title class="pa-4">New Folder</v-card-title>
-      <v-card-text class="pt-0">
-        <v-text-field
-          v-model="mkdirName"
-          label="Folder name"
-          autofocus
-          :error-messages="mkdirError"
-          @keydown.enter="confirmMkdir"
-        />
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="text" @click="mkdirDialog = false">Cancel</v-btn>
-        <v-btn color="primary" :loading="mkdirLoading" @click="confirmMkdir">Create</v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+  <DialogNewItem
+    v-model="touchDialog"
+    title="New File"
+    label="File name"
+    v-model:name="touchName"
+    :loading="touchLoading"
+    :error="touchError"
+    @confirm="confirmTouch"
+  />
+  <DialogNewItem
+    v-model="mkdirDialog"
+    title="New Folder"
+    label="Folder name"
+    v-model:name="mkdirName"
+    :loading="mkdirLoading"
+    :error="mkdirError"
+    @confirm="confirmMkdir"
+  />
 </template>

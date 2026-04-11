@@ -1,8 +1,9 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useFileStore } from '../../stores/fileStore.js'
 import { filesApi } from '../../services/api.js'
 import { copyFileToClipboard } from '../../composables/useCopyToClipboard.js'
+import { useNotification } from '../../composables/useNotification.js'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -11,8 +12,9 @@ const props = defineProps({
   file: { type: Object, default: null },  // null = background (no file selected)
 })
 
-const emit  = defineEmits(['update:modelValue', 'rename', 'delete', 'delete-multi', 'mkdir', 'touch', 'paste', 'error'])
+const emit  = defineEmits(['update:modelValue', 'rename', 'delete', 'delete-multi', 'mkdir', 'touch', 'paste'])
 const store = useFileStore()
+const { showError, showSuccess } = useNotification()
 
 const canWrite = () => store.writeMode && !store.isAtHome
 
@@ -27,14 +29,12 @@ const multiDownloadFiles = computed(() =>
   store.selectedEntries.filter(e => !e.is_dir)
 )
 
-const copiedSnack = ref(false)
-
 async function copyClipboard() {
   try {
     await copyFileToClipboard(props.file)
-    copiedSnack.value = true
+    showSuccess('Copied to clipboard')
   } catch (e) {
-    emit('error', e.message)
+    showError(e.message)
   }
 }
 
@@ -117,8 +117,4 @@ function downloadMulti() {
     </v-list>
   </v-menu>
 
-  <v-snackbar v-model="copiedSnack" timeout="2000" color="success" location="bottom">
-    <v-icon class="mr-2">mdi-check</v-icon>
-    Copied to clipboard
-  </v-snackbar>
 </template>

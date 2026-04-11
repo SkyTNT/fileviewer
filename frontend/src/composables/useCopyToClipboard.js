@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { imagesApi, filesApi } from '../services/api.js'
+import { useNotification } from './useNotification.js'
 
 const TEXT_SIZE_LIMIT  = 5  * 1024 * 1024  // 5 MB
 const IMAGE_SIZE_LIMIT = 20 * 1024 * 1024  // 20 MB
@@ -37,25 +38,20 @@ export async function copyFileToClipboard(file) {
 }
 
 export function useCopyToClipboard() {
+  const { showError, showSuccess } = useNotification()
   const copyLoading = ref(false)
-  const copiedOk    = ref(false)
-  const copyError   = ref('')
 
   async function copyToClipboard(file) {
     copyLoading.value = true
-    copiedOk.value    = false
-    copyError.value   = ''
     try {
       await copyFileToClipboard(file)
-      copiedOk.value = true
-      setTimeout(() => { copiedOk.value = false }, 2000)
+      showSuccess('Copied to clipboard')
     } catch (e) {
-      copyError.value = e.message
-      setTimeout(() => { copyError.value = '' }, 3000)
+      showError(e.message)
     } finally {
       copyLoading.value = false
     }
   }
 
-  return { copyLoading, copiedOk, copyError, copyToClipboard }
+  return { copyLoading, copyToClipboard }
 }

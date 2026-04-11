@@ -1,23 +1,24 @@
 <script setup>
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useFileStore } from '../../stores/fileStore.js'
-import { writeApi, filesApi } from '../../services/api.js'
 import { useWriteActions } from '../../composables/useWriteActions.js'
 import { useRubberBand } from '../../composables/useRubberBand.js'
-import { useMultiDelete } from '../../composables/useMultiDelete.js'
+import { TYPE_ICON, TYPE_COLOR, formatBytes } from '../../utils/fileTypes.js'
 import ContextMenu from './ContextMenu.vue'
+import DialogRename from '../dialogs/DialogRename.vue'
+import DialogConfirmDelete from '../dialogs/DialogConfirmDelete.vue'
+import DialogNewItem from '../dialogs/DialogNewItem.vue'
 
-const emit  = defineEmits(['open-file', 'error'])
+const emit  = defineEmits(['open-file'])
 const store = useFileStore()
 
 const {
   mkdirDialog, mkdirName, mkdirLoading, mkdirError, openMkdir, confirmMkdir,
   touchDialog, touchName, touchLoading, touchError, openTouch, confirmTouch,
-  pasteLoading, doPaste: _doPaste,
-} = useWriteActions((msg) => emit('error', msg))
-
-const { multiDeleteDialog, multiDeleteTargets, openMultiDelete, confirmMultiDelete } =
-  useMultiDelete((msg) => emit('error', msg))
+  pasteLoading, doPaste,
+  renameDialog, renameName, renameLoading, renameError, openRename, confirmRename,
+  deleteDialog, deleteTargets, openDelete, confirmDelete,
+} = useWriteActions()
 
 // ── Single shared context menu ────────────────────────────────────────────────
 const menuOpen   = ref(false)
@@ -42,38 +43,9 @@ function onBgContextMenu(e) {
 
 const totalPages = computed(() => Math.ceil(store.total / store.pageSize))
 
-const TYPE_ICON = {
-  directory: 'mdi-folder',
-  image:     'mdi-image-outline',
-  parquet:   'mdi-table-large',
-  json:      'mdi-code-json',
-  jsonl:     'mdi-code-json',
-  text:      'mdi-file-document-outline',
-  video:     'mdi-play-circle-outline',
-  audio:     'mdi-music-note',
-  unknown:   'mdi-file-outline',
-}
-const TYPE_COLOR = {
-  directory: 'primary',
-  image:     'success',
-  parquet:   'warning',
-  json:      'secondary',
-  jsonl:     'secondary',
-  text:      'info',
-  video:     'deep-purple',
-  audio:     'pink',
-}
-
 const typeIcon  = t => TYPE_ICON[t]  || 'mdi-file-outline'
 const typeColor = t => TYPE_COLOR[t] || undefined
-
-function formatSize(bytes) {
-  if (bytes == null) return ''
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB'
-  if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB'
-  return (bytes / 1073741824).toFixed(1) + ' GB'
-}
+const formatSize = (bytes) => formatBytes(bytes)
 
 function formatDate(ts) {
   if (!ts) return ''
@@ -97,8 +69,6 @@ function onDblClick(file) {
   else emit('open-file', file)
 }
 
-async function doPaste() { await _doPaste() }
-
 function onContextMenu(e, file) {
   e.preventDefault()
   e.stopPropagation()
@@ -108,42 +78,6 @@ function onContextMenu(e, file) {
   showMenu(e.clientX, e.clientY, file)
 }
 
-// ── Rename ────────────────────────────────────────────────────────────────────
-const renameDialog  = ref(false)
-const renameName    = ref('')
-const renameLoading = ref(false)
-const renameError   = ref('')
-
-function openRename() {
-  renameName.value  = menuTarget.value?.name || ''
-  renameError.value = ''
-  renameDialog.value = true
-}
-
-async function confirmRename() {
-  const newName = renameName.value.trim()
-  if (!newName || newName === menuTarget.value?.name) { renameDialog.value = false; return }
-  renameLoading.value = true
-  renameError.value   = ''
-  try {
-    await writeApi.rename(menuTarget.value.path, newName)
-    renameDialog.value = false
-    store.invalidateTree()
-    store.loadDirectory(store.currentPath)
-  } catch (e) {
-    renameError.value = e.response?.data?.detail || e.message
-  } finally {
-    renameLoading.value = false
-  }
-}
-
-// ── Delete ────────────────────────────────────────────────────────────────────
-const deleteDialog = ref(false)
-
-async function confirmDelete() {
-  deleteDialog.value = false
-  await store.deleteEntries([menuTarget.value])
-}
 
 // ── Rubber-band selection ─────────────────────────────────────────────────────
 const scrollRef = ref(null)
@@ -185,7 +119,7 @@ function onKeyDown(e) {
     case 'v':
       if (store.writeMode && store.clipboard && !store.isAtHome) {
         e.preventDefault()
-        store.paste()
+        doPaste()
       }
       break
   }
@@ -261,99 +195,40 @@ onUnmounted(() => window.removeEventListener('keydown', onKeyDown))
     v-model="menuOpen"
     :x="menuX" :y="menuY"
     :file="menuTarget"
-    @rename="openRename"
-    @delete="deleteDialog = true"
-    @delete-multi="openMultiDelete"
+    @rename="openRename(menuTarget)"
+    @delete="openDelete(menuTarget)"
+    @delete-multi="openDelete"
     @mkdir="openMkdir"
     @touch="openTouch"
     @paste="doPaste"
-    @error="emit('error', $event)"
   />
 
-  <!-- Rename dialog -->
-  <v-dialog v-model="renameDialog" max-width="360">
-    <v-card>
-      <v-card-title class="pa-4">Rename</v-card-title>
-      <v-card-text class="pt-0">
-        <v-text-field
-          v-model="renameName"
-          label="New name"
-          autofocus
-          :error-messages="renameError"
-          @keydown.enter="confirmRename"
-        />
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="text" @click="renameDialog = false">Cancel</v-btn>
-        <v-btn color="primary" :loading="renameLoading" @click="confirmRename">Rename</v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
-
-  <!-- Delete confirm dialog -->
-  <v-dialog v-model="deleteDialog" max-width="360">
-    <v-card>
-      <v-card-title class="pa-4">Delete</v-card-title>
-      <v-card-text class="pt-0">
-        Are you sure you want to delete <strong>{{ menuTarget?.name }}</strong>?
-        <span v-if="menuTarget?.is_dir" class="text-error d-block mt-1 text-body-2">
-          This will delete the folder and all its contents.
-        </span>
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
-        <v-btn color="error" @click="confirmDelete">Delete</v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
-
-
-  <!-- Multi-delete confirm dialog -->
-  <v-dialog v-model="multiDeleteDialog" max-width="400">
-    <v-card>
-      <v-card-title class="pa-4">Delete {{ multiDeleteTargets.length }} items</v-card-title>
-      <v-card-text class="pt-0">
-        Are you sure you want to delete {{ multiDeleteTargets.length }} items? This cannot be undone.
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="text" @click="multiDeleteDialog = false">Cancel</v-btn>
-        <v-btn color="error" @click="confirmMultiDelete">Delete</v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
-
-  <!-- New Folder dialog -->
-  <v-dialog v-model="mkdirDialog" max-width="360" @keydown.enter="confirmMkdir">
-    <v-card>
-      <v-card-title class="pa-4">New Folder</v-card-title>
-      <v-card-text class="pt-0">
-        <v-text-field v-model="mkdirName" label="Folder name" autofocus :error-messages="mkdirError" @keydown.enter="confirmMkdir" />
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="text" @click="mkdirDialog = false">Cancel</v-btn>
-        <v-btn color="primary" :loading="mkdirLoading" @click="confirmMkdir">Create</v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
-
-  <!-- New File dialog -->
-  <v-dialog v-model="touchDialog" max-width="360">
-    <v-card>
-      <v-card-title class="pa-4">New File</v-card-title>
-      <v-card-text class="pt-0">
-        <v-text-field v-model="touchName" label="File name" autofocus :error-messages="touchError" @keydown.enter="confirmTouch" />
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="text" @click="touchDialog = false">Cancel</v-btn>
-        <v-btn color="primary" :loading="touchLoading" @click="confirmTouch">Create</v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+  <DialogRename
+    v-model="renameDialog"
+    v-model:name="renameName"
+    :loading="renameLoading"
+    :error="renameError"
+    @confirm="confirmRename"
+  />
+  <DialogConfirmDelete v-model="deleteDialog" :targets="deleteTargets" @confirm="confirmDelete" />
+  <DialogNewItem
+    v-model="mkdirDialog"
+    title="New Folder"
+    label="Folder name"
+    v-model:name="mkdirName"
+    :loading="mkdirLoading"
+    :error="mkdirError"
+    @confirm="confirmMkdir"
+  />
+  <DialogNewItem
+    v-model="touchDialog"
+    title="New File"
+    label="File name"
+    v-model:name="touchName"
+    :loading="touchLoading"
+    :error="touchError"
+    @confirm="confirmTouch"
+  />
 </template>
 
 <style scoped>

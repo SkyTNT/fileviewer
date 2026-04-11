@@ -6,20 +6,7 @@ import { basicSetup } from 'codemirror'
 import { EditorView } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 import { oneDark } from '@codemirror/theme-one-dark'
-import { javascript } from '@codemirror/lang-javascript'
-import { python } from '@codemirror/lang-python'
-import { html } from '@codemirror/lang-html'
-import { css } from '@codemirror/lang-css'
-import { json } from '@codemirror/lang-json'
-import { sql } from '@codemirror/lang-sql'
-import { xml } from '@codemirror/lang-xml'
-import { markdown } from '@codemirror/lang-markdown'
-import { yaml } from '@codemirror/lang-yaml'
-import { cpp } from '@codemirror/lang-cpp'
-import { java } from '@codemirror/lang-java'
-import { rust } from '@codemirror/lang-rust'
-import { php } from '@codemirror/lang-php'
-import { vue } from '@codemirror/lang-vue'
+import { getLangByExt } from '../../utils/langSupport.js'
 import { textApi, writeApi } from '../../services/api.js'
 import MarkdownRenderer from './MarkdownRenderer.vue'
 import { useFileStore } from '../../stores/fileStore.js'
@@ -47,31 +34,6 @@ const isDirty     = computed(() => editMode.value && editText.value !== content.
 const isMarkdown  = computed(() => ['.md', '.markdown'].includes((currentFile.value?.extension || '').toLowerCase()))
 const previewMode = ref(false)
 
-// ── Language detection ────────────────────────────────────────────────────────
-function getLang(ext) {
-  switch ((ext || '').toLowerCase()) {
-    case '.js': case '.jsx': case '.mjs': case '.cjs':
-      return javascript({ jsx: true })
-    case '.ts': return javascript({ typescript: true })
-    case '.tsx': return javascript({ typescript: true, jsx: true })
-    case '.py': return python()
-    case '.html': case '.htm': return html()
-    case '.css': return css()
-    case '.json': case '.jsonl': return json()
-    case '.sql': return sql()
-    case '.xml': return xml()
-    case '.svg': return xml()
-    case '.md': case '.rst': return markdown()
-    case '.yaml': case '.yml': return yaml()
-    case '.c': case '.h': case '.cpp': case '.hpp': case '.cc': case '.cxx': return cpp()
-    case '.java': case '.kt': case '.kts': return java()
-    case '.rs': return rust()
-    case '.php': return php()
-    case '.vue': return vue()
-    default: return null
-  }
-}
-
 // ── CodeMirror extensions ─────────────────────────────────────────────────────
 const fillTheme = EditorView.theme({
   '.cm-scroller':{ fontFamily: "'Roboto Mono','Courier New',monospace", fontSize: '13px', lineHeight: '1.5' },
@@ -83,7 +45,7 @@ const extensions = computed(() => {
   const exts = [basicSetup, fillTheme, EditorView.lineWrapping]
   if (isDark.value) exts.push(oneDark)
   if (!editMode.value) exts.push(EditorState.readOnly.of(true))
-  const lang = getLang(currentFile.value?.extension)
+  const lang = getLangByExt(currentFile.value?.extension)
   if (lang) exts.push(lang)
   return exts
 })
