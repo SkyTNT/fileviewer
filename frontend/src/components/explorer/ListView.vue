@@ -1,8 +1,10 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useFileStore } from '../../stores/fileStore.js'
 import { writeApi, filesApi } from '../../services/api.js'
 import { useWriteActions } from '../../composables/useWriteActions.js'
+import { useRubberBand } from '../../composables/useRubberBand.js'
+import { useMultiDelete } from '../../composables/useMultiDelete.js'
 import ContextMenu from './ContextMenu.vue'
 
 const emit  = defineEmits(['open-file', 'error'])
@@ -13,6 +15,9 @@ const {
   touchDialog, touchName, touchLoading, touchError, openTouch, confirmTouch,
   pasteLoading, doPaste: _doPaste,
 } = useWriteActions((msg) => emit('error', msg))
+
+const { multiDeleteDialog, multiDeleteTargets, openMultiDelete, confirmMultiDelete } =
+  useMultiDelete((msg) => emit('error', msg))
 
 // ── Single shared context menu ────────────────────────────────────────────────
 const menuOpen   = ref(false)
@@ -77,9 +82,12 @@ function formatDate(ts) {
 
 let clickTimer = null
 
-function onClick(file) {
+function onClick(e, file) {
   clearTimeout(clickTimer)
-  clickTimer = setTimeout(() => store.selectEntry(file), 250)
+  clickTimer = setTimeout(() => {
+    if (e.ctrlKey || e.metaKey) store.toggleEntry(file)
+    else store.selectEntry(file)
+  }, 250)
 }
 
 function onDblClick(file) {
@@ -145,10 +153,57 @@ async function confirmDelete() {
     deleteLoading.value = false
   }
 }
+
+// ── Rubber-band selection ─────────────────────────────────────────────────────
+const scrollRef = ref(null)
+
+function onRubberSelect(paths) {
+  if (!paths.length) { store.clearSelection(); return }
+  const pathSet = new Set(paths)
+  store.setSelection(store.entries.filter(e => pathSet.has(e.path)))
+}
+
+const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
+  useRubberBand(scrollRef, onRubberSelect)
+
+function onKeyDown(e) {
+  if (!e.ctrlKey && !e.metaKey) return
+  const el = document.activeElement
+  if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.isContentEditable) return
+  if (el?.closest('[role="dialog"]')) return
+
+  switch (e.key) {
+    case 'a':
+      e.preventDefault()
+      store.setSelection([...store.entries])
+      break
+    case 'c':
+      if (store.selectedEntries.length) {
+        e.preventDefault()
+        store.setCopy(store.selectedEntries[0])
+      }
+      break
+    case 'x':
+      if (store.writeMode && store.selectedEntries.length) {
+        e.preventDefault()
+        store.setCut(store.selectedEntries[0])
+      }
+      break
+    case 'v':
+      if (store.writeMode && store.clipboard && !(store.multiRoot && store.currentPath === '')) {
+        e.preventDefault()
+        store.paste()
+      }
+      break
+  }
+}
+
+onMounted(()   => window.addEventListener('keydown', onKeyDown))
+onUnmounted(() => window.removeEventListener('keydown', onKeyDown))
 </script>
 
 <template>
-  <div class="list-scroll" @contextmenu="onBgContextMenu">
+  <div ref="scrollRef" class="list-scroll" @contextmenu="onBgContextMenu" @mousedown="rbMouseDown">
     <v-progress-linear v-if="store.loading" indeterminate color="primary" height="2" />
 
     <div v-if="!store.loading && store.total === 0" class="text-center text-grey pa-12">
@@ -161,11 +216,12 @@ async function confirmDelete() {
         v-for="file in store.entries"
         v-ripple
         :key="file.path"
+        :data-path="file.path"
         rounded="lg"
         density="comfortable"
         color="primary"
-        :active="store.selectedEntry?.path === file.path"
-        @click="onClick(file)"
+        :active="store.selectedEntries.some(e => e.path === file.path)"
+        @click="onClick($event, file)"
         @dblclick="onDblClick(file)"
         @contextmenu="onContextMenu($event, file)"
       >
@@ -200,6 +256,13 @@ async function confirmDelete() {
     </div>
   </div>
 
+  <!-- Rubber-band selection overlay -->
+  <div
+    v-if="rbDragging"
+    class="rubberband-rect"
+    :style="{ left: rbRect.left + 'px', top: rbRect.top + 'px', width: rbRect.width + 'px', height: rbRect.height + 'px' }"
+  />
+
   <!-- Single shared context menu -->
   <ContextMenu
     v-model="menuOpen"
@@ -207,9 +270,11 @@ async function confirmDelete() {
     :file="menuTarget"
     @rename="openRename"
     @delete="deleteDialog = true"
+    @delete-multi="openMultiDelete"
     @mkdir="openMkdir"
     @touch="openTouch"
     @paste="doPaste"
+    @error="emit('error', $event)"
   />
 
   <!-- Rename dialog -->
@@ -252,6 +317,21 @@ async function confirmDelete() {
   </v-dialog>
 
 
+  <!-- Multi-delete confirm dialog -->
+  <v-dialog v-model="multiDeleteDialog" max-width="400">
+    <v-card>
+      <v-card-title class="pa-4">Delete {{ multiDeleteTargets.length }} items</v-card-title>
+      <v-card-text class="pt-0">
+        Are you sure you want to delete {{ multiDeleteTargets.length }} items? This cannot be undone.
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn variant="text" @click="multiDeleteDialog = false">Cancel</v-btn>
+        <v-btn color="error" @click="confirmMultiDelete">Delete</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
   <!-- New Folder dialog -->
   <v-dialog v-model="mkdirDialog" max-width="360" @keydown.enter="confirmMkdir">
     <v-card>
@@ -287,6 +367,13 @@ async function confirmDelete() {
 .list-scroll {
   height: 100%;
   overflow-y: auto;
+}
+.rubberband-rect {
+  position: fixed;
+  pointer-events: none;
+  border: 1px solid rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.08);
+  z-index: 999;
 }
 .pagination-fab {
   position: fixed;

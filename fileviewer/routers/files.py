@@ -137,3 +137,4 @@ def download_file(path: str = Query(...)):
         filename=file_path.name,
         media_type="application/octet-stream",
     )
+

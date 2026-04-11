@@ -1,0 +1,61 @@
+import { ref } from 'vue'
+import { imagesApi, filesApi } from '../services/api.js'
+
+const TEXT_SIZE_LIMIT  = 5  * 1024 * 1024  // 5 MB
+const IMAGE_SIZE_LIMIT = 20 * 1024 * 1024  // 20 MB
+
+export async function copyFileToClipboard(file) {
+  const size = file.size ?? 0
+  if (file.type === 'image') {
+    if (size > IMAGE_SIZE_LIMIT) throw new Error('Image too large (max 20 MB)')
+    const res = await fetch(imagesApi.fullUrl(file.path))
+    let blob  = await res.blob()
+    if (blob.type !== 'image/png') {
+      const bmp    = await createImageBitmap(blob)
+      const canvas = document.createElement('canvas')
+      canvas.width = bmp.width; canvas.height = bmp.height
+      canvas.getContext('2d').drawImage(bmp, 0, 0)
+      blob = await new Promise(r => canvas.toBlob(r, 'image/png'))
+    }
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+  } else {
+    if (size > TEXT_SIZE_LIMIT) throw new Error('File too large (max 5 MB)')
+    const res   = await fetch(filesApi.downloadUrl(file.path))
+    const buf   = await res.arrayBuffer()
+    const bytes = new Uint8Array(buf)
+    for (let i = 0; i < bytes.length; i++) {
+      if (bytes[i] === 0) throw new Error('Cannot copy binary file to clipboard')
+    }
+    let text
+    try {
+      text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    } catch {
+      throw new Error('Cannot copy binary file to clipboard')
+    }
+    await navigator.clipboard.writeText(text)
+  }
+}
+
+export function useCopyToClipboard() {
+  const copyLoading = ref(false)
+  const copiedOk    = ref(false)
+  const copyError   = ref('')
+
+  async function copyToClipboard(file) {
+    copyLoading.value = true
+    copiedOk.value    = false
+    copyError.value   = ''
+    try {
+      await copyFileToClipboard(file)
+      copiedOk.value = true
+      setTimeout(() => { copiedOk.value = false }, 2000)
+    } catch (e) {
+      copyError.value = e.message
+      setTimeout(() => { copyError.value = '' }, 3000)
+    } finally {
+      copyLoading.value = false
+    }
+  }
+
+  return { copyLoading, copiedOk, copyError, copyToClipboard }
+}

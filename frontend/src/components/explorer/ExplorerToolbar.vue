@@ -265,7 +265,7 @@ async function onFilesSelected(e) {
         @click:close="store.clearClipboard"
       >
         <v-icon start size="14">{{ store.clipboard.action === 'cut' ? 'mdi-content-cut' : 'mdi-content-copy' }}</v-icon>
-        {{ store.clipboard.entry.name }}
+        {{ store.clipboard.entries.length > 1 ? store.clipboard.entries.length + ' items' : store.clipboard.entries[0].name }}
       </v-chip>
       <v-btn icon size="small" class="mr-2" color="primary" :loading="pasteLoading" @click="doPaste">
         <v-icon size="20">mdi-content-paste</v-icon>
@@ -401,7 +401,7 @@ async function onFilesSelected(e) {
         <template v-if="store.clipboard && !(store.multiRoot && store.currentPath === '')">
           <v-list-item
             :prepend-icon="store.clipboard.action === 'cut' ? 'mdi-content-cut' : 'mdi-content-copy'"
-            :title="'Paste ' + store.clipboard.entry.name"
+            :title="'Paste ' + (store.clipboard.entries.length > 1 ? store.clipboard.entries.length + ' items' : store.clipboard.entries[0].name)"
             density="compact"
             rounded="lg"
             color="primary"

@@ -3,11 +3,34 @@ import { computed, ref, watch } from 'vue'
 import { useFileStore } from '../../stores/fileStore.js'
 import { imagesApi, filesApi, textApi } from '../../services/api.js'
 import { writeApi } from '../../services/api.js'
+import { useCopyToClipboard } from '../../composables/useCopyToClipboard.js'
 import JsonNode from '../viewers/JsonNode.vue'
 
 const emit  = defineEmits(['open-file'])
 const store = useFileStore()
+
+// Single-select (when exactly 1 item selected)
 const file  = computed(() => store.selectedEntry)
+
+// ── Multi-select computed ────────────────────────────────────────────────────
+const isMulti     = computed(() => store.selectedEntries.length > 1)
+const multiFiles  = computed(() => store.selectedEntries.filter(e => !e.is_dir))
+const multiDirs   = computed(() => store.selectedEntries.filter(e =>  e.is_dir))
+const multiSize   = computed(() => multiFiles.value.reduce((s, e) => s + (e.size ?? 0), 0))
+
+function downloadSelected() {
+  multiFiles.value.forEach(f => {
+    const a = document.createElement('a')
+    a.href = filesApi.downloadUrl(f.path)
+    a.download = f.name
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  })
+}
+
+function copySelected() { if (store.selectedEntries.length) store.setCopy(store.selectedEntries[0]) }
+function cutSelected()  { if (store.selectedEntries.length) store.setCut(store.selectedEntries[0])  }
 
 function openEntry() {
   if (!file.value) return
@@ -21,7 +44,11 @@ function openEntry() {
 
 const isImage = computed(() => file.value?.type === 'image')
 const imgError = ref(false)
-watch(file, () => { imgError.value = false })
+
+const { copyLoading, copiedOk, copyError, copyToClipboard: _copyToClipboard } = useCopyToClipboard()
+const copyToClipboard = () => _copyToClipboard(file.value)
+
+watch(file, () => { imgError.value = false; copiedOk.value = false; copyError.value = '' })
 
 // Same-name .json meta file
 const metaData    = ref(null)
@@ -110,6 +137,19 @@ async function confirmRename() {
   }
 }
 
+// ── Multi-delete ──────────────────────────────────────────────────────────────
+const multiDeleteDialog = ref(false)
+
+async function confirmMultiDelete() {
+  const targets = [...store.selectedEntries]
+  multiDeleteDialog.value = false
+  try {
+    await store.deleteEntries(targets)
+  } catch (e) {
+    console.error('Multi-delete failed', e)
+  }
+}
+
 // ── Delete ────────────────────────────────────────────────────────────────────
 const deleteDialog  = ref(false)
 const deleteLoading = ref(false)
@@ -131,7 +171,108 @@ async function confirmDelete() {
 </script>
 
 <template>
-  <div v-if="file" class="detail-panel">
+  <!-- ── Multi-select panel ───────────────────────────────────────────────── -->
+  <div v-if="isMulti" class="detail-panel">
+    <div class="d-flex align-center px-3 pt-3 pb-1">
+      <span class="text-subtitle-2 font-weight-bold">{{ store.selectedEntries.length }} items selected</span>
+      <v-spacer />
+      <v-btn icon size="small" variant="text" @click="store.clearSelection()">
+        <v-icon size="18">mdi-close</v-icon>
+      </v-btn>
+    </div>
+
+    <v-divider />
+
+    <!-- Preview area -->
+    <div class="preview-area pa-4 d-flex align-center justify-center">
+      <v-icon color="primary" size="80">mdi-checkbox-multiple-marked-outline</v-icon>
+    </div>
+
+    <v-divider />
+
+    <!-- Actions -->
+    <div class="px-3 pt-3 d-flex flex-column ga-2">
+      <v-btn
+        v-if="multiFiles.length"
+        color="secondary"
+        variant="tonal"
+        block
+        prepend-icon="mdi-download"
+        @click="downloadSelected"
+      >
+        Download {{ multiFiles.length }} files
+      </v-btn>
+
+      <template v-if="store.writeMode">
+        <div class="d-flex ga-2">
+          <v-btn
+            color="secondary"
+            variant="tonal"
+            style="flex:1"
+            prepend-icon="mdi-content-copy"
+            @click="copySelected"
+          >
+            Copy
+          </v-btn>
+          <v-btn
+            color="secondary"
+            variant="tonal"
+            style="flex:1"
+            prepend-icon="mdi-content-cut"
+            @click="cutSelected"
+          >
+            Cut
+          </v-btn>
+        </div>
+        <v-btn
+          color="error"
+          variant="tonal"
+          block
+          prepend-icon="mdi-delete-outline"
+          @click="multiDeleteDialog = true"
+        >
+          Delete {{ store.selectedEntries.length }} items
+        </v-btn>
+      </template>
+    </div>
+
+    <!-- Summary -->
+    <div class="info-list pa-3">
+      <div v-if="multiFiles.length" class="info-row">
+        <span class="info-label text-caption text-medium-emphasis">Files</span>
+        <span class="info-value text-body-2">{{ multiFiles.length }}</span>
+      </div>
+      <div v-if="multiDirs.length" class="info-row">
+        <span class="info-label text-caption text-medium-emphasis">Folders</span>
+        <span class="info-value text-body-2">{{ multiDirs.length }}</span>
+      </div>
+      <div v-if="multiFiles.length" class="info-row">
+        <span class="info-label text-caption text-medium-emphasis">Total size</span>
+        <span class="info-value text-body-2">{{ formatSize(multiSize) }}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label text-caption text-medium-emphasis">Selected</span>
+        <div class="d-flex flex-column ga-1 mt-1">
+          <span
+            v-for="entry in store.selectedEntries.slice(0, 10)"
+            :key="entry.path"
+            class="info-value text-body-2 text-truncate"
+            :title="entry.name"
+          >
+            <v-icon size="14" class="mr-1" :color="entry.is_dir ? 'primary' : undefined">
+              {{ entry.is_dir ? 'mdi-folder' : 'mdi-file-outline' }}
+            </v-icon>{{ entry.name }}
+          </span>
+          <span v-if="store.selectedEntries.length > 10" class="text-caption text-medium-emphasis">
+            … and {{ store.selectedEntries.length - 10 }} more
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Single-select panel ──────────────────────────────────────────────── -->
+  <div v-else-if="file" class="detail-panel">
     <!-- Header -->
     <div class="d-flex align-center px-3 pt-3 pb-1">
       <span class="text-subtitle-2 font-weight-bold">Details</span>
@@ -181,6 +322,19 @@ async function confirmDelete() {
         prepend-icon="mdi-download"
       >
         Download
+      </v-btn>
+
+      <!-- Copy to clipboard -->
+      <v-btn
+        v-if="!file.is_dir"
+        :loading="copyLoading"
+        :color="copyError ? 'error' : copiedOk ? 'success' : 'secondary'"
+        variant="tonal"
+        block
+        :prepend-icon="copyError ? 'mdi-alert-circle-outline' : copiedOk ? 'mdi-check' : 'mdi-clipboard-outline'"
+        @click="copyToClipboard"
+      >
+        {{ copyError || (copiedOk ? 'Copied!' : 'Copy to clipboard') }}
       </v-btn>
 
       <!-- Write mode actions -->
@@ -274,6 +428,21 @@ async function confirmDelete() {
       </div>
     </template>
   </div>
+
+  <!-- Multi-delete confirm dialog -->
+  <v-dialog v-model="multiDeleteDialog" max-width="400">
+    <v-card>
+      <v-card-title class="pa-4">Delete {{ store.selectedEntries.length }} items</v-card-title>
+      <v-card-text class="pt-0">
+        Are you sure you want to delete {{ store.selectedEntries.length }} items? This cannot be undone.
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn variant="text" @click="multiDeleteDialog = false">Cancel</v-btn>
+        <v-btn color="error" @click="confirmMultiDelete">Delete</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 
   <!-- Rename dialog -->
   <v-dialog v-model="renameDialog" max-width="360">

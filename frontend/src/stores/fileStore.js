@@ -12,30 +12,78 @@ export const useFileStore = defineStore('file', () => {
   const page          = ref(1)
   const pageSize      = ref(50)
   const total         = ref(0)
-  const selectedEntry = ref(null)
+  const selectedEntries = ref([])   // all selected file objects
+  const selectedEntry   = computed(() =>   // single-select compat
+    selectedEntries.value.length === 1 ? selectedEntries.value[0] : null
+  )
   const writeMode     = ref(false)
   const multiRoot     = ref(false)
   const treeRevision  = ref(0)
   const filterPattern = ref('')
-  const clipboard     = ref(null) // { entry, action: 'copy' | 'cut' }
+  const clipboard      = ref(null)  // { entries: [...], action: 'copy' | 'cut' }
+  const pasteProgress  = ref(null)  // { done, total, action } | null
+  const deleteProgress = ref(null)  // { done, total } | null
 
   function invalidateTree() { treeRevision.value++ }
 
-  function setCopy(entry) { clipboard.value = { entry, action: 'copy' } }
-  function setCut(entry)  { clipboard.value = { entry, action: 'cut'  } }
+  function selectEntry(entry) {
+    if (!entry) { selectedEntries.value = []; return }
+    const isSame = selectedEntries.value.length === 1 && selectedEntries.value[0].path === entry.path
+    selectedEntries.value = isSame ? [] : [entry]
+  }
+
+  function toggleEntry(entry) {
+    const idx = selectedEntries.value.findIndex(e => e.path === entry.path)
+    if (idx >= 0) selectedEntries.value = selectedEntries.value.filter((_, i) => i !== idx)
+    else          selectedEntries.value = [...selectedEntries.value, entry]
+  }
+
+  function clearSelection()        { selectedEntries.value = [] }
+  function setSelection(entries)  { selectedEntries.value = [...entries] }
+
+  function setCopy(entry) {
+    const all = selectedEntries.value
+    const entries = (all.length > 1 && all.some(e => e.path === entry.path)) ? [...all] : [entry]
+    clipboard.value = { entries, action: 'copy' }
+  }
+  function setCut(entry) {
+    const all = selectedEntries.value
+    const entries = (all.length > 1 && all.some(e => e.path === entry.path)) ? [...all] : [entry]
+    clipboard.value = { entries, action: 'cut' }
+  }
   function clearClipboard() { clipboard.value = null }
+
+  async function deleteEntries(entries) {
+    deleteProgress.value = { done: 0, total: entries.length }
+    try {
+      for (const entry of entries) {
+        await writeApi.delete(entry.path)
+        deleteProgress.value = { done: deleteProgress.value.done + 1, total: entries.length }
+      }
+      clearSelection()
+      invalidateTree()
+      await loadDirectory(currentPath.value)
+    } finally {
+      deleteProgress.value = null
+    }
+  }
 
   async function paste() {
     if (!clipboard.value) return
-    const { entry, action } = clipboard.value
-    if (action === 'copy') {
-      await writeApi.copy(entry.path, currentPath.value)
-    } else {
-      await writeApi.move(entry.path, currentPath.value)
-      clipboard.value = null
+    const { entries, action } = clipboard.value
+    pasteProgress.value = { done: 0, total: entries.length, action }
+    try {
+      for (const entry of entries) {
+        if (action === 'copy') await writeApi.copy(entry.path, currentPath.value)
+        else                   await writeApi.move(entry.path, currentPath.value)
+        pasteProgress.value = { done: pasteProgress.value.done + 1, total: entries.length, action }
+      }
+      if (action === 'cut') clipboard.value = null
+      invalidateTree()
+      await loadDirectory(currentPath.value)
+    } finally {
+      pasteProgress.value = null
     }
-    invalidateTree()
-    await loadDirectory(currentPath.value)
   }
 
   function setFilter(pattern) {
@@ -99,17 +147,13 @@ export const useFileStore = defineStore('file', () => {
     }
   }
 
-  function selectEntry(entry) {
-    if (!entry) { selectedEntry.value = null; return }
-    selectedEntry.value = selectedEntry.value?.path === entry.path ? null : entry
-  }
 
   async function loadDirectory(path, push = false) {
     // Clear immediately so views can detect a fresh load
-    entries.value       = []
-    total.value         = 0
-    page.value          = 1
-    selectedEntry.value = null
+    entries.value         = []
+    total.value           = 0
+    page.value            = 1
+    selectedEntries.value = []
     await _fetchPage(path, 1, push)
   }
 
@@ -131,9 +175,9 @@ export const useFileStore = defineStore('file', () => {
 
   return {
     rootName, currentPath, entries, loading, error, viewMode, breadcrumbs,
-    page, pageSize, total, selectedEntry, writeMode, multiRoot, treeRevision, filterPattern,
-    clipboard,
-    init, loadDirectory, goToPage, navigate, selectEntry, invalidateTree, setFilter,
-    setCopy, setCut, clearClipboard, paste,
+    page, pageSize, total, selectedEntry, selectedEntries, writeMode, multiRoot, treeRevision, filterPattern,
+    clipboard, pasteProgress, deleteProgress,
+    init, loadDirectory, goToPage, navigate, selectEntry, toggleEntry, clearSelection, setSelection, invalidateTree, setFilter,
+    setCopy, setCut, clearClipboard, paste, deleteEntries,
   }
 })

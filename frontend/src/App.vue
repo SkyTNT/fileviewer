@@ -164,7 +164,7 @@ function handleOpenFile(file) {
 
     <!-- Right detail drawer -->
     <v-navigation-drawer
-      :model-value="!!store.selectedEntry"
+      :model-value="store.selectedEntries.length > 0"
       location="end"
       :width="280"
       @update:model-value="v => { if (!v) store.selectEntry(null) }"
@@ -183,6 +183,49 @@ function handleOpenFile(file) {
     <v-snackbar v-model="snackbar" color="error" timeout="4000" location="bottom">
       <v-icon class="mr-2">mdi-alert-circle-outline</v-icon>
       {{ snackbarText }}
+    </v-snackbar>
+
+    <!-- Operation progress (delete / copy / move) -->
+    <v-snackbar
+      :model-value="!!(store.deleteProgress || store.pasteProgress)"
+      :timeout="-1"
+      location="bottom"
+      color="surface"
+      elevation="4"
+      min-width="300"
+    >
+      <template v-if="store.deleteProgress">
+        <div class="d-flex align-center ga-2 mb-1">
+          <v-icon size="18" color="error">mdi-delete-outline</v-icon>
+          <span class="text-body-2 font-weight-medium">Deleting files</span>
+          <v-spacer />
+          <span class="text-caption text-medium-emphasis">
+            {{ store.deleteProgress.done }} / {{ store.deleteProgress.total }}
+          </span>
+        </div>
+        <v-progress-linear
+          :model-value="store.deleteProgress.total ? (store.deleteProgress.done / store.deleteProgress.total) * 100 : 0"
+          color="error" rounded height="6"
+        />
+      </template>
+      <template v-else-if="store.pasteProgress">
+        <div class="d-flex align-center ga-2 mb-1">
+          <v-icon size="18" color="primary">
+            {{ store.pasteProgress.action === 'cut' ? 'mdi-content-cut' : 'mdi-content-copy' }}
+          </v-icon>
+          <span class="text-body-2 font-weight-medium">
+            {{ store.pasteProgress.action === 'cut' ? 'Moving' : 'Copying' }} files
+          </span>
+          <v-spacer />
+          <span class="text-caption text-medium-emphasis">
+            {{ store.pasteProgress.done }} / {{ store.pasteProgress.total }}
+          </span>
+        </div>
+        <v-progress-linear
+          :model-value="store.pasteProgress.total ? (store.pasteProgress.done / store.pasteProgress.total) * 100 : 0"
+          color="primary" rounded height="6"
+        />
+      </template>
     </v-snackbar>
 
     <!-- Login overlay — shown when auth is required and not logged in -->

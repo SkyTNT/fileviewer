@@ -2,6 +2,8 @@
 import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
 import { useFileStore } from '../../stores/fileStore.js'
 import { useWriteActions } from '../../composables/useWriteActions.js'
+import { useRubberBand } from '../../composables/useRubberBand.js'
+import { useMultiDelete } from '../../composables/useMultiDelete.js'
 import { writeApi } from '../../services/api.js'
 import FileCard from './FileCard.vue'
 import ContextMenu from './ContextMenu.vue'
@@ -14,6 +16,9 @@ const {
   touchDialog, touchName, touchLoading, touchError, openTouch, confirmTouch,
   doPaste,
 } = useWriteActions((msg) => emit('error', msg))
+
+const { multiDeleteDialog, multiDeleteTargets, openMultiDelete, confirmMultiDelete } =
+  useMultiDelete((msg) => emit('error', msg))
 
 // ── Single context menu (shared between cards and background) ─────────────────
 const menuOpen   = ref(false)
@@ -240,7 +245,40 @@ watch(sentinelRef, (el, oldEl) => {
   if (el)    scrollObs?.observe(el)
 })
 
+function onKeyDown(e) {
+  if (!e.ctrlKey && !e.metaKey) return
+  const el = document.activeElement
+  if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.isContentEditable) return
+  if (el?.closest('[role="dialog"]')) return
+
+  switch (e.key) {
+    case 'a':
+      e.preventDefault()
+      store.setSelection([...displayEntries.value])
+      break
+    case 'c':
+      if (store.selectedEntries.length) {
+        e.preventDefault()
+        store.setCopy(store.selectedEntries[0])
+      }
+      break
+    case 'x':
+      if (store.writeMode && store.selectedEntries.length) {
+        e.preventDefault()
+        store.setCut(store.selectedEntries[0])
+      }
+      break
+    case 'v':
+      if (store.writeMode && store.clipboard && !(store.multiRoot && store.currentPath === '')) {
+        e.preventDefault()
+        store.paste()
+      }
+      break
+  }
+}
+
 onMounted(() => {
+  window.addEventListener('keydown', onKeyDown)
   scrollObs = new IntersectionObserver(
     (entries) => { if (entries[0].isIntersecting) loadMore() },
     { rootMargin: '400px' }
@@ -257,15 +295,28 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  window.removeEventListener('keydown', onKeyDown)
   if (rafId) cancelAnimationFrame(rafId)
   scrollObs?.disconnect()
   containerRO?.disconnect()
   for (const ro of Object.values(cardROs)) ro.disconnect()
 })
+
+// ── Rubber-band selection ─────────────────────────────────────────────────────
+const scrollRef = ref(null)
+
+function onRubberSelect(paths) {
+  if (!paths.length) { store.clearSelection(); return }
+  const pathSet = new Set(paths)
+  store.setSelection(displayEntries.value.filter(e => pathSet.has(e.path)))
+}
+
+const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
+  useRubberBand(scrollRef, onRubberSelect)
 </script>
 
 <template>
-  <div class="waterfall-scroll pa-3" @contextmenu="onBgContextMenu">
+  <div ref="scrollRef" class="waterfall-scroll pa-3" @contextmenu="onBgContextMenu" @mousedown="rbMouseDown">
     <div v-if="store.loading && displayEntries.length === 0"
          class="d-flex justify-center align-center" style="height:200px">
       <v-progress-circular indeterminate />
@@ -284,6 +335,7 @@ onUnmounted(() => {
           :key="file.path"
           :ref="el => attachCardRef(el, file.path)"
           :style="cardStyle(file)"
+          :data-path="file.path"
         >
           <FileCard
             :file="file"
@@ -307,6 +359,13 @@ onUnmounted(() => {
     </template>
   </div>
 
+  <!-- Rubber-band selection overlay -->
+  <div
+    v-if="rbDragging"
+    class="rubberband-rect"
+    :style="{ left: rbRect.left + 'px', top: rbRect.top + 'px', width: rbRect.width + 'px', height: rbRect.height + 'px' }"
+  />
+
   <!-- Single shared context menu for cards and background -->
   <ContextMenu
     v-model="menuOpen"
@@ -314,9 +373,11 @@ onUnmounted(() => {
     :file="menuTarget"
     @rename="openRename"
     @delete="deleteDialog = true"
+    @delete-multi="openMultiDelete"
     @mkdir="openMkdir"
     @touch="openTouch"
     @paste="doPaste"
+    @error="emit('error', $event)"
   />
 
   <!-- Rename dialog -->
@@ -348,6 +409,21 @@ onUnmounted(() => {
         <v-spacer />
         <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
         <v-btn color="error" :loading="deleteLoading" @click="confirmDelete">Delete</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- Multi-delete confirm dialog -->
+  <v-dialog v-model="multiDeleteDialog" max-width="400">
+    <v-card>
+      <v-card-title class="pa-4">Delete {{ multiDeleteTargets.length }} items</v-card-title>
+      <v-card-text class="pt-0">
+        Are you sure you want to delete {{ multiDeleteTargets.length }} items? This cannot be undone.
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn variant="text" @click="multiDeleteDialog = false">Cancel</v-btn>
+        <v-btn color="error" @click="confirmMultiDelete">Delete</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -389,5 +465,12 @@ onUnmounted(() => {
 }
 .masonry {
   position: relative;
+}
+.rubberband-rect {
+  position: fixed;
+  pointer-events: none;
+  border: 1px solid rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.08);
+  z-index: 999;
 }
 </style>

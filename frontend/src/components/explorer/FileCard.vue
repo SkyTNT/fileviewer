@@ -9,7 +9,7 @@ const props = defineProps({
 const emit  = defineEmits(['open', 'navigate', 'context-menu'])
 const store = useFileStore()
 
-const isSelected   = computed(() => store.selectedEntry?.path === props.file.path)
+const isSelected   = computed(() => store.selectedEntries.some(e => e.path === props.file.path))
 const isImage      = computed(() => props.file.type === 'image')
 const thumbnailUrl = computed(() =>
   isImage.value ? imagesApi.thumbnailUrl(props.file.path, 400) : null
@@ -51,9 +51,12 @@ function formatSize(bytes) {
 
 let clickTimer = null
 
-function onClick() {
+function onClick(e) {
   clearTimeout(clickTimer)
-  clickTimer = setTimeout(() => store.selectEntry(props.file), 250)
+  clickTimer = setTimeout(() => {
+    if (e.ctrlKey || e.metaKey) store.toggleEntry(props.file)
+    else store.selectEntry(props.file)
+  }, 250)
 }
 
 function onDblClick() {
