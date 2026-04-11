@@ -9,7 +9,7 @@ router = APIRouter()
 
 
 def require_write():
-    if not os.environ.get("FILE_VIEWER_WRITE"):
+    if os.environ.get("FILE_VIEWER_WRITE", "").lower() in ("", "0", "false", "no"):
         raise HTTPException(status_code=403, detail="Write mode not enabled")
 
 

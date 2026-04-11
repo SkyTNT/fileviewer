@@ -65,6 +65,8 @@ function onDblClick() {
 function onContextMenu(e) {
   e.preventDefault()
   e.stopPropagation()
+  const hasMenu = store.writeMode || store.clipboard || !props.file.is_dir
+  if (!hasMenu) return
   emit('context-menu', { file: props.file, x: e.clientX, y: e.clientY })
 }
 </script>

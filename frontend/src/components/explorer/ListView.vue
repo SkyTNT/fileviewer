@@ -91,10 +91,10 @@ function onDblClick(file) {
 async function doPaste() { await _doPaste() }
 
 function onContextMenu(e, file) {
+  e.preventDefault()
   e.stopPropagation()
   const hasMenu = store.writeMode || store.clipboard || !file.is_dir
   if (!hasMenu) return
-  e.preventDefault()
   showMenu(e.clientX, e.clientY, file)
 }
 

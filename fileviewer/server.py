@@ -59,7 +59,7 @@ def get_config():
     from fileviewer.config import get_roots
     roots = get_roots()
     return {
-        "write_mode": bool(os.environ.get("FILE_VIEWER_WRITE")),
+        "write_mode": os.environ.get("FILE_VIEWER_WRITE", "").lower() not in ("", "0", "false", "no"),
         "roots": [{"slug": slug, "name": display_name} for slug, display_name, _ in roots],
     }
 
