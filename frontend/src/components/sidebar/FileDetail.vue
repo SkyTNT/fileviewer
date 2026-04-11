@@ -10,7 +10,8 @@ const emit  = defineEmits(['open-file'])
 const store = useFileStore()
 
 // Single-select (when exactly 1 item selected)
-const file  = computed(() => store.selectedEntry)
+const file     = computed(() => store.selectedEntry)
+const canWrite = computed(() => store.writeMode && store.currentPath !== '')
 
 // ── Multi-select computed ────────────────────────────────────────────────────
 const isMulti     = computed(() => store.selectedEntries.length > 1)
@@ -151,22 +152,11 @@ async function confirmMultiDelete() {
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────
-const deleteDialog  = ref(false)
-const deleteLoading = ref(false)
+const deleteDialog = ref(false)
 
 async function confirmDelete() {
-  deleteLoading.value = true
-  try {
-    await writeApi.delete(file.value.path)
-    deleteDialog.value = false
-    store.selectEntry(null)
-    store.invalidateTree()
-    store.loadDirectory(store.currentPath)
-  } catch (e) {
-    console.error('Delete failed', e)
-  } finally {
-    deleteLoading.value = false
-  }
+  deleteDialog.value = false
+  await store.deleteEntries([file.value])
 }
 </script>
 
@@ -203,7 +193,7 @@ async function confirmDelete() {
         Download {{ multiFiles.length }} files
       </v-btn>
 
-      <template v-if="store.writeMode">
+      <template v-if="canWrite">
         <div class="d-flex ga-2">
           <v-btn
             color="secondary"
@@ -338,7 +328,7 @@ async function confirmDelete() {
       </v-btn>
 
       <!-- Write mode actions -->
-      <template v-if="store.writeMode">
+      <template v-if="canWrite">
         <div class="d-flex ga-2">
           <v-btn
             color="secondary"
@@ -478,7 +468,7 @@ async function confirmDelete() {
       <v-card-actions>
         <v-spacer />
         <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
-        <v-btn color="error" :loading="deleteLoading" @click="confirmDelete">Delete</v-btn>
+        <v-btn color="error" @click="confirmDelete">Delete</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>

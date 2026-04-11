@@ -228,6 +228,39 @@ function handleOpenFile(file) {
       </template>
     </v-snackbar>
 
+    <!-- Paste conflict dialog -->
+    <v-dialog :model-value="!!store.pasteConflicts" max-width="480" persistent>
+      <v-card>
+        <v-card-title class="pa-4">Name conflict</v-card-title>
+        <v-card-text class="pt-0">
+          <p class="mb-3 text-body-2">
+            {{ store.pasteConflicts?.conflicts.length }} item(s) already exist in the destination:
+          </p>
+          <v-list density="compact" class="rounded mb-3"
+                  max-height="160" style="overflow-y:auto">
+            <v-list-item
+              v-for="c in (store.pasteConflicts?.conflicts ?? []).slice(0, 100)"
+              :key="c.src"
+              :title="c.name"
+              prepend-icon="mdi-file-outline"
+            />
+            <v-list-item
+              v-if="(store.pasteConflicts?.conflicts.length ?? 0) > 100"
+              :title="`… and ${store.pasteConflicts.conflicts.length - 100} more`"
+            />
+          </v-list>
+          <p class="text-body-2">What would you like to do?</p>
+        </v-card-text>
+        <v-card-actions class="pa-4 pt-0 flex-wrap ga-2">
+          <v-btn variant="text" @click="store.pasteConflicts = null">Cancel</v-btn>
+          <v-spacer />
+          <v-btn variant="tonal" @click="store.resolvePaste('skip')">Skip</v-btn>
+          <v-btn variant="tonal" color="warning" @click="store.resolvePaste('coexist')">Keep both</v-btn>
+          <v-btn variant="tonal" color="error" @click="store.resolvePaste('overwrite')">Overwrite</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Login overlay — shown when auth is required and not logged in -->
     <LoginPage v-if="!authStore.checking && authStore.authRequired && !authStore.loggedIn" />
   </v-app>

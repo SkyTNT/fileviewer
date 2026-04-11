@@ -23,6 +23,7 @@ export const useFileStore = defineStore('file', () => {
   const clipboard      = ref(null)  // { entries: [...], action: 'copy' | 'cut' }
   const pasteProgress  = ref(null)  // { done, total, action } | null
   const deleteProgress = ref(null)  // { done, total } | null
+  const pasteConflicts = ref(null)  // { conflicts, entries, action, destDir } | null
 
   function invalidateTree() { treeRevision.value++ }
 
@@ -53,37 +54,78 @@ export const useFileStore = defineStore('file', () => {
   }
   function clearClipboard() { clipboard.value = null }
 
+  async function _readSSE(response, onEvent) {
+    if (!response.ok) throw new Error(`Request failed: ${response.status}`)
+    const reader  = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const parts = buffer.split('\n\n')
+      buffer = parts.pop()
+      for (const part of parts) {
+        const line = part.trim()
+        if (!line.startsWith('data:')) continue
+        try { onEvent(JSON.parse(line.slice(5).trim())) } catch {}
+      }
+    }
+  }
+
   async function deleteEntries(entries) {
     deleteProgress.value = { done: 0, total: entries.length }
     try {
-      for (const entry of entries) {
-        await writeApi.delete(entry.path)
-        deleteProgress.value = { done: deleteProgress.value.done + 1, total: entries.length }
-      }
-      clearSelection()
-      invalidateTree()
-      await loadDirectory(currentPath.value)
+      const response = await writeApi.delete(entries.map(e => e.path))
+      await _readSSE(response, (ev) => {
+        if (ev.type === 'progress' || ev.type === 'error')
+          deleteProgress.value = { done: ev.done, total: ev.total }
+        if (ev.type === 'done') {
+          clearSelection()
+          invalidateTree()
+          loadDirectory(currentPath.value)
+        }
+      })
     } finally {
       deleteProgress.value = null
+    }
+  }
+
+  async function _executePaste(entries, action, destDir, onConflict) {
+    pasteProgress.value = { done: 0, total: entries.length, action }
+    try {
+      const response = await writeApi.paste(entries, action, destDir, onConflict)
+      await _readSSE(response, (ev) => {
+        if (ev.type === 'progress' || ev.type === 'error')
+          pasteProgress.value = { done: ev.done, total: ev.total, action }
+        if (ev.type === 'done') {
+          if (action === 'cut') clipboard.value = null
+          invalidateTree()
+          loadDirectory(currentPath.value)
+        }
+      })
+    } finally {
+      pasteProgress.value = null
     }
   }
 
   async function paste() {
     if (!clipboard.value) return
     const { entries, action } = clipboard.value
-    pasteProgress.value = { done: 0, total: entries.length, action }
-    try {
-      for (const entry of entries) {
-        if (action === 'copy') await writeApi.copy(entry.path, currentPath.value)
-        else                   await writeApi.move(entry.path, currentPath.value)
-        pasteProgress.value = { done: pasteProgress.value.done + 1, total: entries.length, action }
-      }
-      if (action === 'cut') clipboard.value = null
-      invalidateTree()
-      await loadDirectory(currentPath.value)
-    } finally {
-      pasteProgress.value = null
+    const destDir = currentPath.value
+    const res = await writeApi.checkConflicts(entries, action, destDir)
+    if (res.data.conflicts.length > 0) {
+      pasteConflicts.value = { conflicts: res.data.conflicts, entries, action, destDir }
+      return
     }
+    await _executePaste(entries, action, destDir, 'skip')
+  }
+
+  async function resolvePaste(strategy) {
+    if (!pasteConflicts.value) return
+    const { entries, action, destDir } = pasteConflicts.value
+    pasteConflicts.value = null
+    await _executePaste(entries, action, destDir, strategy)
   }
 
   function setFilter(pattern) {
@@ -176,8 +218,8 @@ export const useFileStore = defineStore('file', () => {
   return {
     rootName, currentPath, entries, loading, error, viewMode, breadcrumbs,
     page, pageSize, total, selectedEntry, selectedEntries, writeMode, multiRoot, treeRevision, filterPattern,
-    clipboard, pasteProgress, deleteProgress,
+    clipboard, pasteProgress, deleteProgress, pasteConflicts,
     init, loadDirectory, goToPage, navigate, selectEntry, toggleEntry, clearSelection, setSelection, invalidateTree, setFilter,
-    setCopy, setCut, clearClipboard, paste, deleteEntries,
+    setCopy, setCut, clearClipboard, paste, resolvePaste, deleteEntries,
   }
 })

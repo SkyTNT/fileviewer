@@ -158,14 +158,23 @@ def to_rel(abs_path: Path) -> str:
         except ValueError:
             return ""
     else:
+        # Among all roots that contain abs_path, prefer the deepest one
+        # so that a root nested inside another root is matched correctly.
+        best_slug = None
+        best_rel  = None
+        best_depth = -1
         for slug, _, root in roots:
             try:
                 rel = abs_path.relative_to(root)
-                s = str(rel).replace(os.sep, "/")
-                return slug if s == "." else f"{slug}/{s}"
+                depth = len(root.parts)
+                if depth > best_depth:
+                    best_depth = depth
+                    best_slug  = slug
+                    s = str(rel).replace(os.sep, "/")
+                    best_rel = slug if s == "." else f"{slug}/{s}"
             except ValueError:
                 continue
-        return ""
+        return best_rel or ""
 
 
 def _dtype_to_node(name: str, dtype) -> dict:

@@ -101,6 +101,7 @@ async function doPaste() { await _doPaste() }
 function onContextMenu(e, file) {
   e.preventDefault()
   e.stopPropagation()
+  if (store.currentPath === '' && file.is_dir) return
   const hasMenu = store.writeMode || store.clipboard || !file.is_dir
   if (!hasMenu) return
   showMenu(e.clientX, e.clientY, file)
@@ -136,22 +137,11 @@ async function confirmRename() {
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────
-const deleteDialog  = ref(false)
-const deleteLoading = ref(false)
-
+const deleteDialog = ref(false)
 
 async function confirmDelete() {
-  deleteLoading.value = true
-  try {
-    await writeApi.delete(menuTarget.value.path)
-    deleteDialog.value = false
-    store.invalidateTree()
-    store.loadDirectory(store.currentPath)
-  } catch (e) {
-    console.error('Delete failed', e)
-  } finally {
-    deleteLoading.value = false
-  }
+  deleteDialog.value = false
+  await store.deleteEntries([menuTarget.value])
 }
 
 // ── Rubber-band selection ─────────────────────────────────────────────────────
@@ -311,7 +301,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeyDown))
       <v-card-actions>
         <v-spacer />
         <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
-        <v-btn color="error" :loading="deleteLoading" @click="confirmDelete">Delete</v-btn>
+        <v-btn color="error" @click="confirmDelete">Delete</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>

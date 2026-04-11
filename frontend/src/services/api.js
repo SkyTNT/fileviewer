@@ -59,14 +59,34 @@ export const writeApi = {
   mkdir:  (parent, name)              => http.post('/write/mkdir',  { parent, name }),
   touch:  (parent, name)              => http.post('/write/touch',  { parent, name }),
   rename: (path, new_name)            => http.post('/write/rename', { path, new_name }),
-  delete: (path)                      => http.delete('/write/delete', { params: { path } }),
   save:   (path, content)             => http.post('/write/save',   { path, content }),
-  copy:   (src, dest_parent)          => http.post('/write/copy',   { src, dest_parent }),
-  move:   (src, dest_parent)          => http.post('/write/move',   { src, dest_parent }),
-  upload: (parent, files)      => {
+  upload: (parent, files) => {
     const fd = new FormData()
     fd.append('parent', parent)
     for (const f of files) fd.append('files', f)
     return http.post('/write/upload', fd)
   },
+  checkConflicts: (entries, action, destParent) =>
+    http.post('/write/check-conflicts', {
+      entries: entries.map(e => ({ src: e.path, dest_parent: destParent })),
+      action,
+    }),
+  paste: (entries, action, destParent, onConflict) =>
+    fetch('/api/write/paste', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        entries: entries.map(e => ({ src: e.path, dest_parent: destParent })),
+        action,
+        on_conflict: onConflict,
+      }),
+    }),
+  delete: (paths) =>
+    fetch('/api/write/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ paths }),
+    }),
 }

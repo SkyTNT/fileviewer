@@ -68,21 +68,11 @@ async function confirmRename() {
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────
-const deleteDialog  = ref(false)
-const deleteLoading = ref(false)
+const deleteDialog = ref(false)
 
 async function confirmDelete() {
-  deleteLoading.value = true
-  try {
-    await writeApi.delete(menuTarget.value.path)
-    deleteDialog.value = false
-    store.invalidateTree()
-    store.loadDirectory(store.currentPath)
-  } catch (e) {
-    emit('error', e.response?.data?.detail || e.message)
-  } finally {
-    deleteLoading.value = false
-  }
+  deleteDialog.value = false
+  await store.deleteEntries([menuTarget.value])
 }
 
 // ── Background context menu ───────────────────────────────────────────────────
@@ -408,7 +398,7 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
       <v-card-actions>
         <v-spacer />
         <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
-        <v-btn color="error" :loading="deleteLoading" @click="confirmDelete">Delete</v-btn>
+        <v-btn color="error" @click="confirmDelete">Delete</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
