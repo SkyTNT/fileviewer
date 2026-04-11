@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useFileStore } from '../../stores/fileStore.js'
 import FileCard from './FileCard.vue'
 
@@ -22,16 +22,8 @@ function estimatedHeight(file) {
 
 // ── Height tracking ──────────────────────────────────────────────────────────
 // Plain object (non-reactive) so individual card measurements don't cascade.
-// layoutVersion is the single reactive trigger that batches all updates.
 const cardHeights = {}
 const cardROs     = {}
-const layoutVersion = ref(0)
-let rafId = null
-
-function scheduleLayout() {
-  if (rafId) cancelAnimationFrame(rafId)
-  rafId = requestAnimationFrame(() => { rafId = null; layoutVersion.value++ })
-}
 
 // Called by each card wrapper's :ref. On null we keep cardHeights intact to
 // avoid a redistribution loop (stale estimate → card moves → remount → repeat).
@@ -51,20 +43,47 @@ function attachCardRef(el, path) {
   }
 }
 
-// ── Column distribution ──────────────────────────────────────────────────────
-// Recomputes only when entries, colCount, or the batched height version changes.
-const columns = computed(() => {
-  layoutVersion.value          // batched height updates
-  const n   = colCount.value
-  const cols    = Array.from({ length: n }, () => [])
+// ── Column layout ────────────────────────────────────────────────────────────
+const columns = ref([])
+let savedColHeights = []  // Column heights after last layout (for incremental append)
+let rafId = null
+
+function runLayout() {
+  const n = colCount.value
+  const cols = Array.from({ length: n }, () => [])
   const heights = new Array(n).fill(0)
   for (const file of displayEntries.value) {
     const minIdx = heights.indexOf(Math.min(...heights))
     cols[minIdx].push(file)
     heights[minIdx] += (cardHeights[file.path] ?? estimatedHeight(file)) + 8
   }
-  return cols
-})
+  savedColHeights = heights
+  columns.value = cols
+}
+
+// RAF debounce: batches all height changes within the same frame into one layout.
+function scheduleLayout() {
+  if (rafId) cancelAnimationFrame(rafId)
+  rafId = requestAnimationFrame(() => { rafId = null; runLayout() })
+}
+
+// Incremental: append new entries without redistributing existing ones.
+function appendLayout(prevCount) {
+  if (columns.value.length !== colCount.value || prevCount === 0) {
+    runLayout()
+    return
+  }
+  const cols = columns.value.map(col => [...col])
+  const heights = [...savedColHeights]
+  for (let i = prevCount; i < displayEntries.value.length; i++) {
+    const file = displayEntries.value[i]
+    const minIdx = heights.indexOf(Math.min(...heights))
+    cols[minIdx].push(file)
+    heights[minIdx] += (cardHeights[file.path] ?? estimatedHeight(file)) + 8
+  }
+  savedColHeights = heights
+  columns.value = cols
+}
 
 // ── Entries ──────────────────────────────────────────────────────────────────
 watch(() => store.entries, (newEntries) => {
@@ -73,10 +92,20 @@ watch(() => store.entries, (newEntries) => {
     const keep = new Set(newEntries.map(e => e.path))
     for (const p of Object.keys(cardHeights)) if (!keep.has(p)) delete cardHeights[p]
     displayEntries.value = [...newEntries]
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null }
+    runLayout()
   } else {
+    const prevCount = displayEntries.value.length
     displayEntries.value = [...displayEntries.value, ...newEntries]
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null }
+    appendLayout(prevCount)
   }
 }, { immediate: true })
+
+watch(colCount, () => {
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null }
+  runLayout()
+})
 
 function loadMore() {
   if (store.loading || displayEntries.value.length >= store.total) return
