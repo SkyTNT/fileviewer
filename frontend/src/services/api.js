@@ -56,11 +56,13 @@ export const mediaApi = {
 }
 
 export const writeApi = {
-  mkdir:  (parent, name)       => http.post('/write/mkdir', { parent, name }),
-  touch:  (parent, name)       => http.post('/write/touch', { parent, name }),
-  rename: (path, new_name)     => http.post('/write/rename', { path, new_name }),
-  delete: (path)               => http.delete('/write/delete', { params: { path } }),
-  save:   (path, content)      => http.post('/write/save', { path, content }),
+  mkdir:  (parent, name)              => http.post('/write/mkdir',  { parent, name }),
+  touch:  (parent, name)              => http.post('/write/touch',  { parent, name }),
+  rename: (path, new_name)            => http.post('/write/rename', { path, new_name }),
+  delete: (path)                      => http.delete('/write/delete', { params: { path } }),
+  save:   (path, content)             => http.post('/write/save',   { path, content }),
+  copy:   (src, dest_parent)          => http.post('/write/copy',   { src, dest_parent }),
+  move:   (src, dest_parent)          => http.post('/write/move',   { src, dest_parent }),
   upload: (parent, files)      => {
     const fd = new FormData()
     fd.append('parent', parent)

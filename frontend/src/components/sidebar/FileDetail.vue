@@ -185,6 +185,26 @@ async function confirmDelete() {
 
       <!-- Write mode actions -->
       <template v-if="store.writeMode">
+        <div class="d-flex ga-2">
+          <v-btn
+            color="secondary"
+            variant="tonal"
+            style="flex:1"
+            prepend-icon="mdi-content-copy"
+            @click="store.setCopy(file)"
+          >
+            Copy
+          </v-btn>
+          <v-btn
+            color="secondary"
+            variant="tonal"
+            style="flex:1"
+            prepend-icon="mdi-content-cut"
+            @click="store.setCut(file)"
+          >
+            Cut
+          </v-btn>
+        </div>
         <v-btn
           color="secondary"
           variant="tonal"

@@ -6,7 +6,7 @@ import { useAuthStore } from '../../stores/authStore.js'
 import { useAppTheme, ACCENT_COLORS } from '../../composables/useAppTheme.js'
 import { writeApi } from '../../services/api.js'
 
-defineEmits(['toggle-sidebar'])
+const emit = defineEmits(['toggle-sidebar', 'error'])
 const store     = useFileStore()
 const authStore = useAuthStore()
 const { isDark, accentColor, toggleMode, setAccent } = useAppTheme()
@@ -130,6 +130,20 @@ async function confirmTouch() {
   }
 }
 
+// ── Paste ─────────────────────────────────────────────────────────────────────
+const pasteLoading = ref(false)
+
+async function doPaste() {
+  pasteLoading.value = true
+  try {
+    await store.paste()
+  } catch (e) {
+    emit('error', e.response?.data?.detail || e.message)
+  } finally {
+    pasteLoading.value = false
+  }
+}
+
 // ── Upload ────────────────────────────────────────────────────────────────────
 const uploadInput   = ref(null)
 const uploadLoading = ref(false)
@@ -240,6 +254,25 @@ async function onFilesSelected(e) {
       </v-btn>
     </template>
 
+    <!-- Clipboard paste -->
+    <template v-if="store.writeMode && store.clipboard">
+      <v-chip
+        size="x-small"
+        :color="store.clipboard.action === 'cut' ? 'warning' : 'info'"
+        variant="tonal"
+        class="mr-1"
+        closable
+        @click:close="store.clearClipboard"
+      >
+        <v-icon start size="14">{{ store.clipboard.action === 'cut' ? 'mdi-content-cut' : 'mdi-content-copy' }}</v-icon>
+        {{ store.clipboard.entry.name }}
+      </v-chip>
+      <v-btn icon size="small" class="mr-2" color="primary" :loading="pasteLoading" @click="doPaste">
+        <v-icon size="20">mdi-content-paste</v-icon>
+        <v-tooltip activator="parent">Paste here</v-tooltip>
+      </v-btn>
+    </template>
+
     <!-- View toggle -->
     <v-btn-toggle v-model="store.viewMode" mandatory density="compact" rounded="lg" class="mr-2" color="primary">
       <v-btn value="waterfall" size="small">
@@ -341,7 +374,7 @@ async function onFilesSelected(e) {
       <!-- Write mode actions -->
       <template v-if="store.writeMode">
         <v-divider />
-        <div class="px-3 py-1">
+        <div class="px-3 py-1 d-flex align-center ga-2">
           <v-chip size="x-small" color="warning" variant="tonal" class="font-weight-bold">WRITE</v-chip>
         </div>
         <v-list-item
@@ -365,6 +398,24 @@ async function onFilesSelected(e) {
           rounded="lg"
           @click="openMkdir"
         />
+        <template v-if="store.clipboard">
+          <v-list-item
+            :prepend-icon="store.clipboard.action === 'cut' ? 'mdi-content-cut' : 'mdi-content-copy'"
+            :title="'Paste ' + store.clipboard.entry.name"
+            density="compact"
+            rounded="lg"
+            color="primary"
+            :disabled="pasteLoading"
+            @click="doPaste"
+          />
+          <v-list-item
+            prepend-icon="mdi-close-circle-outline"
+            title="Clear clipboard"
+            density="compact"
+            rounded="lg"
+            @click="store.clearClipboard"
+          />
+        </template>
       </template>
 
       <v-divider />

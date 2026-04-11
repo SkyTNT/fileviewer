@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { filesApi, configApi } from '../services/api.js'
+import { filesApi, configApi, writeApi } from '../services/api.js'
 
 export const useFileStore = defineStore('file', () => {
   const rootName    = ref('Root')
@@ -16,8 +16,26 @@ export const useFileStore = defineStore('file', () => {
   const writeMode     = ref(false)
   const treeRevision  = ref(0)
   const filterPattern = ref('')
+  const clipboard     = ref(null) // { entry, action: 'copy' | 'cut' }
 
   function invalidateTree() { treeRevision.value++ }
+
+  function setCopy(entry) { clipboard.value = { entry, action: 'copy' } }
+  function setCut(entry)  { clipboard.value = { entry, action: 'cut'  } }
+  function clearClipboard() { clipboard.value = null }
+
+  async function paste() {
+    if (!clipboard.value) return
+    const { entry, action } = clipboard.value
+    if (action === 'copy') {
+      await writeApi.copy(entry.path, currentPath.value)
+    } else {
+      await writeApi.move(entry.path, currentPath.value)
+      clipboard.value = null
+    }
+    invalidateTree()
+    await loadDirectory(currentPath.value)
+  }
 
   function setFilter(pattern) {
     filterPattern.value = pattern
@@ -112,6 +130,8 @@ export const useFileStore = defineStore('file', () => {
   return {
     rootName, currentPath, entries, loading, error, viewMode, breadcrumbs,
     page, pageSize, total, selectedEntry, writeMode, treeRevision, filterPattern,
+    clipboard,
     init, loadDirectory, goToPage, navigate, selectEntry, invalidateTree, setFilter,
+    setCopy, setCut, clearClipboard, paste,
   }
 })

@@ -1,5 +1,6 @@
 import os
 import shutil
+from pathlib import Path
 from fastapi import APIRouter, Query, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from fileviewer.config import validate_path
@@ -10,6 +11,21 @@ router = APIRouter()
 def require_write():
     if not os.environ.get("FILE_VIEWER_WRITE"):
         raise HTTPException(status_code=403, detail="Write mode not enabled")
+
+
+def _unique_copy_name(dest_dir: Path, name: str) -> str:
+    """Return a name that doesn't conflict in dest_dir, appending _copy suffix."""
+    if not (dest_dir / name).exists():
+        return name
+    p = Path(name)
+    stem = p.stem
+    suffix = p.suffix
+    candidate = f"{stem}_copy{suffix}"
+    counter = 2
+    while (dest_dir / candidate).exists():
+        candidate = f"{stem}_copy_{counter}{suffix}"
+        counter += 1
+    return candidate
 
 
 class MkdirRequest(BaseModel):
@@ -91,6 +107,50 @@ def delete(path: str = Query(...)):
         shutil.rmtree(target)
     else:
         target.unlink()
+    return {"ok": True}
+
+
+class CopyRequest(BaseModel):
+    src: str
+    dest_parent: str
+
+
+class MoveRequest(BaseModel):
+    src: str
+    dest_parent: str
+
+
+@router.post("/copy")
+def copy_entry(req: CopyRequest):
+    require_write()
+    src = validate_path(req.src)
+    if not src.exists():
+        raise HTTPException(status_code=404, detail="Source not found")
+    dest_dir = validate_path(req.dest_parent)
+    if not dest_dir.is_dir():
+        raise HTTPException(status_code=400, detail="Destination is not a directory")
+    dest_name = _unique_copy_name(dest_dir, src.name)
+    dest = dest_dir / dest_name
+    if src.is_dir():
+        shutil.copytree(src, dest)
+    else:
+        shutil.copy2(src, dest)
+    return {"ok": True, "name": dest_name}
+
+
+@router.post("/move")
+def move_entry(req: MoveRequest):
+    require_write()
+    src = validate_path(req.src)
+    if not src.exists():
+        raise HTTPException(status_code=404, detail="Source not found")
+    dest_dir = validate_path(req.dest_parent)
+    if not dest_dir.is_dir():
+        raise HTTPException(status_code=400, detail="Destination is not a directory")
+    dest = dest_dir / src.name
+    if dest.exists():
+        raise HTTPException(status_code=409, detail="A file with that name already exists in the destination")
+    shutil.move(str(src), str(dest))
     return {"ok": True}
 
 

@@ -126,6 +126,7 @@ function handleOpenFile(file) {
         prepend-icon="mdi-folder-multiple-outline"
         title="File Viewer"
         nav
+        style="min-height: 48px"
       >
         <template v-if="mobile" #append>
           <v-btn icon size="small" variant="text" @click="sidebarVisible = false">
@@ -145,7 +146,7 @@ function handleOpenFile(file) {
     </v-navigation-drawer>
 
     <v-app-bar density="compact" elevation="1">
-      <ExplorerToolbar @toggle-sidebar="sidebarVisible = !sidebarVisible" />
+      <ExplorerToolbar @toggle-sidebar="sidebarVisible = !sidebarVisible" @error="showError" />
     </v-app-bar>
 
     <v-main>
