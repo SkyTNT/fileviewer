@@ -191,7 +191,6 @@ export const useFileStore = defineStore('file', () => {
   async function init() {
     try {
       const res = await configApi.getConfig()
-      rootName.value  = 'Home'
       writeMode.value = res.data.write_mode ?? false
       roots.value     = res.data.roots
       await loadDirectory(getHashPath())
