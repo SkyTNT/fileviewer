@@ -67,7 +67,7 @@ function statusColor(task) {
                   </template>
                 </v-tooltip>
                 <v-icon v-else size="15" :color="statusColor(task)">{{ statusIcon(task) }}</v-icon>
-                <span class="text-body-2 text-truncate flex-1" :title="task.name">{{ task.name }}</span>
+                <span class="text-body-2 text-truncate" style="flex:1; min-width:0" :title="task.name">{{ task.name }}</span>
                 <div style="width:36px; height:24px; flex-shrink:0" class="d-flex align-center justify-end">
                   <span v-if="task.status === 'uploading'" class="text-caption text-medium-emphasis">
                     {{ task.progress }}%
