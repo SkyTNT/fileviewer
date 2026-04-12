@@ -3,10 +3,11 @@ from pathlib import Path
 
 IMAGE_EXTENSIONS   = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".svg"}
 PARQUET_EXTENSIONS = {".parquet"}
+CSV_EXTENSIONS     = {".csv"}
 JSON_EXTENSIONS    = {".json"}
-JSONL_EXTENSIONS   = {".jsonl"}
+JSONL_EXTENSIONS   = {".jsonl", ".ndjson"}
 TEXT_EXTENSIONS    = {
-    ".txt", ".md", ".rst", ".tex", ".csv", ".log", ".ini", ".conf", ".cfg", ".env",
+    ".txt", ".md", ".rst", ".tex", ".log", ".ini", ".conf", ".cfg", ".env",
     ".yaml", ".yml", ".toml",
     ".xml", ".html", ".htm", ".css",
     ".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx",
@@ -33,8 +34,21 @@ AUDIO_MIME_TYPES = {
     '.aac': 'audio/aac', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4',
     '.opus': 'audio/opus', '.wma': 'audio/x-ms-wma',
 }
-VIDEO_EXTENSIONS = set(VIDEO_MIME_TYPES)
-AUDIO_EXTENSIONS = set(AUDIO_MIME_TYPES)
+
+_EXT_TO_TYPE: dict[str, str] = {
+    ext: t
+    for t, exts in [
+        ("image",   IMAGE_EXTENSIONS),
+        ("parquet", PARQUET_EXTENSIONS),
+        ("csv",     CSV_EXTENSIONS),
+        ("json",    JSON_EXTENSIONS),
+        ("jsonl",   JSONL_EXTENSIONS),
+        ("text",    TEXT_EXTENSIONS),
+        ("video",   VIDEO_MIME_TYPES),
+        ("audio",   AUDIO_MIME_TYPES),
+    ]
+    for ext in exts
+}
 
 
 import re
@@ -214,12 +228,4 @@ def schema_to_tree(schema) -> list[dict]:
 def get_file_type(path: Path) -> str:
     if path.is_dir():
         return "directory"
-    suffix = path.suffix.lower()
-    if suffix in IMAGE_EXTENSIONS:    return "image"
-    if suffix in PARQUET_EXTENSIONS:  return "parquet"
-    if suffix in JSON_EXTENSIONS:     return "json"
-    if suffix in JSONL_EXTENSIONS:    return "jsonl"
-    if suffix in TEXT_EXTENSIONS:     return "text"
-    if suffix in VIDEO_EXTENSIONS:    return "video"
-    if suffix in AUDIO_EXTENSIONS:    return "audio"
-    return "unknown"
+    return _EXT_TO_TYPE.get(path.suffix.lower(), "unknown")

@@ -37,9 +37,9 @@ export const imagesApi = {
   getDimensions: (path) => http.get('/images/dimensions', { params: { path } }),
 }
 
-export const parquetApi = {
-  getSchema: (path) => http.get('/parquet/schema', { params: { path } }),
-  getData: (path, params = {}) => http.get('/parquet/data', { params: { path, ...params } }),
+export const dataframeApi = {
+  getSchema: (path) => http.get('/dataframe/schema', { params: { path } }),
+  getData: (path, params = {}) => http.get('/dataframe/data', { params: { path, ...params } }),
 }
 
 export const textApi = {

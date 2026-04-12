@@ -94,9 +94,10 @@ watch(() => authStore.loggedIn, (v) => {
 function handleOpenFile(file) {
   openFile(file)
   switch (file.type) {
-    case 'image':              imageViewerRef.value?.open(file);  break
-    case 'parquet':            dfViewerRef.value?.open(file);     break
-    case 'json': case 'jsonl': jsonViewerRef.value?.open(file);   break
+    case 'image':              imageViewerRef.value?.open(file);        break
+    case 'parquet':            dfViewerRef.value?.open(file);           break
+    case 'csv':                dfViewerRef.value?.open(file, 'csv');    break
+    case 'json': case 'jsonl': jsonViewerRef.value?.open(file);         break
     case 'video': case 'audio': mediaPlayerRef.value?.open(file); break
     default:                   textViewerRef.value?.open(file)
   }

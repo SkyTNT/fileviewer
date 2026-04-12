@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fileviewer.routers import files, images, parquet_reader, text_reader
+from fileviewer.routers import files, images, dataframe_reader, text_reader
 from fileviewer.routers import media, write_ops, hex_reader, auth
 from fileviewer import auth_state
 
@@ -37,7 +37,7 @@ async def auth_middleware(request: Request, call_next):
 app.include_router(auth.router,           prefix="/api/auth",    tags=["auth"])
 app.include_router(files.router,          prefix="/api/files",   tags=["files"])
 app.include_router(images.router,         prefix="/api/images",  tags=["images"])
-app.include_router(parquet_reader.router, prefix="/api/parquet", tags=["parquet"])
+app.include_router(dataframe_reader.router, prefix="/api/dataframe", tags=["dataframe"])
 app.include_router(text_reader.router,    prefix="/api/text",    tags=["text"])
 app.include_router(media.router,          prefix="/api/media",   tags=["media"])
 app.include_router(write_ops.router,      prefix="/api/write",   tags=["write"])

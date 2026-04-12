@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, nextTick } from 'vue'
-import { parquetApi } from '../../services/api.js'
+import { dataframeApi } from '../../services/api.js'
 import JsonNode from './JsonNode.vue'
 
 const dialog   = ref(false)
@@ -27,10 +27,73 @@ const filterSql      = ref('')
 // Autocomplete
 const filterFieldRef  = ref(null)
 const wrapperRef      = ref(null)
-const suggestions     = ref([])
+const suggestionListRef = ref(null)
+const suggestions     = ref([])   // [{ label, insert, kind, detail }]
 const suggestionIdx   = ref(-1)
 const showSuggestions = ref(false)
 const wordStart       = ref(0)
+
+const SQL_FUNCTIONS = [
+  'ABS', 'AVG', 'CAST', 'CEIL', 'COALESCE', 'COUNT', 'DATE',
+  'DAY', 'FLOOR', 'LENGTH', 'LOWER', 'LTRIM', 'MAX', 'MIN',
+  'MONTH', 'NULLIF', 'ROUND', 'RTRIM', 'STRFTIME', 'SUBSTR',
+  'SUM', 'TRIM', 'UPPER', 'YEAR',
+]
+
+// Suggestions shown after a column name
+const OPERATOR_SUGGESTIONS = [
+  { label: '=',           insert: '= ',            kind: 'operator', detail: 'equals' },
+  { label: '!=',          insert: '!= ',           kind: 'operator', detail: 'not equals' },
+  { label: '>',           insert: '> ',            kind: 'operator', detail: 'greater than' },
+  { label: '<',           insert: '< ',            kind: 'operator', detail: 'less than' },
+  { label: '>=',          insert: '>= ',           kind: 'operator', detail: 'greater or equal' },
+  { label: '<=',          insert: '<= ',           kind: 'operator', detail: 'less or equal' },
+  { label: '+',           insert: '+ ',            kind: 'operator', detail: 'add' },
+  { label: '-',           insert: '- ',            kind: 'operator', detail: 'subtract' },
+  { label: '*',           insert: '* ',            kind: 'operator', detail: 'multiply' },
+  { label: '/',           insert: '/ ',            kind: 'operator', detail: 'divide' },
+  { label: 'LIKE',        insert: 'LIKE ',         kind: 'keyword',  detail: 'pattern match' },
+  { label: 'ILIKE',       insert: 'ILIKE ',        kind: 'keyword',  detail: 'case-insensitive' },
+  { label: 'BETWEEN',     insert: 'BETWEEN ',      kind: 'keyword',  detail: 'range' },
+  { label: 'IN',          insert: 'IN (',          kind: 'keyword',  detail: 'in list' },
+  { label: 'NOT IN',      insert: 'NOT IN (',      kind: 'keyword',  detail: 'not in list' },
+  { label: 'IS NULL',     insert: 'IS NULL',       kind: 'keyword',  detail: 'is null' },
+  { label: 'IS NOT NULL', insert: 'IS NOT NULL',   kind: 'keyword',  detail: 'is not null' },
+  { label: 'AND',         insert: 'AND ',          kind: 'keyword',  detail: '' },
+  { label: 'OR',          insert: 'OR ',           kind: 'keyword',  detail: '' },
+]
+
+// Suggestions shown after a comparison operator
+const VALUE_SUGGESTIONS = [
+  { label: 'NULL',  insert: 'NULL',  kind: 'keyword', detail: '' },
+  { label: 'TRUE',  insert: 'TRUE',  kind: 'keyword', detail: '' },
+  { label: 'FALSE', insert: 'FALSE', kind: 'keyword', detail: '' },
+]
+
+// Suggestions shown after a value / closing expression
+const CONJUNCTION_SUGGESTIONS = [
+  { label: 'AND', insert: 'AND ', kind: 'keyword', detail: '' },
+  { label: 'OR',  insert: 'OR ',  kind: 'keyword', detail: '' },
+]
+
+// Determine what kind of token precedes the current word
+function detectContext(textBeforeWord) {
+  const t = textBeforeWord.trimEnd()
+  if (!t) return 'start'
+
+  if (/"[^"]*"$/.test(t))                          return 'after_column'
+  if (/[!=<>]+$/.test(t))                          return 'after_operator'
+  if (/\b(LIKE|ILIKE|BETWEEN)$/i.test(t))          return 'after_operator'
+  if (/\b(NULL|TRUE|FALSE)$/i.test(t))             return 'after_value'
+  if (/'[^']*'$/.test(t))                          return 'after_value'
+  if (/(?<![a-zA-Z_])\d+(\.\d+)?$/.test(t))       return 'after_value'
+  if (/[)]$/.test(t))                              return 'after_value'
+  if (/\b(AND|OR)$/i.test(t))                      return 'start'
+  if (/\bNOT$/i.test(t))                           return 'start'
+  if (/[,(]$/.test(t))                             return 'start'
+  if (/\b[a-zA-Z_][\w.]*$/.test(t))               return 'after_column'
+  return 'start'
+}
 
 // Flat list of all dotted paths built from schema_tree
 const schemaTree = ref([])
@@ -48,10 +111,6 @@ const allPaths = computed(() => {
   return result
 })
 
-function getDtype(path) {
-  return allPaths.value.find(p => p.path === path)?.dtype ?? ''
-}
-
 function shortDtype(dtype) {
   if (!dtype) return ''
   if (dtype.startsWith('Struct')) return 'Struct'
@@ -67,38 +126,111 @@ function displayValue(val) {
 }
 
 function onFilterInput() {
-  const el     = filterFieldRef.value?.$el?.querySelector('input')
+  const el = filterFieldRef.value?.$el?.querySelector('input')
   if (!el) return
   const text   = el.value
   const cursor = el.selectionStart ?? text.length
 
-  // Walk back — include dots so "image.ye" is one token
+  // Walk back over word chars and dots (for nested column paths)
   let s = cursor
   while (s > 0 && /[\w.]/.test(text[s - 1])) s--
-  wordStart.value = s
-  const word = text.slice(s, cursor)
+  wordStart.value  = s
+  const word       = text.slice(s, cursor)
+  const textBefore = text.slice(0, s)
+  const context    = detectContext(textBefore)
 
-  if (word.length === 0) {
+  // Nothing typed at all → hide
+  if (!word && !textBefore.trim()) {
     showSuggestions.value = false
     return
   }
+  // No word typed, start context (cursor right after opening) → hide
+  if (!word && context === 'start') {
+    showSuggestions.value = false
+    return
+  }
+
   const lower = word.toLowerCase()
-  suggestions.value   = allPaths.value
-    .map(p => p.path)
-    .filter(p => p.toLowerCase().includes(lower))
-    .slice(0, 14)
+  const pfx   = (label) => !word || label.toLowerCase().startsWith(lower)
+  const sub   = (path)  => !word || path.toLowerCase().includes(lower)
+  const items = []
+
+  if (context === 'after_column') {
+    for (const op of OPERATOR_SUGGESTIONS)
+      if (pfx(op.label)) items.push(op)
+
+  } else if (context === 'after_operator') {
+    for (const v of VALUE_SUGGESTIONS)
+      if (pfx(v.label)) items.push(v)
+    for (const { path, dtype } of allPaths.value)
+      if (sub(path)) items.push({ label: path, insert: quoteCol(path), kind: 'column', detail: shortDtype(dtype) })
+    for (const fn of SQL_FUNCTIONS)
+      if (pfx(fn)) items.push({ label: fn + '()', insert: fn + '(', kind: 'function', detail: '' })
+
+  } else if (context === 'after_value') {
+    for (const kw of CONJUNCTION_SUGGESTIONS)
+      if (pfx(kw.label)) items.push(kw)
+
+  } else {
+    // start: columns first, then NOT, then functions
+    for (const { path, dtype } of allPaths.value)
+      if (sub(path)) items.push({ label: path, insert: quoteCol(path), kind: 'column', detail: shortDtype(dtype) })
+    if (pfx('NOT')) items.push({ label: 'NOT', insert: 'NOT ', kind: 'keyword', detail: '' })
+    for (const fn of SQL_FUNCTIONS)
+      if (pfx(fn)) items.push({ label: fn + '()', insert: fn + '(', kind: 'function', detail: '' })
+  }
+
+  suggestions.value   = items.slice(0, 16)
   suggestionIdx.value = -1
-  showSuggestions.value = suggestions.value.length > 0
+  showSuggestions.value = items.length > 0
 }
 
+function scrollSuggestionIntoView() {
+  nextTick(() => {
+    const list = suggestionListRef.value?.$el
+    if (!list) return
+    const items = list.querySelectorAll('.v-list-item')
+    items[suggestionIdx.value]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  })
+}
+
+const skipNextBlur = ref(false)
+
 function onFilterKeydown(e) {
+  if (e.key === 'Tab' && !showSuggestions.value) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!filterInput.value.trim()) {
+      // Empty input: show all columns + NOT + functions (start context, no filter)
+      const items = [
+        ...allPaths.value.map(({ path, dtype }) => ({ label: path, insert: quoteCol(path), kind: 'column', detail: shortDtype(dtype) })),
+        { label: 'NOT', insert: 'NOT ', kind: 'keyword', detail: '' },
+        ...SQL_FUNCTIONS.map(fn => ({ label: fn + '()', insert: fn + '(', kind: 'function', detail: '' })),
+      ]
+      suggestions.value     = items.slice(0, 16)
+      suggestionIdx.value   = -1
+      showSuggestions.value = suggestions.value.length > 0
+    } else {
+      onFilterInput()
+    }
+    return
+  }
   if (!showSuggestions.value) return
   if (e.key === 'ArrowDown') {
     e.preventDefault()
+    e.stopPropagation()
     suggestionIdx.value = Math.min(suggestionIdx.value + 1, suggestions.value.length - 1)
+    scrollSuggestionIntoView()
   } else if (e.key === 'ArrowUp') {
     e.preventDefault()
+    e.stopPropagation()
     suggestionIdx.value = Math.max(suggestionIdx.value - 1, -1)
+    scrollSuggestionIntoView()
+  } else if (e.key === 'Tab') {
+    e.preventDefault()
+    e.stopPropagation()
+    const idx = suggestionIdx.value >= 0 ? suggestionIdx.value : 0
+    selectSuggestion(suggestions.value[idx])
   } else if (e.key === 'Enter' && suggestionIdx.value >= 0) {
     e.preventDefault()
     selectSuggestion(suggestions.value[suggestionIdx.value])
@@ -108,21 +240,27 @@ function onFilterKeydown(e) {
 }
 
 function onFilterBlur() {
-  // @mousedown.prevent on list items keeps input focused during selection,
-  // so blur only fires when truly leaving the field
+  if (skipNextBlur.value) {
+    skipNextBlur.value = false
+    return
+  }
   showSuggestions.value = false
 }
 
-function selectSuggestion(col) {
+function quoteCol(col) {
+  return /[^a-zA-Z0-9_]/.test(col) ? `"${col}"` : col
+}
+
+function selectSuggestion(item) {
   const el = filterFieldRef.value?.$el?.querySelector('input')
   if (!el) return
-  const cursor  = el.selectionStart ?? filterInput.value.length
-  const before  = filterInput.value.slice(0, wordStart.value)
-  const after   = filterInput.value.slice(cursor)
-  filterInput.value = before + col + after
+  const cursor = el.selectionStart ?? filterInput.value.length
+  const before = filterInput.value.slice(0, wordStart.value)
+  const after  = filterInput.value.slice(cursor)
+  filterInput.value = before + item.insert + after
   showSuggestions.value = false
   nextTick(() => {
-    const pos = wordStart.value + col.length
+    const pos = wordStart.value + item.insert.length
     el.setSelectionRange(pos, pos)
     el.focus()
   })
@@ -153,7 +291,7 @@ async function open(file, type = 'parquet') {
 // ── Server-side pagination, SQL filter, sort (parquet + jsonl) ───────────────
 async function loadSchema() {
   try {
-    const res    = await parquetApi.getSchema(filePath.value)
+    const res    = await dataframeApi.getSchema(filePath.value)
     schema.value = res.data.columns.map((c, i) => ({ name: c, dtype: res.data.dtypes[i] }))
     schemaTree.value = res.data.schema_tree ?? []
   } catch {} // schema is supplementary — data loads independently via loadParquet
@@ -163,7 +301,7 @@ async function loadParquet() {
   loading.value = true
   error.value   = null
   try {
-    const res     = await parquetApi.getData(filePath.value, {
+    const res     = await dataframeApi.getData(filePath.value, {
       page:       page.value,
       page_size:  pageSize.value,
       filter_sql: filterSql.value || undefined,
@@ -273,21 +411,26 @@ defineExpose({ open })
             no-click-animation
             offset="2"
           >
-            <v-list density="compact" nav min-width="280" max-height="240">
+            <v-list ref="suggestionListRef" density="compact" nav min-width="300" max-height="280">
               <v-list-item
-                v-for="(col, idx) in suggestions"
-                :key="col"
+                v-for="(item, idx) in suggestions"
+                :key="item.label"
                 :active="idx === suggestionIdx"
                 color="primary"
                 rounded="lg"
                 @mousedown.prevent
-                @click="selectSuggestion(col)"
+                @click="selectSuggestion(item)"
               >
+                <template #prepend>
+                  <v-icon size="14" class="mr-1" :color="{ column: 'primary', keyword: 'warning', function: 'deep-purple', operator: 'teal' }[item.kind]">
+                    {{ { column: 'mdi-table-column', keyword: 'mdi-code-tags', function: 'mdi-function', operator: 'mdi-approximately-equal' }[item.kind] }}
+                  </v-icon>
+                </template>
                 <v-list-item-title class="text-body-2" style="font-family:monospace">
-                  {{ col }}
+                  {{ item.label }}
                 </v-list-item-title>
                 <template #append>
-                  <v-chip size="x-small" variant="tonal" label>{{ getDtype(col) }}</v-chip>
+                  <v-chip v-if="item.detail" size="x-small" variant="tonal" label>{{ item.detail }}</v-chip>
                 </template>
               </v-list-item>
             </v-list>

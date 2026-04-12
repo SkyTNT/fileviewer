@@ -3,15 +3,40 @@ from pathlib import Path
 from typing import Optional
 from fastapi import APIRouter, Query, HTTPException
 import polars as pl
-from fileviewer.config import validate_path, schema_to_tree
+from fileviewer.config import validate_path, schema_to_tree, JSONL_EXTENSIONS, CSV_EXTENSIONS
 
 router = APIRouter()
 
 
 @lru_cache(maxsize=32)
 def _load_lazy_frame(abs_path: str, mtime: float) -> pl.LazyFrame:
-    if abs_path.lower().endswith(('.jsonl', '.ndjson')):
+    suffix = Path(abs_path).suffix.lower()
+    if suffix in JSONL_EXTENSIONS:
         return pl.scan_ndjson(abs_path)
+    if suffix in CSV_EXTENSIONS:
+        sample = pl.read_csv(
+            abs_path,
+            n_rows=100,
+            null_values=["", "NA", "NaN", "nan", "null"],
+            truncate_ragged_lines=True,
+        )
+        rename_map = {c: c.strip() for c in sample.columns if c != c.strip()}
+        schema_overrides = {}
+        for orig_col in sample.columns:
+            if sample[orig_col].dtype == pl.String:
+                stripped = sample[orig_col].str.strip_chars()
+                casted = stripped.cast(pl.Float64, strict=False)
+                if casted.is_null().sum() <= stripped.is_null().sum():
+                    schema_overrides[orig_col] = pl.Float64
+        lf = pl.scan_csv(
+            abs_path,
+            schema_overrides=schema_overrides,
+            null_values=["", "NA", "NaN", "nan", "null"],
+            truncate_ragged_lines=True,
+        )
+        if rename_map:
+            lf = lf.rename(rename_map)
+        return lf
     return pl.scan_parquet(abs_path)
 
 
