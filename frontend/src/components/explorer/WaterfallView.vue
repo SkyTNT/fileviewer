@@ -6,6 +6,7 @@ import { useWriteActions } from '../../composables/useWriteActions.js'
 import { useRubberBand } from '../../composables/useRubberBand.js'
 import { useContextMenu } from '../../composables/useContextMenu.js'
 import { useExplorerKeyboard } from '../../composables/useExplorerKeyboard.js'
+import { filesApi } from '../../services/api.js'
 import FileCard from './FileCard.vue'
 import ContextMenu from './ContextMenu.vue'
 import DialogRename from '../dialogs/DialogRename.vue'
@@ -25,6 +26,31 @@ const {
 } = useWriteActions()
 
 const { menuOpen, menuX, menuY, menuTarget, showMenu, onBgContextMenu } = useContextMenu()
+
+async function refreshAll() {
+  const path   = store.currentPath
+  const pages  = store.page
+  const size   = store.pageSize
+  const filter = store.filterPattern || null
+  store.loading = true
+  try {
+    const all = []
+    let newTotal = store.total
+    for (let p = 1; p <= pages; p++) {
+      const res = await filesApi.listDirectory(path, p, size, filter)
+      all.push(...res.data.entries)
+      newTotal = res.data.total
+    }
+    store.total = newTotal
+    const keep = new Set(all.map(e => e.path))
+    for (const k of Object.keys(cardHeights))   if (!keep.has(k)) delete cardHeights[k]
+    for (const k of Object.keys(cardPositions)) if (!keep.has(k)) delete cardPositions[k]
+    displayEntries.value = [...all]
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null }
+    runLayout()
+  } catch { /* ignore */ }
+  finally { store.loading = false }
+}
 
 useExplorerKeyboard(() => displayEntries.value, doPaste)
 
@@ -139,6 +165,12 @@ watch(() => store.entries, (newEntries) => {
     runLayout()
   } else {
     const prevCount = displayEntries.value.length
+    if (prevCount === 0) {
+      // Mounted while store.page > 1 (e.g. switched from ListView on a non-first page).
+      // displayEntries is empty so we can't append — reset to page 1 instead.
+      store.loadDirectory(store.currentPath)
+      return
+    }
     displayEntries.value = [...displayEntries.value, ...newEntries]
     if (rafId) { cancelAnimationFrame(rafId); rafId = null }
     appendLayout(prevCount)
@@ -185,6 +217,8 @@ watch(sentinelRef, (el, oldEl) => {
 })
 
 onMounted(() => {
+  store.setRefreshHook(refreshAll)
+
   scrollObs = new IntersectionObserver(
     (entries) => { if (entries[0].isIntersecting) loadMore() },
     { rootMargin: '400px' }
@@ -201,6 +235,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  store.setRefreshHook(null)
   if (rafId) cancelAnimationFrame(rafId)
   scrollObs?.disconnect()
   containerRO?.disconnect()
@@ -230,12 +265,7 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
 
 <template>
   <div ref="scrollRef" class="waterfall-scroll pa-3" @contextmenu="onBgContextMenu" @mousedown="rbMouseDown">
-    <div v-if="store.loading && displayEntries.length === 0"
-         class="d-flex justify-center align-center" style="height:200px">
-      <v-progress-circular indeterminate />
-    </div>
-
-    <div v-else-if="!store.loading && store.total === 0"
+    <div v-if="store.total === 0 && !store.loading"
          class="text-center text-grey pa-12">
       <v-icon size="64" class="mb-2">mdi-folder-open-outline</v-icon>
       <div>{{ t('explorer.emptyDirectory') }}</div>
@@ -262,11 +292,7 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
 
       <div ref="sentinelRef" style="height:1px" />
 
-      <div v-if="store.loading" class="d-flex justify-center pa-4">
-        <v-progress-circular indeterminate size="28" width="3" />
-      </div>
-
-      <div v-else-if="displayEntries.length >= store.total && store.total > 0"
+      <div v-if="displayEntries.length >= store.total && store.total > 0"
            class="text-center text-caption text-medium-emphasis pa-3">
         {{ t('explorer.totalItems', { n: store.total }) }}
       </div>

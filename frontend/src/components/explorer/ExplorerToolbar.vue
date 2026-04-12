@@ -119,7 +119,7 @@ async function onFilesSelected(e) {
   uploadLoading.value = true
   try {
     await writeApi.upload(store.currentPath, files)
-    store.loadDirectory(store.currentPath)
+    store.refresh()
   } catch (err) {
     showError(err.response?.data?.detail || err.message)
   } finally {

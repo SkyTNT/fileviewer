@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFileStore } from '../../stores/fileStore.js'
 import { useWriteActions } from '../../composables/useWriteActions.js'
@@ -28,6 +28,9 @@ const {
 const { menuOpen, menuX, menuY, menuTarget, showMenu, onBgContextMenu } = useContextMenu()
 
 useExplorerKeyboard(() => store.entries, doPaste)
+
+onMounted(()   => store.setRefreshHook(() => store.goToPage(store.page)))
+onUnmounted(() => store.setRefreshHook(null))
 
 const totalPages = computed(() => Math.ceil(store.total / store.pageSize))
 
@@ -78,9 +81,7 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
 
 <template>
   <div ref="scrollRef" class="list-scroll" @contextmenu="onBgContextMenu" @mousedown="rbMouseDown">
-    <v-progress-linear v-if="store.loading" indeterminate color="primary" height="2" />
-
-    <div v-if="!store.loading && store.total === 0" class="text-center text-grey pa-12">
+    <div v-if="store.total === 0 && !store.loading" class="text-center text-grey pa-12">
       <v-icon size="64" class="mb-2">mdi-folder-open-outline</v-icon>
       <div>{{ t('explorer.emptyDirectory') }}</div>
     </div>

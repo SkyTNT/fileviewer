@@ -72,7 +72,7 @@ async function onDrop(e) {
   if (!files.length) return
   try {
     await writeApi.upload(store.currentPath, files)
-    store.loadDirectory(store.currentPath)
+    store.refresh()
   } catch (err) {
     showError(err.response?.data?.detail || err.message)
   }
@@ -171,6 +171,13 @@ function handleOpenFile(file) {
 
     <v-app-bar density="compact" elevation="1">
       <ExplorerToolbar @toggle-sidebar="sidebarVisible = !sidebarVisible" />
+      <v-progress-linear
+        :active="store.loading"
+        :indeterminate="store.loading"
+        color="primary"
+        absolute
+        location="bottom"
+      />
     </v-app-bar>
 
     <v-main>

@@ -37,7 +37,7 @@ export function useWriteActions() {
       await writeApi.rename(renameTarget.value.path, newName)
       rename.dialog.value = false
       store.invalidateTree()
-      store.loadDirectory(store.currentPath)
+      store.refresh()
       _renameOnSuccess?.()
     } catch (e) {
       rename.error.value = getErrorMessage(e)
@@ -82,7 +82,7 @@ export function useWriteActions() {
       await writeApi.mkdir(store.currentPath, name)
       mkdir.dialog.value = false
       store.invalidateTree()
-      store.loadDirectory(store.currentPath)
+      store.refresh()
     } catch (e) {
       mkdir.error.value = getErrorMessage(e)
     } finally {
@@ -107,7 +107,7 @@ export function useWriteActions() {
     try {
       await writeApi.touch(store.currentPath, name)
       touch.dialog.value = false
-      store.loadDirectory(store.currentPath)
+      store.refresh()
     } catch (e) {
       touch.error.value = getErrorMessage(e)
     } finally {

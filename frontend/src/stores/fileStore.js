@@ -28,6 +28,15 @@ export const useFileStore = defineStore('file', () => {
 
   function invalidateTree() { treeRevision.value++ }
 
+  // ── Refresh hook ──────────────────────────────────────────────────────────────
+  // Active view registers its own refresh strategy so write ops don't reset page.
+  let _refreshHook = null
+  function setRefreshHook(fn) { _refreshHook = fn }
+  function refresh() {
+    if (_refreshHook) _refreshHook()
+    else loadDirectory(currentPath.value)
+  }
+
   function selectEntry(entry) {
     if (!entry) { selectedEntries.value = []; selectionAnchor.value = null; return }
     const isSame = selectedEntries.value.length === 1 && selectedEntries.value[0].path === entry.path
@@ -102,7 +111,7 @@ export const useFileStore = defineStore('file', () => {
         if (ev.type === 'done') {
           clearSelection()
           invalidateTree()
-          loadDirectory(currentPath.value)
+          refresh()
         }
       })
     } finally {
@@ -125,7 +134,7 @@ export const useFileStore = defineStore('file', () => {
         if (ev.type === 'done') {
           if (action === 'cut') clipboard.value = null
           invalidateTree()
-          loadDirectory(currentPath.value)
+          refresh()
         }
       })
     } finally {
@@ -262,5 +271,6 @@ export const useFileStore = defineStore('file', () => {
     clipboard, pasteProgress, deleteProgress, pasteConflicts,
     init, loadDirectory, goToPage, navigate, selectEntry, toggleEntry, shiftSelectTo, addToSelection, clearSelection, setSelection, invalidateTree, setFilter,
     setCopy, setCut, clearClipboard, paste, resolvePaste, deleteEntries,
+    setRefreshHook, refresh,
   }
 })

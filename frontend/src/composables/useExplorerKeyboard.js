@@ -16,7 +16,7 @@ export function useExplorerKeyboard(getEntries, doPaste) {
 
     if (e.key === 'F5') {
       e.preventDefault()
-      if (!store.isAtHome) store.loadDirectory(store.currentPath)
+      if (!store.isAtHome) store.refresh()
       store.invalidateTree()
       return
     }
