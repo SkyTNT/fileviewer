@@ -3,10 +3,16 @@ import { ref, computed, watch } from 'vue'
 import { useTheme } from 'vuetify'
 import { Codemirror } from 'vue-codemirror'
 import { basicSetup } from 'codemirror'
-import { EditorView } from '@codemirror/view'
+import { EditorView, keymap } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 import { oneDark } from '@codemirror/theme-one-dark'
+import { completeAnyWord, acceptCompletion } from '@codemirror/autocomplete'
 import { getLangByExt } from '../../utils/langSupport.js'
+
+// Register word-from-document completion as a global language-data source.
+// This runs alongside language-specific completions (JS globals, CSS props, etc.)
+// and provides token suggestions for every file type.
+const wordCompletion = EditorState.languageData.of(() => [{ autocomplete: completeAnyWord }])
 import { textApi, writeApi } from '../../services/api.js'
 import MarkdownRenderer from './MarkdownRenderer.vue'
 import { useFileStore } from '../../stores/fileStore.js'
@@ -36,13 +42,16 @@ const previewMode = ref(false)
 
 // ── CodeMirror extensions ─────────────────────────────────────────────────────
 const fillTheme = EditorView.theme({
-  '.cm-scroller':{ fontFamily: "'Roboto Mono','Courier New',monospace", fontSize: '13px', lineHeight: '1.5' },
+  '&':           { height: '100%' },
+  '.cm-scroller':{ fontFamily: "'Roboto Mono','Courier New',monospace", fontSize: '13px', lineHeight: '1.5', overflow: 'auto' },
   '.cm-content': { paddingBottom: '16px' },
   '.cm-gutters': { fontFamily: "'Roboto Mono','Courier New',monospace", fontSize: '13px', minHeight: '100%' },
 })
 
+const tabAccept = keymap.of([{ key: 'Tab', run: acceptCompletion }])
+
 const extensions = computed(() => {
-  const exts = [basicSetup, fillTheme, EditorView.lineWrapping]
+  const exts = [basicSetup, fillTheme, EditorView.lineWrapping, wordCompletion, tabAccept]
   if (isDark.value) exts.push(oneDark)
   if (!editMode.value) exts.push(EditorState.readOnly.of(true))
   const lang = getLangByExt(currentFile.value?.extension)
@@ -133,8 +142,8 @@ defineExpose({ open })
 </script>
 
 <template>
-  <v-dialog v-model="dialog" max-width="1100" @keydown="onKeydown">
-    <v-card style="display:flex; flex-direction:column; height:88vh">
+  <v-dialog v-model="dialog" max-width="1100" content-class="text-viewer-content" @keydown="onKeydown">
+    <v-card style="display:flex; flex-direction:column; height:100%">
 
       <!-- Title bar -->
       <v-card-title class="d-flex align-center pa-3 flex-shrink-0" style="gap:6px">
@@ -254,7 +263,7 @@ defineExpose({ open })
                  '.cc':'C++', '.cxx':'C++',
                  '.java':'Java', '.kt':'Kotlin', '.kts':'Kotlin',
                  '.rs':'Rust', '.php':'PHP', '.vue':'Vue',
-                 '.go':'Go', '.rb':'Ruby', '.sh':'Shell', '.bash':'Bash',
+                 '.go':'Go', '.rb':'Ruby', '.sh':'Shell', '.bash':'Shell',
                  '.cs':'C#', '.swift':'Swift', '.dart':'Dart',
                  '.lua':'Lua', '.pl':'Perl', '.r':'R',
                }[currentFile.extension.toLowerCase()] || 'Plain Text' }}
@@ -266,12 +275,28 @@ defineExpose({ open })
   </v-dialog>
 </template>
 
+<style>
+.text-viewer-content {
+  height: 88vh !important;
+  max-height: 88vh !important;
+  overflow: hidden !important;
+}
+</style>
+
 <style scoped>
 .editor-body {
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
+  overflow: hidden;
+}
+:deep(.vue-codemirror) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 :deep(.cm-editor) {
   width: 100%;
+  height: 100%;
 }
 </style>

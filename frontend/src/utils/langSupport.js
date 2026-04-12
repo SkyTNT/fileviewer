@@ -12,6 +12,7 @@ import { java } from '@codemirror/lang-java'
 import { rust } from '@codemirror/lang-rust'
 import { php } from '@codemirror/lang-php'
 import { vue } from '@codemirror/lang-vue'
+import { go } from '@codemirror/lang-go'
 
 // Map file extension (.js, .py, …) → CodeMirror language extension
 export function getLangByExt(ext) {
@@ -32,6 +33,7 @@ export function getLangByExt(ext) {
     case '.rs':  return rust()
     case '.php': return php()
     case '.vue': return vue()
+    case '.go':  return go()
     default: return null
   }
 }
