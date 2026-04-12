@@ -20,7 +20,7 @@ const { t } = useI18n()
 const {
   mkdirDialog, mkdirName, mkdirLoading, mkdirError, openMkdir, confirmMkdir,
   touchDialog, touchName, touchLoading, touchError, openTouch, confirmTouch,
-  pasteLoading, doPaste,
+  doPaste,
   renameDialog, renameName, renameLoading, renameError, openRename, confirmRename,
   deleteDialog, deleteTargets, openDelete, confirmDelete,
 } = useWriteActions()

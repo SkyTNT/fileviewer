@@ -116,16 +116,11 @@ export function useWriteActions() {
   }
 
   // ── Paste ─────────────────────────────────────────────────────────────────────
-  const pasteLoading = ref(false)
-
   async function doPaste() {
-    pasteLoading.value = true
     try {
       await store.paste()
     } catch (e) {
       showError(getErrorMessage(e))
-    } finally {
-      pasteLoading.value = false
     }
   }
 
@@ -145,6 +140,6 @@ export function useWriteActions() {
     touchLoading: touch.loading, touchError: touch.error,
     openTouch, confirmTouch,
     // paste
-    pasteLoading, doPaste,
+    doPaste,
   }
 }

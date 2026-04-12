@@ -6,7 +6,6 @@ import { useFileStore } from '../../stores/fileStore.js'
 import { useAuthStore } from '../../stores/authStore.js'
 import { useAppTheme, ACCENT_COLORS } from '../../composables/useAppTheme.js'
 import { useWriteActions } from '../../composables/useWriteActions.js'
-import { useNotificationStore } from '../../stores/notificationStore.js'
 import DialogNewItem from '../dialogs/DialogNewItem.vue'
 
 const emit = defineEmits(['toggle-sidebar'])
@@ -14,7 +13,6 @@ const store     = useFileStore()
 const authStore = useAuthStore()
 const { isDark, accentColor, toggleMode, setAccent } = useAppTheme()
 const { mobile } = useDisplay()
-const { showError } = useNotificationStore()
 const { t, locale } = useI18n()
 
 // ── Language ──────────────────────────────────────────────────────────────────
@@ -100,7 +98,7 @@ const displayCrumbs = computed(() => {
 const {
   mkdirDialog, mkdirName, mkdirLoading, mkdirError, openMkdir, confirmMkdir,
   touchDialog, touchName, touchLoading, touchError, openTouch, confirmTouch,
-  pasteLoading, doPaste,
+  doPaste,
 } = useWriteActions()
 
 // ── Upload ────────────────────────────────────────────────────────────────────
@@ -224,7 +222,7 @@ const clipboardLabel = computed(() => {
         <v-icon start size="14">{{ store.clipboard.action === 'cut' ? 'mdi-content-cut' : 'mdi-content-copy' }}</v-icon>
         {{ clipboardLabel }}
       </v-chip>
-      <v-btn icon size="small" class="mr-2" color="primary" :loading="pasteLoading" @click="doPaste">
+      <v-btn icon size="small" class="mr-2" color="primary" @click="doPaste">
         <v-icon size="20">mdi-content-paste</v-icon>
         <v-tooltip activator="parent">{{ t('toolbar.paste') }}</v-tooltip>
       </v-btn>
@@ -402,7 +400,6 @@ const clipboardLabel = computed(() => {
             density="compact"
             rounded="lg"
             color="primary"
-            :disabled="pasteLoading"
             @click="doPaste"
           />
           <v-list-item
