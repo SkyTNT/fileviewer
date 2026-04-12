@@ -10,10 +10,18 @@ export function useExplorerKeyboard(getEntries, doPaste) {
   const store = useFileStore()
 
   function onKeyDown(e) {
-    if (!e.ctrlKey && !e.metaKey) return
     const el = document.activeElement
     if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.isContentEditable) return
     if (el?.closest('[role="dialog"]')) return
+
+    if (e.key === 'F5') {
+      e.preventDefault()
+      if (!store.isAtHome) store.loadDirectory(store.currentPath)
+      store.invalidateTree()
+      return
+    }
+
+    if (!e.ctrlKey && !e.metaKey) return
 
     switch (e.key) {
       case 'a':
