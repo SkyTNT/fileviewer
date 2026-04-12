@@ -390,10 +390,8 @@ defineExpose({ open })
       <v-divider />
 
       <!-- Table -->
-      <v-card-text class="pa-0 table-area" style="overflow:auto; max-height:58vh">
-        <div v-if="loading" class="loading-overlay">
-          <v-progress-circular indeterminate />
-        </div>
+      <div class="table-area">
+      <v-card-text class="pa-0" style="overflow:auto; max-height:58vh">
         <v-alert v-if="error" type="error" class="ma-4">{{ error }}</v-alert>
         <table v-else-if="rows.length" class="df-table">
           <thead>
@@ -434,6 +432,10 @@ defineExpose({ open })
         </table>
         <div v-else-if="!loading" class="text-center text-medium-emphasis pa-12">{{ t('dataframe.noData') }}</div>
       </v-card-text>
+      <div v-if="loading" class="loading-overlay">
+        <v-progress-circular indeterminate />
+      </div>
+      </div>
 
       <!-- Pagination -->
       <v-divider />

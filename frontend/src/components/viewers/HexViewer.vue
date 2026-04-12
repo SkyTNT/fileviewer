@@ -57,11 +57,11 @@ defineExpose({ open })
 </script>
 
 <template>
-  <v-dialog v-model="dialog" max-width="760" scrollable>
-    <v-card style="display:flex; flex-direction:column; max-height:90vh">
+  <v-dialog v-model="dialog" max-width="760">
+    <v-card>
 
       <!-- Title -->
-      <v-card-title class="d-flex align-center pa-3 flex-shrink-0">
+      <v-card-title class="d-flex align-center pa-3">
         <v-icon class="mr-2" size="20">mdi-hexadecimal</v-icon>
         <span class="text-truncate" style="max-width:60%">{{ currentFile?.name }}</span>
         <v-chip size="x-small" variant="tonal" color="secondary" class="ml-2">
@@ -76,33 +76,35 @@ defineExpose({ open })
       <v-divider />
 
       <!-- Hex dump body -->
-      <v-card-text class="pa-0 flex-grow-1 hex-body" style="overflow:auto">
-        <div v-if="loading && !rows.length" class="d-flex justify-center pa-8">
-          <v-progress-circular indeterminate />
-        </div>
-        <v-alert v-else-if="error" type="error" class="ma-4">{{ error }}</v-alert>
-        <div v-else class="hex-wrap pa-3">
-          <div v-if="loading" class="loading-overlay">
+      <div class="hex-body">
+        <v-card-text class="pa-0 hex-scroll" style="overflow:auto; max-height:60vh">
+          <div v-if="loading && !rows.length" class="d-flex justify-center pa-8">
             <v-progress-circular indeterminate />
           </div>
-          <!-- Header row -->
-          <div class="hex-row hex-header">
-            <span class="col-offset">{{ t('hexViewer.offset') }}</span>
-            <span class="col-bytes">00 01 02 03 04 05 06 07  08 09 0A 0B 0C 0D 0E 0F</span>
-            <span class="col-ascii">{{ t('hexViewer.ascii') }}</span>
+          <v-alert v-else-if="error" type="error" class="ma-4">{{ error }}</v-alert>
+          <div v-else class="hex-wrap pa-3">
+            <!-- Header row -->
+            <div class="hex-row hex-header">
+              <span class="col-offset">{{ t('hexViewer.offset') }}</span>
+              <span class="col-bytes">00 01 02 03 04 05 06 07  08 09 0A 0B 0C 0D 0E 0F</span>
+              <span class="col-ascii">{{ t('hexViewer.ascii') }}</span>
+            </div>
+            <!-- Data rows -->
+            <div
+              v-for="row in rows"
+              :key="row.offset"
+              class="hex-row"
+            >
+              <span class="col-offset text-medium-emphasis">{{ formatOffset(row.offset) }}</span>
+              <span class="col-bytes">{{ formatHex(row.hex) }}</span>
+              <span class="col-ascii text-medium-emphasis">{{ row.ascii }}</span>
+            </div>
           </div>
-          <!-- Data rows -->
-          <div
-            v-for="row in rows"
-            :key="row.offset"
-            class="hex-row"
-          >
-            <span class="col-offset text-medium-emphasis">{{ formatOffset(row.offset) }}</span>
-            <span class="col-bytes">{{ formatHex(row.hex) }}</span>
-            <span class="col-ascii text-medium-emphasis">{{ row.ascii }}</span>
-          </div>
+        </v-card-text>
+        <div v-if="loading && rows.length" class="loading-overlay">
+          <v-progress-circular indeterminate />
         </div>
-      </v-card-text>
+      </div>
 
 
       <!-- Pagination -->
@@ -128,7 +130,9 @@ defineExpose({ open })
 </template>
 
 <style scoped>
-.hex-body { position: relative; }
+.hex-body {
+  position: relative;
+}
 .loading-overlay {
   position: absolute;
   inset: 0;
