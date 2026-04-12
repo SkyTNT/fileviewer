@@ -38,8 +38,9 @@ export const imagesApi = {
 }
 
 export const dataframeApi = {
-  getSchema: (path) => http.get('/dataframe/schema', { params: { path } }),
-  getData: (path, params = {}) => http.get('/dataframe/data', { params: { path, ...params } }),
+  getSchema:       (path)         => http.get('/dataframe/schema', { params: { path } }),
+  getData:         (path, params) => http.get('/dataframe/data',   { params: { path, ...params } }),
+  detectImageCols: (path)         => http.get('/dataframe/detect-image-cols', { params: { path } }),
 }
 
 export const textApi = {

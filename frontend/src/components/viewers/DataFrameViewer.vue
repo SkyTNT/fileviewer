@@ -1,7 +1,9 @@
 <script setup>
 import { ref, computed, nextTick } from 'vue'
-import { dataframeApi } from '../../services/api.js'
+import { dataframeApi, imagesApi } from '../../services/api.js'
 import JsonNode from './JsonNode.vue'
+
+const emit = defineEmits(['open-image'])
 
 const dialog   = ref(false)
 const fileName = ref('')
@@ -19,6 +21,9 @@ const sortAsc  = ref(true)
 const loading  = ref(false)
 const error    = ref(null)
 const schema   = ref([])
+
+// Image columns: { colName: 'path' | 'url' }
+const imageCols = ref({})
 
 // Parquet-only filter
 const filterInput    = ref('')
@@ -278,11 +283,12 @@ async function open(file, type = 'parquet') {
   sortAsc.value     = true
   filterInput.value = ''
   filterSql.value   = ''
-  columns.value     = []
-  rows.value        = []
-  schema.value      = []
-  error.value       = null
-  dialog.value      = true
+  columns.value       = []
+  rows.value          = []
+  schema.value        = []
+  imageCols.value     = {}
+  error.value         = null
+  dialog.value        = true
 
   await loadSchema()
   await loadParquet()
@@ -294,7 +300,13 @@ async function loadSchema() {
     const res    = await dataframeApi.getSchema(filePath.value)
     schema.value = res.data.columns.map((c, i) => ({ name: c, dtype: res.data.dtypes[i] }))
     schemaTree.value = res.data.schema_tree ?? []
-  } catch {} // schema is supplementary — data loads independently via loadParquet
+  } catch {}
+  // Detect image columns in parallel (non-blocking)
+  dataframeApi.detectImageCols(filePath.value)
+    .then(res => {
+      imageCols.value = Object.fromEntries(res.data.image_cols.map(({ col, kind }) => [col, kind]))
+    })
+    .catch(() => {})
 }
 
 async function loadParquet() {
@@ -361,6 +373,15 @@ const selectedRow = ref(null)
 function openRow(row) {
   selectedRow.value = row
   rowDialog.value   = true
+}
+
+// ── Image cell helpers ────────────────────────────────────────────────────────
+function cellThumbUrl(value) {
+  return value ? imagesApi.thumbnailUrl(value, 200) : ''
+}
+
+function openImgPreview(value) {
+  if (value) emit('open-image', { path: value, name: value })
 }
 
 function close() { dialog.value = false }
@@ -498,7 +519,21 @@ defineExpose({ open })
           </thead>
           <tbody>
             <tr v-for="(row, ri) in rows" :key="ri" class="data-row" @dblclick="openRow(row)">
-              <td v-for="col in columns" :key="col">{{ displayValue(row[col]) }}</td>
+              <td v-for="col in columns" :key="col">
+                <template v-if="imageCols[col] && row[col]">
+                  <v-tooltip :text="row[col]" location="top">
+                    <template #activator="{ props: tp }">
+                      <img
+                        v-bind="tp"
+                        :src="cellThumbUrl(row[col])"
+                        style="height:48px;max-width:80px;object-fit:cover;cursor:pointer;border-radius:3px;vertical-align:middle"
+                        @click.stop="openImgPreview(row[col])"
+                      />
+                    </template>
+                  </v-tooltip>
+                </template>
+                <template v-else>{{ displayValue(row[col]) }}</template>
+              </td>
             </tr>
           </tbody>
         </table>

@@ -1,12 +1,22 @@
+import asyncio
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
-from fastapi import APIRouter, Query, HTTPException
+
+import httpx
 import polars as pl
-from fileviewer.config import validate_path, schema_to_tree, JSONL_EXTENSIONS, CSV_EXTENSIONS
+from fastapi import APIRouter, Query, HTTPException
+
+from fileviewer.config import (
+    validate_path, schema_to_tree,
+    JSONL_EXTENSIONS, CSV_EXTENSIONS, IMAGE_EXTENSIONS,
+)
 
 router = APIRouter()
 
+
+# ── Lazy frame loading ────────────────────────────────────────────────────────
 
 @lru_cache(maxsize=32)
 def _load_lazy_frame(abs_path: str, mtime: float) -> pl.LazyFrame:
@@ -44,6 +54,8 @@ def get_lazy_frame(abs_path: str) -> pl.LazyFrame:
     mtime = Path(abs_path).stat().st_mtime
     return _load_lazy_frame(abs_path, mtime)
 
+
+# ── Schema / data ─────────────────────────────────────────────────────────────
 
 @router.get("/schema")
 def get_schema(path: str = Query(...)):
@@ -94,3 +106,66 @@ def get_data(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Image column detection ────────────────────────────────────────────────────
+
+async def _is_image_url(client: httpx.AsyncClient, url: str) -> bool:
+    try:
+        resp = await client.head(url, timeout=5, follow_redirects=True)
+        ct = resp.headers.get("content-type", "").split(";")[0].strip()
+        return ct.startswith("image/")
+    except Exception:
+        return False
+
+
+async def _classify_image_col(client: httpx.AsyncClient, vals: list[str]) -> str | None:
+    """Return 'path', 'url', or None based on sampled values."""
+    path_hits = 0
+    url_vals, other_vals = [], []
+    for v in vals:
+        v = v.strip()
+        if v.startswith(("http://", "https://")):
+            url_vals.append(v)
+        else:
+            if Path(v).suffix.lower() in IMAGE_EXTENSIONS and os.path.isfile(v):
+                path_hits += 1
+            other_vals.append(v)
+
+    url_checks = await asyncio.gather(*[_is_image_url(client, u) for u in url_vals])
+    url_hits = sum(url_checks)
+
+    total = len(vals)
+    if path_hits / total >= 0.5:
+        return "path"
+    if url_hits / total >= 0.5:
+        return "url"
+    return None
+
+
+@router.get("/detect-image-cols")
+async def detect_image_cols(path: str = Query(...)):
+    file_path = validate_path(path)
+    try:
+        lf = get_lazy_frame(str(file_path))
+        schema = lf.collect_schema()
+        str_cols = [c for c, t in schema.items() if t == pl.String]
+        if not str_cols:
+            return {"image_cols": []}
+
+        sample = lf.select(str_cols).limit(10).collect()
+
+        async with httpx.AsyncClient(headers={"User-Agent": "Mozilla/5.0"}) as client:
+            async def classify_col(col: str) -> tuple[str, str | None]:
+                vals = [v for v in sample[col].drop_nulls().to_list() if isinstance(v, str) and v.strip()]
+                if not vals:
+                    return col, None
+                return col, await _classify_image_col(client, vals)
+
+            results = await asyncio.gather(*[classify_col(col) for col in str_cols])
+
+        image_cols = [{"col": col, "kind": kind} for col, kind in results if kind]
+        return {"image_cols": image_cols}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

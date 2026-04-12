@@ -162,7 +162,7 @@ function handleOpenFile(file) {
 
     <!-- Viewers (portals / dialogs) -->
     <ImageViewer ref="imageViewerRef" />
-    <DataFrameViewer ref="dfViewerRef" />
+    <DataFrameViewer ref="dfViewerRef" @open-image="imageViewerRef?.open($event)" />
     <JsonViewer ref="jsonViewerRef" @open-dataframe="dfViewerRef?.open($event, 'jsonl')" />
     <TextViewer ref="textViewerRef" :file="activeFile" @error="showError" @open-hex="hexViewerRef?.open($event)" />
     <MediaPlayer ref="mediaPlayerRef" />
