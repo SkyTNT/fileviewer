@@ -10,8 +10,7 @@ export async function copyFileToClipboard(file) {
   const size = file.size ?? 0
   if (file.type === 'image') {
     if (size > IMAGE_SIZE_LIMIT) throw new Error('Image too large (max 20 MB)')
-    const res = await fetch(imagesApi.fullUrl(file.path))
-    let blob  = await res.blob()
+    let blob = (await imagesApi.full(file.path)).data
     if (blob.type !== 'image/png') {
       const bmp    = await createImageBitmap(blob)
       const canvas = document.createElement('canvas')
@@ -22,9 +21,7 @@ export async function copyFileToClipboard(file) {
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
   } else {
     if (size > TEXT_SIZE_LIMIT) throw new Error('File too large (max 5 MB)')
-    const res   = await fetch(filesApi.downloadUrl(file.path))
-    const buf   = await res.arrayBuffer()
-    const bytes = new Uint8Array(buf)
+    const bytes = new Uint8Array((await filesApi.download(file.path)).data)
     for (let i = 0; i < bytes.length; i++) {
       if (bytes[i] === 0) throw new Error('Cannot copy binary file to clipboard')
     }

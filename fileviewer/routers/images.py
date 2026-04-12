@@ -115,13 +115,3 @@ async def get_full_image(path: str = Query(...)):
     return FileResponse(str(file_path), media_type=mt)
 
 
-@router.get("/dimensions")
-def get_dimensions(path: str = Query(...)):
-    file_path = validate_path(path)
-    if file_path.suffix.lower() == ".svg":
-        return {"width": None, "height": None}
-    try:
-        with Image.open(file_path) as img:
-            return {"width": img.width, "height": img.height}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))

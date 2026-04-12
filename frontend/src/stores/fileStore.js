@@ -27,8 +27,9 @@ export const useFileStore = defineStore('file', () => {
   const nameConflicts  = ref(null)  // { conflicts: [{name}], resolve: fn } | null
 
   // ── Upload state ──────────────────────────────────────────────────────────────
-  const uploadTasks   = ref([])    // reactive task objects
-  const _uploadFiles  = new Map()  // id → File, kept outside reactivity
+  const uploadTasks        = ref([])    // reactive task objects
+  const _uploadFiles       = new Map()  // id → File, kept outside reactivity
+  const _uploadControllers = new Map()  // id → AbortController, for cancellation
   let _uploadNextId   = 1
   let _uploadRafId    = null
 
@@ -173,44 +174,30 @@ export const useFileStore = defineStore('file', () => {
   function cancelNameConflicts() { resolveNameConflicts(null) }
 
   // ── Upload ────────────────────────────────────────────────────────────────────
-  function _uploadFile(task) {
-    return new Promise((resolve) => {
-      const file = _uploadFiles.get(task.id)
-      const fd   = new FormData()
-      fd.append('parent',      task.parent)
-      fd.append('files',       file)
-      fd.append('on_conflict', task.onConflict)
-
-      const xhr = new XMLHttpRequest()
-      xhr.open('POST', '/api/write/upload')
-      xhr.withCredentials = true
-
-      xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable) task.progress = Math.round(e.loaded / e.total * 100)
+  async function _uploadFile(task) {
+    const file       = _uploadFiles.get(task.id)
+    const controller = new AbortController()
+    _uploadControllers.set(task.id, controller)
+    try {
+      await writeApi.upload(task.parent, file, task.onConflict, {
+        signal: controller.signal,
+        onUploadProgress: (e) => {
+          if (e.total) task.progress = Math.round(e.loaded / e.total * 100)
+        },
       })
-
-      xhr.addEventListener('load', () => {
-        _uploadFiles.delete(task.id)
-        if (xhr.status >= 200 && xhr.status < 300) {
-          task.progress = 100
-          task.status   = 'done'
-        } else {
-          task.status = 'error'
-          try   { task.error = JSON.parse(xhr.responseText)?.detail || xhr.statusText }
-          catch { task.error = xhr.statusText }
-        }
-        resolve()
-      })
-
-      xhr.addEventListener('error', () => {
-        _uploadFiles.delete(task.id)
-        task.status = 'error'
-        task.error  = 'Network error'
-        resolve()
-      })
-
-      xhr.send(fd)
-    })
+      task.progress = 100
+      task.status   = 'done'
+    } catch (err) {
+      if (err.code === 'ERR_CANCELED') {
+        uploadTasks.value = uploadTasks.value.filter(t => t.id !== task.id)
+        return
+      }
+      task.status = 'error'
+      task.error  = err.response?.data?.detail || err.message || 'Upload failed'
+    } finally {
+      _uploadFiles.delete(task.id)
+      _uploadControllers.delete(task.id)
+    }
   }
 
   function _scheduleUploadRefresh() {
@@ -269,6 +256,8 @@ export const useFileStore = defineStore('file', () => {
   }
 
   function removeUploadTask(id) {
+    const controller = _uploadControllers.get(id)
+    if (controller) { controller.abort(); return }  // ERR_CANCELED handler cleans up
     uploadTasks.value = uploadTasks.value.filter(t => t.id !== id)
     _uploadFiles.delete(id)
   }

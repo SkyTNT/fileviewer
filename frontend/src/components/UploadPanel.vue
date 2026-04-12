@@ -70,11 +70,11 @@ function statusColor(task) {
                 </v-tooltip>
                 <v-icon v-else size="15" :color="statusColor(task)">{{ statusIcon(task) }}</v-icon>
                 <span class="text-body-2 text-truncate" style="flex:1; min-width:0" :title="task.name">{{ task.name }}</span>
-                <div style="width:36px; height:24px; flex-shrink:0" class="d-flex align-center justify-end">
+                <div style="flex-shrink:0" class="d-flex align-center ga-1">
                   <span v-if="task.status === 'uploading'" class="text-caption text-medium-emphasis">
                     {{ task.progress }}%
                   </span>
-                  <v-btn v-else icon size="x-small" variant="text" @click="store.removeUploadTask(task.id)">
+                  <v-btn icon size="x-small" variant="text" @click="store.removeUploadTask(task.id)">
                     <v-icon size="13">mdi-close</v-icon>
                   </v-btn>
                 </div>
