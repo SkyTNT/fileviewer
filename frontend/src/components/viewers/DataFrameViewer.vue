@@ -33,6 +33,9 @@ const schema   = ref([])
 const imageCols = ref({})
 const filterSql = ref('')
 const schemaTree = ref([])
+const imgRowHeight = ref(48)
+
+const hasImageCols = computed(() => Object.keys(imageCols.value).length > 0)
 
 // ── CodeMirror SQL editor ─────────────────────────────────────────────────────
 
@@ -321,7 +324,7 @@ function openRow(row) {
 // ── Image helpers ─────────────────────────────────────────────────────────────
 
 function cellThumbUrl(value) {
-  return value ? imagesApi.thumbnailUrl(value, 200) : ''
+  return value ? imagesApi.thumbnailUrl(value, 400) : ''
 }
 function openImgPreview(value) {
   if (value) emit('open-image', { path: value, name: value })
@@ -355,6 +358,16 @@ defineExpose({ open })
         <v-btn size="small" color="primary" @click="applyFilter">{{ t('dataframe.filter') }}</v-btn>
         <v-btn size="small" variant="tonal" @click="clearFilter">{{ t('dataframe.clear') }}</v-btn>
         <v-spacer />
+        <v-select
+          v-if="hasImageCols"
+          v-model="imgRowHeight"
+          :items="[40, 64, 96, 128, 200]"
+          :label="t('dataframe.imgHeight')"
+          density="compact"
+          hide-details
+          variant="outlined"
+          style="max-width:110px"
+        />
         <v-select
           v-model="pageSize"
           :items="[50, 100, 250, 500]"
@@ -412,14 +425,14 @@ defineExpose({ open })
           </thead>
           <tbody>
             <tr v-for="(row, ri) in rows" :key="ri" class="data-row" @dblclick="openRow(row)">
-              <td v-for="col in columns" :key="col">
+              <td v-for="col in columns" :key="col" :class="{ 'img-col': !!imageCols[col] }">
                 <template v-if="imageCols[col] && row[col]">
                   <v-tooltip :text="row[col]" location="top">
                     <template #activator="{ props: tp }">
                       <img
                         v-bind="tp"
                         :src="cellThumbUrl(row[col])"
-                        style="height:48px;max-width:80px;object-fit:cover;cursor:pointer;border-radius:3px;vertical-align:middle"
+                        :style="{ height: imgRowHeight + 'px', cursor: 'pointer', borderRadius: '3px', verticalAlign: 'middle' }"
                         @click.stop="openImgPreview(row[col])"
                       />
                     </template>
@@ -529,6 +542,12 @@ defineExpose({ open })
   max-width: 280px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.df-table td.img-col {
+  max-width: none;
+  overflow: visible;
+  text-overflow: unset;
+  padding: 2px 8px;
 }
 .df-table tr:hover td { background: rgba(var(--v-theme-on-surface), 0.04); }
 .data-row { cursor: pointer; }

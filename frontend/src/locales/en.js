@@ -133,6 +133,7 @@ export default {
     filter: 'Filter',
     clear: 'Clear',
     rowsPerPage: 'Rows/page',
+    imgHeight: 'Img height',
     noData: 'No data',
     page: 'Page {page} / {total}',
     rowDetail: 'Row detail',

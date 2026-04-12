@@ -133,6 +133,7 @@ export default {
     filter: 'フィルター',
     clear: 'クリア',
     rowsPerPage: '行/ページ',
+    imgHeight: '画像の高さ',
     noData: 'データなし',
     page: '{page} / {total} ページ',
     rowDetail: '行の詳細',
