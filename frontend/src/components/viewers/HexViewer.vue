@@ -3,14 +3,15 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { hexApi } from '../../services/api.js'
 import { formatBytes } from '../../utils/fileTypes.js'
+import PaginationBar from '../PaginationBar.vue'
 
-const dialog    = ref(false)
-const loading   = ref(false)
-const error     = ref(null)
-const rows      = ref([])
-const fileSize  = ref(0)
-const page      = ref(1)
-const totalPages = ref(1)
+const dialog      = ref(false)
+const loading     = ref(false)
+const error       = ref(null)
+const rows        = ref([])
+const fileSize    = ref(0)
+const page        = ref(1)
+const totalPages  = ref(1)
 const currentFile = ref(null)
 
 async function open(file) {
@@ -75,12 +76,15 @@ defineExpose({ open })
       <v-divider />
 
       <!-- Hex dump body -->
-      <v-card-text class="pa-0 flex-grow-1" style="overflow:auto">
-        <div v-if="loading" class="d-flex justify-center pa-8">
+      <v-card-text class="pa-0 flex-grow-1 hex-body" style="overflow:auto">
+        <div v-if="loading && !rows.length" class="d-flex justify-center pa-8">
           <v-progress-circular indeterminate />
         </div>
         <v-alert v-else-if="error" type="error" class="ma-4">{{ error }}</v-alert>
         <div v-else class="hex-wrap pa-3">
+          <div v-if="loading" class="loading-overlay">
+            <v-progress-circular indeterminate />
+          </div>
           <!-- Header row -->
           <div class="hex-row hex-header">
             <span class="col-offset">{{ t('hexViewer.offset') }}</span>
@@ -100,29 +104,22 @@ defineExpose({ open })
         </div>
       </v-card-text>
 
+
       <!-- Pagination -->
       <template v-if="totalPages > 1">
         <v-divider />
-        <div class="d-flex align-center justify-center pa-2 flex-shrink-0 ga-2">
-          <v-btn
-            icon="mdi-chevron-left"
-            size="small"
-            variant="text"
-            :disabled="page <= 1 || loading"
-            @click="fetchPage(page - 1)"
-          />
-          <span class="text-caption text-medium-emphasis">
-            {{ t('hexViewer.page', { page, total: totalPages }) }}
-            &nbsp;·&nbsp;
-            {{ t('hexViewer.rowRange', { from: (page - 1) * 512 + 1, to: Math.min(page * 512, Math.ceil(fileSize / 16)) }) }}
-          </span>
-          <v-btn
-            icon="mdi-chevron-right"
-            size="small"
-            variant="text"
-            :disabled="page >= totalPages || loading"
-            @click="fetchPage(page + 1)"
-          />
+        <div class="d-flex justify-center pa-2 flex-shrink-0">
+          <PaginationBar
+            :model-value="page"
+            :total="totalPages"
+            :disabled="loading"
+            @navigate="fetchPage"
+          >
+            <span class="text-caption text-medium-emphasis">
+              &nbsp;·&nbsp;
+              {{ t('hexViewer.rowRange', { from: (page - 1) * 512 + 1, to: Math.min(page * 512, Math.ceil(fileSize / 16)) }) }}
+            </span>
+          </PaginationBar>
         </div>
       </template>
 
@@ -131,6 +128,20 @@ defineExpose({ open })
 </template>
 
 <style scoped>
+.hex-body { position: relative; }
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4;
+  pointer-events: none;
+}
+.loading-overlay :deep(.v-progress-circular) {
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.3));
+}
+
 .hex-wrap {
   font-family: 'Roboto Mono', 'Courier New', monospace;
   font-size: 12.5px;

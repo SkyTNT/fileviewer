@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, nextTick, onUnmounted, watch, watchEffect } from 'vue'
+import { ref, computed, nextTick, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { EditorState, Compartment } from '@codemirror/state'
@@ -8,6 +8,7 @@ import { history, historyKeymap, defaultKeymap } from '@codemirror/commands'
 import { autocompletion, completionKeymap, acceptCompletion } from '@codemirror/autocomplete'
 import { dataframeApi, imagesApi } from '../../services/api.js'
 import JsonNode from './JsonNode.vue'
+import PaginationBar from '../PaginationBar.vue'
 
 const emit = defineEmits(['open-image'])
 const { t } = useI18n()
@@ -22,7 +23,6 @@ const dtypes   = ref([])
 const rows     = ref([])
 const total    = ref(0)
 const page      = ref(1)
-const pageInput = ref(1)
 const pageSize  = ref(100)
 const sortCol  = ref(null)
 const sortAsc  = ref(true)
@@ -299,33 +299,14 @@ function onSort(col) {
   loadParquet()
 }
 
-function prevPage() {
-  if (page.value <= 1) return
-  page.value--
-  loadParquet()
-}
-function nextPage() {
-  if (page.value >= totalPages.value) return
-  page.value++
-  loadParquet()
-}
 function onPageSizeChange() {
   page.value = 1
   loadParquet()
 }
-function goToPageInput() {
-  const val = parseInt(pageInput.value)
-  if (!isNaN(val)) {
-    const clamped = Math.max(1, Math.min(val, totalPages.value))
-    if (clamped !== page.value) {
-      page.value = clamped
-      loadParquet()
-    }
-  }
-  pageInput.value = page.value
+function goToPage(p) {
+  page.value = p
+  loadParquet()
 }
-
-watchEffect(() => { pageInput.value = page.value })
 
 // ── Row detail ────────────────────────────────────────────────────────────────
 
@@ -456,29 +437,14 @@ defineExpose({ open })
 
       <!-- Pagination -->
       <v-divider />
-      <v-card-actions class="justify-center ga-2">
-        <v-btn icon size="small" variant="tonal" :disabled="page <= 1" @click="page = 1; loadParquet()">
-          <v-icon>mdi-page-first</v-icon>
-        </v-btn>
-        <v-btn icon size="small" variant="tonal" :disabled="page <= 1" @click="prevPage">
-          <v-icon>mdi-chevron-left</v-icon>
-        </v-btn>
-        <input
-          v-model.number="pageInput"
-          class="page-input"
-          type="number"
-          min="1"
-          :max="totalPages"
-          @keydown.enter.prevent="goToPageInput"
-          @blur="goToPageInput"
+      <v-card-actions class="justify-center">
+        <PaginationBar
+          :model-value="page"
+          :total="totalPages"
+          :disabled="loading"
+          variant="tonal"
+          @navigate="goToPage"
         />
-        <span class="text-body-2">/ {{ totalPages }}</span>
-        <v-btn icon size="small" variant="tonal" :disabled="page >= totalPages" @click="nextPage">
-          <v-icon>mdi-chevron-right</v-icon>
-        </v-btn>
-        <v-btn icon size="small" variant="tonal" :disabled="page >= totalPages" @click="page = totalPages; loadParquet()">
-          <v-icon>mdi-page-last</v-icon>
-        </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -519,24 +485,6 @@ defineExpose({ open })
   filter: drop-shadow(0 2px 6px rgba(0,0,0,0.3));
 }
 
-.page-input {
-  width: 52px;
-  text-align: center;
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 4px;
-  padding: 3px 4px;
-  font-size: 13px;
-  background: transparent;
-  color: inherit;
-  outline: none;
-}
-.page-input:focus {
-  border-color: rgb(var(--v-theme-primary));
-  border-width: 2px;
-}
-.page-input::-webkit-inner-spin-button,
-.page-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-.page-input[type=number] { -moz-appearance: textfield; }
 
 .sql-editor-wrap {
   flex: 1;

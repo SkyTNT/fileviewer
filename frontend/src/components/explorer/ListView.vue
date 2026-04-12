@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFileStore } from '../../stores/fileStore.js'
 import { useWriteActions } from '../../composables/useWriteActions.js'
@@ -11,6 +11,7 @@ import ContextMenu from './ContextMenu.vue'
 import DialogRename from '../dialogs/DialogRename.vue'
 import DialogConfirmDelete from '../dialogs/DialogConfirmDelete.vue'
 import DialogNewItem from '../dialogs/DialogNewItem.vue'
+import PaginationBar from '../PaginationBar.vue'
 
 const emit  = defineEmits(['open-file'])
 const store = useFileStore()
@@ -29,18 +30,6 @@ const { menuOpen, menuX, menuY, menuTarget, showMenu, onBgContextMenu } = useCon
 useExplorerKeyboard(() => store.entries, doPaste)
 
 const totalPages = computed(() => Math.ceil(store.total / store.pageSize))
-
-const pageInput = ref(store.page)
-watch(() => store.page, v => { pageInput.value = v })
-
-function goToListPage() {
-  const val = parseInt(pageInput.value)
-  if (!isNaN(val)) {
-    const clamped = Math.max(1, Math.min(val, totalPages.value))
-    if (clamped !== store.page) store.goToPage(clamped)
-  }
-  pageInput.value = store.page
-}
 
 const typeIcon   = t => TYPE_ICON[t]  || 'mdi-file-outline'
 const typeColor  = t => TYPE_COLOR[t] || undefined
@@ -131,29 +120,13 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
       </v-list-item>
     </v-list>
 
-    <div v-if="totalPages > 1" class="pagination-fab d-flex align-center ga-1">
-      <v-btn icon size="small" variant="text" :disabled="store.page <= 1" @click="store.goToPage(1)">
-        <v-icon>mdi-page-first</v-icon>
-      </v-btn>
-      <v-btn icon size="small" variant="text" :disabled="store.page <= 1" @click="store.goToPage(store.page - 1)">
-        <v-icon>mdi-chevron-left</v-icon>
-      </v-btn>
-      <input
-        v-model.number="pageInput"
-        class="page-input"
-        type="number"
-        min="1"
-        :max="totalPages"
-        @keydown.enter.prevent="goToListPage"
-        @blur="goToListPage"
+    <div v-if="totalPages > 1" class="pagination-fab">
+      <PaginationBar
+        :model-value="store.page"
+        :total="totalPages"
+        :disabled="store.loading"
+        @navigate="store.goToPage"
       />
-      <span class="text-body-2">/ {{ totalPages }}</span>
-      <v-btn icon size="small" variant="text" :disabled="store.page >= totalPages" @click="store.goToPage(store.page + 1)">
-        <v-icon>mdi-chevron-right</v-icon>
-      </v-btn>
-      <v-btn icon size="small" variant="text" :disabled="store.page >= totalPages" @click="store.goToPage(totalPages)">
-        <v-icon>mdi-page-last</v-icon>
-      </v-btn>
     </div>
   </div>
 
@@ -226,22 +199,4 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
   box-shadow: 0 3px 10px rgba(0,0,0,.2);
   padding: 4px 8px;
 }
-.page-input {
-  width: 52px;
-  text-align: center;
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 4px;
-  padding: 3px 4px;
-  font-size: 13px;
-  background: transparent;
-  color: inherit;
-  outline: none;
-}
-.page-input:focus {
-  border-color: rgb(var(--v-theme-primary));
-  border-width: 2px;
-}
-.page-input::-webkit-inner-spin-button,
-.page-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-.page-input[type=number] { -moz-appearance: textfield; }
 </style>
