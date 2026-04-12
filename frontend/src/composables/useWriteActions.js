@@ -2,6 +2,11 @@ import { ref } from 'vue'
 import { useFileStore } from '../stores/fileStore.js'
 import { useNotification } from './useNotification.js'
 import { writeApi } from '../services/api.js'
+import { getErrorMessage } from '../utils/errors.js'
+
+function createDialogState() {
+  return { dialog: ref(false), name: ref(''), loading: ref(false), error: ref('') }
+}
 
 /**
  * All write-mode operations: rename, delete, mkdir, touch, paste.
@@ -11,36 +16,33 @@ export function useWriteActions() {
   const store = useFileStore()
 
   // ── Rename ───────────────────────────────────────────────────────────────────
-  const renameDialog  = ref(false)
+  const rename = createDialogState()
   const renameTarget  = ref(null)
-  const renameName    = ref('')
-  const renameLoading = ref(false)
-  const renameError   = ref('')
   let _renameOnSuccess = null
 
   function openRename(file, onSuccess = null) {
-    renameTarget.value  = file
-    _renameOnSuccess    = onSuccess
-    renameName.value    = file?.name || ''
-    renameError.value   = ''
-    renameDialog.value  = true
+    renameTarget.value    = file
+    _renameOnSuccess      = onSuccess
+    rename.name.value     = file?.name || ''
+    rename.error.value    = ''
+    rename.dialog.value   = true
   }
 
   async function confirmRename() {
-    const newName = renameName.value.trim()
-    if (!newName || newName === renameTarget.value?.name) { renameDialog.value = false; return }
-    renameLoading.value = true
-    renameError.value   = ''
+    const newName = rename.name.value.trim()
+    if (!newName || newName === renameTarget.value?.name) { rename.dialog.value = false; return }
+    rename.loading.value = true
+    rename.error.value   = ''
     try {
       await writeApi.rename(renameTarget.value.path, newName)
-      renameDialog.value = false
+      rename.dialog.value = false
       store.invalidateTree()
       store.loadDirectory(store.currentPath)
       _renameOnSuccess?.()
     } catch (e) {
-      renameError.value = e.response?.data?.detail || e.message
+      rename.error.value = getErrorMessage(e)
     } finally {
-      renameLoading.value = false
+      rename.loading.value = false
     }
   }
 
@@ -58,64 +60,58 @@ export function useWriteActions() {
     try {
       await store.deleteEntries(deleteTargets.value)
     } catch (e) {
-      showError(e.response?.data?.detail || e.message)
+      showError(getErrorMessage(e))
     }
   }
 
   // ── New Folder ────────────────────────────────────────────────────────────────
-  const mkdirDialog  = ref(false)
-  const mkdirName    = ref('')
-  const mkdirLoading = ref(false)
-  const mkdirError   = ref('')
+  const mkdir = createDialogState()
 
   function openMkdir() {
-    mkdirName.value   = ''
-    mkdirError.value  = ''
-    mkdirDialog.value = true
+    mkdir.name.value   = ''
+    mkdir.error.value  = ''
+    mkdir.dialog.value = true
   }
 
   async function confirmMkdir() {
-    const name = mkdirName.value.trim()
+    const name = mkdir.name.value.trim()
     if (!name) return
-    mkdirLoading.value = true
-    mkdirError.value   = ''
+    mkdir.loading.value = true
+    mkdir.error.value   = ''
     try {
       await writeApi.mkdir(store.currentPath, name)
-      mkdirDialog.value = false
+      mkdir.dialog.value = false
       store.invalidateTree()
       store.loadDirectory(store.currentPath)
     } catch (e) {
-      mkdirError.value = e.response?.data?.detail || e.message
+      mkdir.error.value = getErrorMessage(e)
     } finally {
-      mkdirLoading.value = false
+      mkdir.loading.value = false
     }
   }
 
   // ── New File ──────────────────────────────────────────────────────────────────
-  const touchDialog  = ref(false)
-  const touchName    = ref('')
-  const touchLoading = ref(false)
-  const touchError   = ref('')
+  const touch = createDialogState()
 
   function openTouch() {
-    touchName.value   = ''
-    touchError.value  = ''
-    touchDialog.value = true
+    touch.name.value   = ''
+    touch.error.value  = ''
+    touch.dialog.value = true
   }
 
   async function confirmTouch() {
-    const name = touchName.value.trim()
+    const name = touch.name.value.trim()
     if (!name) return
-    touchLoading.value = true
-    touchError.value   = ''
+    touch.loading.value = true
+    touch.error.value   = ''
     try {
       await writeApi.touch(store.currentPath, name)
-      touchDialog.value = false
+      touch.dialog.value = false
       store.loadDirectory(store.currentPath)
     } catch (e) {
-      touchError.value = e.response?.data?.detail || e.message
+      touch.error.value = getErrorMessage(e)
     } finally {
-      touchLoading.value = false
+      touch.loading.value = false
     }
   }
 
@@ -127,7 +123,7 @@ export function useWriteActions() {
     try {
       await store.paste()
     } catch (e) {
-      showError(e.response?.data?.detail || e.message)
+      showError(getErrorMessage(e))
     } finally {
       pasteLoading.value = false
     }
@@ -135,14 +131,19 @@ export function useWriteActions() {
 
   return {
     // rename
-    renameDialog, renameTarget, renameName, renameLoading, renameError,
+    renameDialog: rename.dialog, renameTarget, renameName: rename.name,
+    renameLoading: rename.loading, renameError: rename.error,
     openRename, confirmRename,
     // delete
     deleteDialog, deleteTargets, openDelete, confirmDelete,
     // mkdir
-    mkdirDialog, mkdirName, mkdirLoading, mkdirError, openMkdir, confirmMkdir,
+    mkdirDialog: mkdir.dialog, mkdirName: mkdir.name,
+    mkdirLoading: mkdir.loading, mkdirError: mkdir.error,
+    openMkdir, confirmMkdir,
     // touch
-    touchDialog, touchName, touchLoading, touchError, openTouch, confirmTouch,
+    touchDialog: touch.dialog, touchName: touch.name,
+    touchLoading: touch.loading, touchError: touch.error,
+    openTouch, confirmTouch,
     // paste
     pasteLoading, doPaste,
   }

@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response, FileResponse
 from PIL import Image
 
-from fileviewer.config import validate_path, get_roots, IMAGE_EXTENSIONS
+from fileviewer.config import validate_path, get_roots, IMAGE_EXTENSIONS, IMAGE_MIME_TYPES
 from fileviewer.http_client import client as _client
 
 router = APIRouter()
@@ -113,12 +113,7 @@ async def get_full_image(path: str = Query(...)):
     if file_path is None:
         file_path = validate_path(path)
 
-    media_types = {
-        ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
-        ".gif": "image/gif",  ".webp": "image/webp", ".bmp": "image/bmp",
-        ".svg": "image/svg+xml", ".tiff": "image/tiff", ".tif": "image/tiff",
-    }
-    mt = media_types.get(file_path.suffix.lower(), "application/octet-stream")
+    mt = IMAGE_MIME_TYPES.get(file_path.suffix.lower(), "application/octet-stream")
     return FileResponse(str(file_path), media_type=mt)
 
 

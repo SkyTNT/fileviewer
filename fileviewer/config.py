@@ -2,6 +2,11 @@ import os
 from pathlib import Path
 
 IMAGE_EXTENSIONS   = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".svg"}
+IMAGE_MIME_TYPES   = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+    ".gif": "image/gif",  ".webp": "image/webp",  ".bmp": "image/bmp",
+    ".svg": "image/svg+xml", ".tiff": "image/tiff", ".tif": "image/tiff",
+}
 PARQUET_EXTENSIONS = {".parquet"}
 CSV_EXTENSIONS     = {".csv"}
 JSON_EXTENSIONS    = {".json"}

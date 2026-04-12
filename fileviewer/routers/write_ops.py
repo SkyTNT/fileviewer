@@ -20,6 +20,29 @@ def _is_root(path: Path) -> bool:
     return any(path == root for _, _, root in get_roots())
 
 
+def _sse(data: dict) -> str:
+    return f"data: {json.dumps(data)}\n\n"
+
+
+def _sse_response(generator):
+    return StreamingResponse(generator, media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+def _create_path_item(parent_str: str, name: str, factory):
+    parent = validate_path(parent_str)
+    if not parent.is_dir():
+        raise HTTPException(status_code=400, detail="Parent is not a directory")
+    target = parent / name
+    if target.exists():
+        raise HTTPException(status_code=409, detail="Already exists")
+    try:
+        factory(target)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    return {"ok": True}
+
+
 def _coexist_name(dest_dir: Path, name: str) -> str:
     """Return a non-conflicting name by appending (1), (2), … before the extension."""
     if not (dest_dir / name).exists():
@@ -56,34 +79,12 @@ class SaveRequest(BaseModel):
 
 @router.post("/mkdir")
 def make_directory(req: MkdirRequest):
-
-    parent = validate_path(req.parent)
-    if not parent.is_dir():
-        raise HTTPException(status_code=400, detail="Parent is not a directory")
-    new_dir = parent / req.name
-    if new_dir.exists():
-        raise HTTPException(status_code=409, detail="Already exists")
-    try:
-        new_dir.mkdir()
-    except PermissionError:
-        raise HTTPException(status_code=403, detail="Permission denied")
-    return {"ok": True}
+    return _create_path_item(req.parent, req.name, lambda p: p.mkdir())
 
 
 @router.post("/touch")
 def touch_file(req: TouchRequest):
-
-    parent = validate_path(req.parent)
-    if not parent.is_dir():
-        raise HTTPException(status_code=400, detail="Parent is not a directory")
-    new_file = parent / req.name
-    if new_file.exists():
-        raise HTTPException(status_code=409, detail="Already exists")
-    try:
-        new_file.touch()
-    except PermissionError:
-        raise HTTPException(status_code=403, detail="Permission denied")
-    return {"ok": True}
+    return _create_path_item(req.parent, req.name, lambda p: p.touch())
 
 
 @router.post("/save")
@@ -156,21 +157,20 @@ def check_conflicts(req: CheckConflictsRequest):
 @router.post("/paste")
 def paste(req: BatchPasteRequest):
 
-
     def generate():
         total = len(req.entries)
         for i, entry in enumerate(req.entries):
             src = validate_path(entry.src)
             name = src.name
             if _is_root(src):
-                yield f"data: {json.dumps({'type': 'error', 'done': i + 1, 'total': total, 'name': name, 'message': 'Cannot copy/move a root directory'})}\n\n"
+                yield _sse({'type': 'error', 'done': i + 1, 'total': total, 'name': name, 'message': 'Cannot copy/move a root directory'})
                 continue
             dest_dir = validate_path(entry.dest_parent)
             dest = dest_dir / name
             try:
                 if dest.exists():
                     if req.on_conflict == "skip":
-                        yield f"data: {json.dumps({'type': 'progress', 'done': i + 1, 'total': total, 'name': name, 'skipped': True})}\n\n"
+                        yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': name, 'skipped': True})
                         continue
                     elif req.on_conflict == "overwrite":
                         shutil.rmtree(dest) if dest.is_dir() else dest.unlink()
@@ -183,19 +183,17 @@ def paste(req: BatchPasteRequest):
                 else:
                     shutil.move(str(src), str(dest))
 
-                yield f"data: {json.dumps({'type': 'progress', 'done': i + 1, 'total': total, 'name': name})}\n\n"
+                yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': name})
             except Exception as e:
-                yield f"data: {json.dumps({'type': 'error', 'done': i + 1, 'total': total, 'name': name, 'message': str(e)})}\n\n"
+                yield _sse({'type': 'error', 'done': i + 1, 'total': total, 'name': name, 'message': str(e)})
 
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        yield _sse({'type': 'done'})
 
-    return StreamingResponse(generate(), media_type="text/event-stream",
-                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    return _sse_response(generate())
 
 
 @router.post("/delete")
 def delete_entries(req: BatchDeleteRequest):
-
 
     def generate():
         total = len(req.paths)
@@ -203,20 +201,19 @@ def delete_entries(req: BatchDeleteRequest):
             target = validate_path(path)
             name = target.name
             if _is_root(target):
-                yield f"data: {json.dumps({'type': 'error', 'done': i + 1, 'total': total, 'name': name, 'message': 'Cannot delete a root directory'})}\n\n"
+                yield _sse({'type': 'error', 'done': i + 1, 'total': total, 'name': name, 'message': 'Cannot delete a root directory'})
                 continue
             try:
                 if not target.exists():
                     raise FileNotFoundError(f"{name}: not found")
                 shutil.rmtree(target) if target.is_dir() else target.unlink()
-                yield f"data: {json.dumps({'type': 'progress', 'done': i + 1, 'total': total, 'name': name})}\n\n"
+                yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': name})
             except Exception as e:
-                yield f"data: {json.dumps({'type': 'error', 'done': i + 1, 'total': total, 'name': name, 'message': str(e)})}\n\n"
+                yield _sse({'type': 'error', 'done': i + 1, 'total': total, 'name': name, 'message': str(e)})
 
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        yield _sse({'type': 'done'})
 
-    return StreamingResponse(generate(), media_type="text/event-stream",
-                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    return _sse_response(generate())
 
 
 @router.post("/upload")
