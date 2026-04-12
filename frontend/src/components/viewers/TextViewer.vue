@@ -220,11 +220,9 @@ defineExpose({ open })
           >{{ saveError }}</v-alert>
 
           <!-- Markdown preview -->
-          <MarkdownRenderer
-            v-if="previewMode"
-            :content="editText"
-            :isDark="isDark"
-          />
+          <div v-if="previewMode" class="md-preview-scroll">
+            <MarkdownRenderer :content="editText" :isDark="isDark" />
+          </div>
 
           <!-- CodeMirror editor -->
           <Codemirror
@@ -291,6 +289,11 @@ defineExpose({ open })
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+}
+.md-preview-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 :deep(.vue-codemirror) {
   flex: 1;
