@@ -6,7 +6,6 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
-import httpx
 import polars as pl
 from fastapi import APIRouter, Query, HTTPException
 
@@ -14,6 +13,7 @@ from fileviewer.config import (
     validate_path, schema_to_tree,
     JSONL_EXTENSIONS, JSON_EXTENSIONS, CSV_EXTENSIONS, IMAGE_EXTENSIONS,
 )
+from fileviewer.http_client import client as _http_client
 
 router = APIRouter()
 
@@ -132,16 +132,16 @@ def get_data(
 
 # ── Image column detection ────────────────────────────────────────────────────
 
-async def _is_image_url(client: httpx.AsyncClient, url: str) -> bool:
+async def _is_image_url(url: str) -> bool:
     try:
-        resp = await client.head(url, timeout=5, follow_redirects=True)
+        resp = await _http_client.head(url)
         ct = resp.headers.get("content-type", "").split(";")[0].strip()
         return ct.startswith("image/")
     except Exception:
         return False
 
 
-async def _classify_image_col(client: httpx.AsyncClient, vals: list[str]) -> str | None:
+async def _classify_image_col(vals: list[str]) -> str | None:
     """Return 'path', 'url', or None based on sampled values."""
     path_hits = 0
     url_vals, other_vals = [], []
@@ -154,7 +154,7 @@ async def _classify_image_col(client: httpx.AsyncClient, vals: list[str]) -> str
                 path_hits += 1
             other_vals.append(v)
 
-    url_checks = await asyncio.gather(*[_is_image_url(client, u) for u in url_vals])
+    url_checks = await asyncio.gather(*[_is_image_url(u) for u in url_vals])
     url_hits = sum(url_checks)
 
     total = len(vals)
@@ -177,15 +177,13 @@ async def detect_image_cols(path: str = Query(...)):
 
         sample = lf.select(str_cols).limit(10).collect()
 
-        async with httpx.AsyncClient(headers={"User-Agent": "Mozilla/5.0"}) as client:
-            async def classify_col(col: str) -> tuple[str, str | None]:
-                vals = [v for v in sample[col].drop_nulls().to_list() if isinstance(v, str) and v.strip()]
-                if not vals:
-                    return col, None
-                return col, await _classify_image_col(client, vals)
+        async def classify_col(col: str) -> tuple[str, str | None]:
+            vals = [v for v in sample[col].drop_nulls().to_list() if isinstance(v, str) and v.strip()]
+            if not vals:
+                return col, None
+            return col, await _classify_image_col(vals)
 
-            results = await asyncio.gather(*[classify_col(col) for col in str_cols])
-
+        results = await asyncio.gather(*[classify_col(col) for col in str_cols])
         image_cols = [{"col": col, "kind": kind} for col, kind in results if kind]
         return {"image_cols": image_cols}
     except Exception as e:

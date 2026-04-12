@@ -2,35 +2,24 @@ import io
 from functools import lru_cache
 from pathlib import Path
 
-import httpx
+from async_lru import alru_cache
+
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response, FileResponse
 from PIL import Image
 
 from fileviewer.config import validate_path, get_roots, IMAGE_EXTENSIONS
+from fileviewer.http_client import client as _client
 
 router = APIRouter()
-
-_HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
 # ── Local image helpers ───────────────────────────────────────────────────────
 
 @lru_cache(maxsize=512)
 def _generate_thumbnail(path: str, size: int, mtime: float) -> bytes:
-    file_path = Path(path)
-    with Image.open(file_path) as img:
-        img.thumbnail((size, size), Image.LANCZOS)
-        if img.mode in ("RGBA", "P", "LA"):
-            bg = Image.new("RGB", img.size, (255, 255, 255))
-            src = img.convert("RGBA") if img.mode == "P" else img
-            bg.paste(src, mask=src.split()[-1])
-            img = bg
-        elif img.mode != "RGB":
-            img = img.convert("RGB")
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=85)
-        return buf.getvalue()
+    with Image.open(path) as img:
+        return _pil_to_jpeg(img, size)
 
 
 def _resolve_abs_path(path: str) -> Path | None:
@@ -58,26 +47,32 @@ def _resolve_abs_path(path: str) -> Path | None:
 # ── URL helpers ───────────────────────────────────────────────────────────────
 
 async def _fetch_url(url: str) -> tuple[bytes, str]:
-    async with httpx.AsyncClient(headers=_HEADERS, follow_redirects=True) as client:
-        resp = await client.get(url, timeout=10)
-        resp.raise_for_status()
-        ct = resp.headers.get("content-type", "image/jpeg").split(";")[0].strip()
-        return resp.content, ct
+    resp = await _client.get(url)
+    resp.raise_for_status()
+    ct = resp.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+    return resp.content, ct
 
 
-def _make_thumbnail(data: bytes, size: int) -> bytes:
-    with Image.open(io.BytesIO(data)) as img:
-        img.thumbnail((size, size), Image.LANCZOS)
-        if img.mode in ("RGBA", "P", "LA"):
-            bg = Image.new("RGB", img.size, (255, 255, 255))
-            src = img.convert("RGBA") if img.mode == "P" else img
-            bg.paste(src, mask=src.split()[-1])
-            img = bg
-        elif img.mode != "RGB":
-            img = img.convert("RGB")
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=85)
-        return buf.getvalue()
+def _pil_to_jpeg(img: Image.Image, size: int) -> bytes:
+    img.thumbnail((size, size), Image.LANCZOS)
+    if img.mode in ("RGBA", "P", "LA"):
+        bg = Image.new("RGB", img.size, (255, 255, 255))
+        src = img.convert("RGBA") if img.mode == "P" else img
+        bg.paste(src, mask=src.split()[-1])
+        img = bg
+    elif img.mode != "RGB":
+        img = img.convert("RGB")
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=85)
+    return buf.getvalue()
+
+
+@alru_cache(maxsize=256)
+async def _url_thumbnail(url: str, size: int) -> bytes:
+    resp = await _client.get(url)
+    resp.raise_for_status()
+    with Image.open(io.BytesIO(resp.content)) as img:
+        return _pil_to_jpeg(img, size)
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -86,8 +81,7 @@ def _make_thumbnail(data: bytes, size: int) -> bytes:
 async def get_thumbnail(path: str = Query(...), size: int = Query(300)):
     if path.startswith(("http://", "https://")):
         try:
-            data, _ = await _fetch_url(path)
-            return Response(content=_make_thumbnail(data, size), media_type="image/jpeg")
+            return Response(content=await _url_thumbnail(path, size), media_type="image/jpeg")
         except Exception as e:
             raise HTTPException(status_code=502, detail=str(e))
 
