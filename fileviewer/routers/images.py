@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response, FileResponse
 from PIL import Image
 
-from fileviewer.config import validate_path, get_roots, IMAGE_EXTENSIONS, IMAGE_MIME_TYPES
+from fileviewer.config import validate_path, validate_abs_path, IMAGE_EXTENSIONS, IMAGE_MIME_TYPES
 from fileviewer.http_client import client as _client
 
 router = APIRouter()
@@ -22,25 +22,23 @@ def _generate_thumbnail(path: str, size: int, mtime: float) -> bytes:
         return _pil_to_jpeg(img, size)
 
 
-def _resolve_abs_path(path: str) -> Path | None:
-    """Accept root-relative OR absolute path (must be under a root)."""
+def _resolve_local_path(path: str) -> Path | None:
+    """Resolve a slug-relative or absolute path to a validated local image file.
+
+    Returns None if the file does not exist.
+    Raises HTTPException(403) if the file exists but is outside all configured roots.
+    """
+    # Standard slug-relative path (e.g. "root_slug/dir/image.jpg")
     try:
         p = validate_path(path)
         if p.is_file():
             return p
     except Exception:
         pass
-    try:
-        p = Path(path)
-        if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS:
-            for _, _, root in get_roots():
-                try:
-                    p.relative_to(root)
-                    return p
-                except ValueError:
-                    continue
-    except Exception:
-        pass
+    # Raw absolute OS path (e.g. a value from a DataFrame column)
+    p = Path(path)
+    if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS:
+        return validate_abs_path(p)  # raises 403 if outside all roots
     return None
 
 
@@ -85,9 +83,9 @@ async def get_thumbnail(path: str = Query(...), size: int = Query(300)):
         except Exception as e:
             raise HTTPException(status_code=502, detail=str(e))
 
-    file_path = _resolve_abs_path(path)
+    file_path = _resolve_local_path(path)
     if file_path is None:
-        file_path = validate_path(path)  # let validate_path raise its own 404/403
+        raise HTTPException(status_code=404, detail="File not found")
 
     if file_path.suffix.lower() == ".svg":
         return FileResponse(str(file_path), media_type="image/svg+xml")
@@ -109,9 +107,9 @@ async def get_full_image(path: str = Query(...)):
         except Exception as e:
             raise HTTPException(status_code=502, detail=str(e))
 
-    file_path = _resolve_abs_path(path)
+    file_path = _resolve_local_path(path)
     if file_path is None:
-        file_path = validate_path(path)
+        raise HTTPException(status_code=404, detail="File not found")
 
     mt = IMAGE_MIME_TYPES.get(file_path.suffix.lower(), "application/octet-stream")
     return FileResponse(str(file_path), media_type=mt)

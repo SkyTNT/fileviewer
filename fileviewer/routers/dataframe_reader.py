@@ -10,7 +10,7 @@ import polars as pl
 from fastapi import APIRouter, Query, HTTPException
 
 from fileviewer.config import (
-    validate_path, schema_to_tree,
+    validate_path, validate_abs_path, schema_to_tree,
     JSONL_EXTENSIONS, JSON_EXTENSIONS, CSV_EXTENSIONS, IMAGE_EXTENSIONS,
 )
 from fileviewer.http_client import client as _http_client
@@ -144,15 +144,19 @@ async def _is_image_url(url: str) -> bool:
 async def _classify_image_col(vals: list[str]) -> str | None:
     """Return 'path', 'url', or None based on sampled values."""
     path_hits = 0
-    url_vals, other_vals = [], []
+    url_vals = []
     for v in vals:
         v = v.strip()
         if v.startswith(("http://", "https://")):
             url_vals.append(v)
         else:
-            if Path(v).suffix.lower() in IMAGE_EXTENSIONS and os.path.isfile(v):
-                path_hits += 1
-            other_vals.append(v)
+            p = Path(v)
+            if p.suffix.lower() in IMAGE_EXTENSIONS and p.is_file():
+                try:
+                    validate_abs_path(p)
+                    path_hits += 1
+                except Exception:
+                    pass
 
     url_checks = await asyncio.gather(*[_is_image_url(u) for u in url_vals])
     url_hits = sum(url_checks)

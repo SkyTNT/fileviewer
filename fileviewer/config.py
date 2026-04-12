@@ -148,9 +148,26 @@ def parse_path(rel_path: str) -> tuple[Path, str, Path]:
 
 
 def validate_path(rel_path: str) -> Path:
-    """Resolve rel_path to an absolute path (convenience wrapper)."""
+    """Resolve a slug-relative path to an absolute path. Raises 403/404 on invalid input."""
     abs_path, _, _ = parse_path(rel_path)
     return abs_path
+
+
+def validate_abs_path(abs_path: Path) -> Path:
+    """Validate that an absolute OS path is under a configured root.
+
+    Used for paths that originate from data (e.g. values in DataFrame columns)
+    rather than from API slug-relative paths.  Raises 403 if not under any root.
+    """
+    from fastapi import HTTPException
+    norm = Path(os.path.normpath(abs_path))
+    for _, _, root in get_roots():
+        try:
+            norm.relative_to(root)
+            return norm
+        except ValueError:
+            continue
+    raise HTTPException(status_code=403, detail="Access denied")
 
 
 def build_entry_path(p: Path, slug: "str | None", root: Path) -> str:
