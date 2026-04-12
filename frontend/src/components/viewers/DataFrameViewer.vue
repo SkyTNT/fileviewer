@@ -81,7 +81,7 @@ function createEditor(container) {
           ...defaultKeymap,
           ...historyKeymap,
         ]),
-        placeholder('SELECT * FROM df WHERE age > 30  — or just:  age > 30'),
+        placeholder('SELECT * FROM df WHERE age > 30'),
         EditorView.lineWrapping,
         EditorView.theme({
           // All colors use Vuetify CSS vars so they adapt to light/dark theme.
