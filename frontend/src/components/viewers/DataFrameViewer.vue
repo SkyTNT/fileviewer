@@ -222,6 +222,7 @@ async function open(file, type = 'parquet') {
   schemaTree.value = []
   imageCols.value  = {}
   error.value      = null
+  loading.value    = true
   dialog.value     = true
 
   if (editorView) {
