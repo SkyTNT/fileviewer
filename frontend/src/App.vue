@@ -7,7 +7,6 @@ import { useAuthStore } from './stores/authStore.js'
 import { useFileOpener } from './composables/useFileOpener.js'
 import { useAppTheme } from './composables/useAppTheme.js'
 import { useNotificationStore } from './stores/notificationStore.js'
-import { writeApi } from './services/api.js'
 import DirectoryTree from './components/sidebar/DirectoryTree.vue'
 import FileDetail from './components/sidebar/FileDetail.vue'
 import ExplorerToolbar from './components/explorer/ExplorerToolbar.vue'
@@ -22,6 +21,7 @@ import MediaPlayer from './components/viewers/MediaPlayer.vue'
 import HexViewer from './components/viewers/HexViewer.vue'
 import LoginPage from './components/LoginPage.vue'
 import AppNotifications from './components/AppNotifications.vue'
+import UploadPanel from './components/UploadPanel.vue'
 
 const store     = useFileStore()
 const authStore = useAuthStore()
@@ -64,18 +64,12 @@ function onDragLeave() {
   }
 }
 
-async function onDrop(e) {
+function onDrop(e) {
   dragCounter.value = 0
   isDragging.value = false
   if (!canWriteHere.value) return
   const files = Array.from(e.dataTransfer?.files ?? [])
-  if (!files.length) return
-  try {
-    await writeApi.upload(store.currentPath, files)
-    store.refresh()
-  } catch (err) {
-    showError(err.response?.data?.detail || err.message)
-  }
+  if (files.length) store.addUploads(store.currentPath, files)
 }
 
 function startResize(e) {
@@ -232,6 +226,7 @@ function handleOpenFile(file) {
     <HexViewer ref="hexViewerRef" />
 
     <AppNotifications />
+    <UploadPanel />
 
     <!-- Login overlay — shown when auth is required and not logged in -->
     <LoginPage v-if="!authStore.checking && authStore.authRequired && !authStore.loggedIn" />

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import { filesApi, configApi, writeApi } from '../services/api.js'
 
 export const useFileStore = defineStore('file', () => {
@@ -24,7 +24,13 @@ export const useFileStore = defineStore('file', () => {
   const clipboard      = ref(null)  // { entries: [...], action: 'copy' | 'cut' }
   const pasteProgress  = ref(null)  // { done, total, action } | null
   const deleteProgress = ref(null)  // { done, total } | null
-  const pasteConflicts = ref(null)  // { conflicts, entries, action, destDir } | null
+  const nameConflicts  = ref(null)  // { conflicts: [{name}], resolve: fn } | null
+
+  // ── Upload state ──────────────────────────────────────────────────────────────
+  const uploadTasks   = ref([])    // reactive task objects
+  const _uploadFiles  = new Map()  // id → File, kept outside reactivity
+  let _uploadNextId   = 1
+  let _uploadRafId    = null
 
   function invalidateTree() { treeRevision.value++ }
 
@@ -148,19 +154,116 @@ export const useFileStore = defineStore('file', () => {
     if (!clipboard.value) return
     const { entries, action } = clipboard.value
     const destDir = currentPath.value
-    const res = await writeApi.checkConflicts(entries, action, destDir)
+    const res = await writeApi.checkConflicts(entries.map(e => ({ name: e.name, dest_parent: destDir })))
     if (res.data.conflicts.length > 0) {
-      pasteConflicts.value = { conflicts: res.data.conflicts, entries, action, destDir }
+      const strategy = await new Promise((resolve) => {
+        nameConflicts.value = { conflicts: res.data.conflicts, resolve }
+      })
+      if (!strategy) return
+      await _executePaste(entries, action, destDir, strategy)
       return
     }
     await _executePaste(entries, action, destDir, 'skip')
   }
 
-  async function resolvePaste(strategy) {
-    if (!pasteConflicts.value) return
-    const { entries, action, destDir } = pasteConflicts.value
-    pasteConflicts.value = null
-    await _executePaste(entries, action, destDir, strategy)
+  function resolveNameConflicts(strategy) {
+    nameConflicts.value?.resolve(strategy)
+    nameConflicts.value = null
+  }
+  function cancelNameConflicts() { resolveNameConflicts(null) }
+
+  // ── Upload ────────────────────────────────────────────────────────────────────
+  function _uploadFile(task) {
+    return new Promise((resolve) => {
+      const file = _uploadFiles.get(task.id)
+      const fd   = new FormData()
+      fd.append('parent',      task.parent)
+      fd.append('files',       file)
+      fd.append('on_conflict', task.onConflict)
+
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', '/api/write/upload')
+      xhr.withCredentials = true
+
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) task.progress = Math.round(e.loaded / e.total * 100)
+      })
+
+      xhr.addEventListener('load', () => {
+        _uploadFiles.delete(task.id)
+        if (xhr.status >= 200 && xhr.status < 300) {
+          task.progress = 100
+          task.status   = 'done'
+        } else {
+          task.status = 'error'
+          try   { task.error = JSON.parse(xhr.responseText)?.detail || xhr.statusText }
+          catch { task.error = xhr.statusText }
+        }
+        resolve()
+      })
+
+      xhr.addEventListener('error', () => {
+        _uploadFiles.delete(task.id)
+        task.status = 'error'
+        task.error  = 'Network error'
+        resolve()
+      })
+
+      xhr.send(fd)
+    })
+  }
+
+  function _scheduleUploadRefresh() {
+    if (_uploadRafId) return
+    _uploadRafId = requestAnimationFrame(() => {
+      _uploadRafId = null
+      refresh()
+    })
+  }
+
+  function _startUploads(parent, files, onConflict) {
+    files.forEach((file) => {
+      const id   = _uploadNextId++
+      const task = reactive({ id, name: file.name, parent, onConflict, progress: 0, status: 'uploading', error: null })
+      _uploadFiles.set(id, file)
+      uploadTasks.value.push(task)
+      _uploadFile(task).then(() => {
+        if (task.status === 'done') _scheduleUploadRefresh()
+      })
+    })
+  }
+
+  async function addUploads(parent, files) {
+    try {
+      const res  = await writeApi.checkConflicts(files.map(f => ({ name: f.name, dest_parent: parent })))
+      const data = res.data
+
+      if (data.conflicts?.length > 0) {
+        const strategy = await new Promise((resolve) => {
+          nameConflicts.value = { conflicts: data.conflicts, resolve }
+        })
+        if (!strategy) return
+        _startUploads(parent, files, strategy)
+        return
+      }
+    } catch {
+      // If the check fails, proceed with default overwrite
+    }
+
+    _startUploads(parent, files, 'overwrite')
+  }
+
+  function clearUploadsDone() {
+    uploadTasks.value = uploadTasks.value.filter(t => t.status === 'uploading')
+  }
+
+  function clearAllUploads() {
+    uploadTasks.value = []
+  }
+
+  function removeUploadTask(id) {
+    uploadTasks.value = uploadTasks.value.filter(t => t.id !== id)
+    _uploadFiles.delete(id)
   }
 
   function setFilter(pattern) {
@@ -268,9 +371,11 @@ export const useFileStore = defineStore('file', () => {
   return {
     rootName, currentPath, entries, loading, error, viewMode, breadcrumbs,
     page, pageSize, total, selectedEntry, selectedEntries, writeMode, roots, isAtHome, treeRevision, filterPattern,
-    clipboard, pasteProgress, deleteProgress, pasteConflicts,
+    clipboard, pasteProgress, deleteProgress, nameConflicts,
+    uploadTasks,
     init, loadDirectory, goToPage, navigate, selectEntry, toggleEntry, shiftSelectTo, addToSelection, clearSelection, setSelection, invalidateTree, setFilter,
-    setCopy, setCut, clearClipboard, paste, resolvePaste, deleteEntries,
+    setCopy, setCut, clearClipboard, paste, resolveNameConflicts, cancelNameConflicts, deleteEntries,
+    addUploads, clearUploadsDone, clearAllUploads, removeUploadTask,
     setRefreshHook, refresh,
   }
 })

@@ -147,6 +147,12 @@ export default {
   jsonNode: {
     items: '{n} 項',
   },
+  upload: {
+    uploadingN: '正在上傳 {n} 個檔案',
+    allDone: '{n} 個檔案上傳完成',
+    doneWithErrors: '{n} 個失敗',
+    clearDone: '清除已完成',
+  },
   textViewer: {
     source: '原始碼',
     preview: '預覽',

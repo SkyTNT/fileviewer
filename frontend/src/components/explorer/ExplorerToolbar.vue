@@ -6,7 +6,6 @@ import { useFileStore } from '../../stores/fileStore.js'
 import { useAuthStore } from '../../stores/authStore.js'
 import { useAppTheme, ACCENT_COLORS } from '../../composables/useAppTheme.js'
 import { useWriteActions } from '../../composables/useWriteActions.js'
-import { writeApi } from '../../services/api.js'
 import { useNotificationStore } from '../../stores/notificationStore.js'
 import DialogNewItem from '../dialogs/DialogNewItem.vue'
 
@@ -105,26 +104,16 @@ const {
 } = useWriteActions()
 
 // ── Upload ────────────────────────────────────────────────────────────────────
-const uploadInput   = ref(null)
-const uploadLoading = ref(false)
+const uploadInput = ref(null)
 
 function openUpload() {
   uploadInput.value.value = ''
   uploadInput.value.click()
 }
 
-async function onFilesSelected(e) {
+function onFilesSelected(e) {
   const files = Array.from(e.target.files)
-  if (!files.length) return
-  uploadLoading.value = true
-  try {
-    await writeApi.upload(store.currentPath, files)
-    store.refresh()
-  } catch (err) {
-    showError(err.response?.data?.detail || err.message)
-  } finally {
-    uploadLoading.value = false
-  }
+  if (files.length) store.addUploads(store.currentPath, files)
 }
 
 // ── Clipboard label ────────────────────────────────────────────────────────────
@@ -208,7 +197,7 @@ const clipboardLabel = computed(() => {
       <v-chip size="x-small" color="warning" variant="tonal" class="mr-2 font-weight-bold">
         WRITE
       </v-chip>
-      <v-btn icon size="small" class="mr-1" :loading="uploadLoading" @click="openUpload">
+      <v-btn icon size="small" class="mr-1" @click="openUpload">
         <v-icon size="20">mdi-upload-outline</v-icon>
         <v-tooltip activator="parent">{{ t('toolbar.upload') }}</v-tooltip>
       </v-btn>

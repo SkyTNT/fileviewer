@@ -120,14 +120,18 @@ def rename(req: RenameRequest):
 
 
 
-class BatchEntry(BaseModel):
-    src: str
+class ConflictEntry(BaseModel):
+    name: str
     dest_parent: str
 
 
 class CheckConflictsRequest(BaseModel):
-    entries: list[BatchEntry]
-    action: str  # 'copy' | 'move'
+    entries: list[ConflictEntry]
+
+
+class BatchEntry(BaseModel):
+    src: str
+    dest_parent: str
 
 
 class BatchPasteRequest(BaseModel):
@@ -142,15 +146,11 @@ class BatchDeleteRequest(BaseModel):
 
 @router.post("/check-conflicts")
 def check_conflicts(req: CheckConflictsRequest):
-
     conflicts = []
     for entry in req.entries:
-        src = validate_path(entry.src)
-        if _is_root(src):
-            raise HTTPException(status_code=403, detail=f"Cannot copy/move root directory '{src.name}'")
         dest_dir = validate_path(entry.dest_parent)
-        if (dest_dir / src.name).exists():
-            conflicts.append({"src": entry.src, "name": src.name})
+        if (dest_dir / entry.name).exists():
+            conflicts.append({"name": entry.name})
     return {"conflicts": conflicts}
 
 
@@ -220,15 +220,21 @@ def delete_entries(req: BatchDeleteRequest):
 async def upload(
     parent: str = Form(...),
     files: list[UploadFile] = File(...),
+    on_conflict: str = Form(default='overwrite'),
 ):
-
     dir_path = validate_path(parent)
     if not dir_path.is_dir():
         raise HTTPException(status_code=400, detail="Not a directory")
     saved = []
     for f in files:
         dest = dir_path / f.filename
+        if dest.exists():
+            if on_conflict == 'skip':
+                continue
+            elif on_conflict == 'coexist':
+                dest = dir_path / _coexist_name(dir_path, f.filename)
+            # 'overwrite' falls through
         content = await f.read()
         dest.write_bytes(content)
-        saved.append(f.filename)
+        saved.append(dest.name)
     return {"ok": True, "saved": saved}

@@ -66,11 +66,8 @@ export const writeApi = {
     for (const f of files) fd.append('files', f)
     return http.post('/write/upload', fd)
   },
-  checkConflicts: (entries, action, destParent) =>
-    http.post('/write/check-conflicts', {
-      entries: entries.map(e => ({ src: e.path, dest_parent: destParent })),
-      action,
-    }),
+  checkConflicts: (entries) =>
+    http.post('/write/check-conflicts', { entries }),
   paste: (entries, action, destParent, onConflict) =>
     fetch('/api/write/paste', {
       method: 'POST',
