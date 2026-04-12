@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { useFileStore } from '../stores/fileStore.js'
-import { useNotification } from './useNotification.js'
+import { useNotificationStore } from '../stores/notificationStore.js'
 import { writeApi } from '../services/api.js'
 import { getErrorMessage } from '../utils/errors.js'
 
@@ -12,7 +12,7 @@ function createDialogState() {
  * All write-mode operations: rename, delete, mkdir, touch, paste.
  */
 export function useWriteActions() {
-  const { showError } = useNotification()
+  const { showError } = useNotificationStore()
   const store = useFileStore()
 
   // ── Rename ───────────────────────────────────────────────────────────────────

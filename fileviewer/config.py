@@ -200,40 +200,6 @@ def _check_under(normalized: Path, root: Path) -> None:
         raise HTTPException(status_code=403, detail="Access denied")
 
 
-def to_rel(abs_path: Path) -> str:
-    """Convert absolute path to forward-slash relative path.
-
-    Single-root: relative to root (empty string = root).
-    Multi-root:  slug/subpath (just slug = root of that root).
-    """
-    roots = get_roots()
-    if len(roots) == 1:
-        _, _, root = roots[0]
-        try:
-            rel = abs_path.relative_to(root)
-            s = str(rel).replace(os.sep, "/")
-            return "" if s == "." else s
-        except ValueError:
-            return ""
-    else:
-        # Among all roots that contain abs_path, prefer the deepest one
-        # so that a root nested inside another root is matched correctly.
-        best_slug = None
-        best_rel  = None
-        best_depth = -1
-        for slug, _, root in roots:
-            try:
-                rel = abs_path.relative_to(root)
-                depth = len(root.parts)
-                if depth > best_depth:
-                    best_depth = depth
-                    best_slug  = slug
-                    s = str(rel).replace(os.sep, "/")
-                    best_rel = slug if s == "." else f"{slug}/{s}"
-            except ValueError:
-                continue
-        return best_rel or ""
-
 
 def _dtype_to_node(name: str, dtype) -> dict:
     node = {"name": name, "dtype": str(dtype)}

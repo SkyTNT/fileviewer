@@ -2,9 +2,9 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFileStore } from '../../stores/fileStore.js'
-import { filesApi } from '../../services/api.js'
 import { copyFileToClipboard } from '../../composables/useCopyToClipboard.js'
-import { useNotification } from '../../composables/useNotification.js'
+import { useNotificationStore } from '../../stores/notificationStore.js'
+import { downloadFiles } from '../../utils/download.js'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -13,9 +13,9 @@ const props = defineProps({
   file: { type: Object, default: null },  // null = background (no file selected)
 })
 
-const emit  = defineEmits(['update:modelValue', 'rename', 'delete', 'delete-multi', 'mkdir', 'touch', 'paste'])
+const emit  = defineEmits(['update:modelValue', 'rename', 'delete', 'mkdir', 'touch', 'paste'])
 const store = useFileStore()
-const { showError, showSuccess } = useNotification()
+const { showError, showSuccess } = useNotificationStore()
 const { t } = useI18n()
 
 const canWrite = () => store.writeMode && !store.isAtHome
@@ -27,8 +27,16 @@ const isMultiTarget = computed(() =>
   store.selectedEntries.some(e => e.path === props.file.path)
 )
 
-const multiDownloadFiles = computed(() =>
-  store.selectedEntries.filter(e => !e.is_dir)
+// Files to download (excludes dirs)
+const downloadTargets = computed(() =>
+  isMultiTarget.value
+    ? store.selectedEntries.filter(e => !e.is_dir)
+    : (props.file && !props.file.is_dir ? [props.file] : [])
+)
+
+// Entries to delete
+const deleteTargets = computed(() =>
+  isMultiTarget.value ? store.selectedEntries : (props.file ? [props.file] : [])
 )
 
 async function copyClipboard() {
@@ -38,17 +46,6 @@ async function copyClipboard() {
   } catch (e) {
     showError(e.message)
   }
-}
-
-function downloadMulti() {
-  multiDownloadFiles.value.forEach(f => {
-    const a = document.createElement('a')
-    a.href = filesApi.downloadUrl(f.path)
-    a.download = f.name
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-  })
 }
 </script>
 
@@ -61,24 +58,15 @@ function downloadMulti() {
   >
     <v-list density="compact" min-width="180">
 
-      <!-- Batch download (multi-select) -->
+      <!-- Download -->
       <v-list-item
-        v-if="isMultiTarget && multiDownloadFiles.length"
+        v-if="downloadTargets.length"
         prepend-icon="mdi-download-outline"
-        :title="t('menu.downloadFiles', { n: multiDownloadFiles.length })"
-        @click="downloadMulti"
+        :title="downloadTargets.length > 1 ? t('menu.downloadFiles', { n: downloadTargets.length }) : t('menu.download')"
+        @click="downloadFiles(downloadTargets)"
       />
 
-      <!-- Single file download -->
-      <v-list-item
-        v-else-if="file && !file.is_dir"
-        prepend-icon="mdi-download-outline"
-        :title="t('menu.download')"
-        :href="filesApi.downloadUrl(file.path)"
-        :download="file.name"
-      />
-
-      <!-- Copy to clipboard (single file) -->
+      <!-- Copy to clipboard (single file only) -->
       <v-list-item
         v-if="file && !file.is_dir && !isMultiTarget"
         prepend-icon="mdi-clipboard-outline"
@@ -94,31 +82,30 @@ function downloadMulti() {
           <v-list-item
             prepend-icon="mdi-content-copy"
             :title="isMultiTarget ? t('menu.copyItems', { n: store.selectedEntries.length }) : t('menu.copy')"
-            @click="store.setCopy(file)"
+            @click="store.setCopy(isMultiTarget ? store.selectedEntries : [file])"
           />
           <v-list-item
             prepend-icon="mdi-content-cut"
             :title="isMultiTarget ? t('menu.cutItems', { n: store.selectedEntries.length }) : t('menu.cut')"
-            @click="store.setCut(file)"
+            @click="store.setCut(isMultiTarget ? store.selectedEntries : [file])"
           />
-          <template v-if="isMultiTarget">
-            <v-divider />
-            <v-list-item
-              prepend-icon="mdi-delete-outline"
-              :title="t('menu.deleteItems', { n: store.selectedEntries.length })"
-              base-color="error"
-              @click="$emit('delete-multi', store.selectedEntries)"
-            />
-          </template>
-          <template v-else>
-            <v-divider />
-            <v-list-item prepend-icon="mdi-pencil-outline" :title="t('menu.rename')" @click="$emit('rename')" />
-            <v-list-item prepend-icon="mdi-delete-outline" :title="t('menu.delete')" base-color="error" @click="$emit('delete')" />
-          </template>
+          <v-divider />
+          <v-list-item
+            v-if="!isMultiTarget"
+            prepend-icon="mdi-pencil-outline"
+            :title="t('menu.rename')"
+            @click="$emit('rename')"
+          />
+          <v-list-item
+            prepend-icon="mdi-delete-outline"
+            :title="isMultiTarget ? t('menu.deleteItems', { n: store.selectedEntries.length }) : t('menu.delete')"
+            base-color="error"
+            @click="$emit('delete', deleteTargets)"
+          />
           <v-divider />
         </template>
 
-        <!-- Background operations (always visible in write mode) -->
+        <!-- Background operations -->
         <v-list-item prepend-icon="mdi-folder-plus-outline" :title="t('menu.newFolder')" @click="$emit('mkdir')" />
         <v-list-item prepend-icon="mdi-file-plus-outline"   :title="t('menu.newFile')"   @click="$emit('touch')" />
 
@@ -131,5 +118,4 @@ function downloadMulti() {
 
     </v-list>
   </v-menu>
-
 </template>

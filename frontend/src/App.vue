@@ -6,7 +6,7 @@ import { useFileStore } from './stores/fileStore.js'
 import { useAuthStore } from './stores/authStore.js'
 import { useFileOpener } from './composables/useFileOpener.js'
 import { useAppTheme } from './composables/useAppTheme.js'
-import { useNotification } from './composables/useNotification.js'
+import { useNotificationStore } from './stores/notificationStore.js'
 import { writeApi } from './services/api.js'
 import DirectoryTree from './components/sidebar/DirectoryTree.vue'
 import FileDetail from './components/sidebar/FileDetail.vue'
@@ -44,12 +44,12 @@ const resizing       = ref(false)
 const MIN_SIDEBAR = 160
 const MAX_SIDEBAR = 600
 
-const { showError } = useNotification()
+const { showError } = useNotificationStore()
 
 // ── Drag & drop upload ────────────────────────────────────────────────────────
-const dragCounter   = ref(0)
-const isDragging    = ref(false)
-const canDrop       = computed(() => store.writeMode && !store.isAtHome)
+const dragCounter     = ref(0)
+const isDragging      = ref(false)
+const canWriteHere    = computed(() => store.writeMode && !store.isAtHome)
 
 function onDragEnter(e) {
   if (!e.dataTransfer?.types?.includes('Files')) return
@@ -67,7 +67,7 @@ function onDragLeave() {
 async function onDrop(e) {
   dragCounter.value = 0
   isDragging.value = false
-  if (!canDrop.value) return
+  if (!canWriteHere.value) return
   const files = Array.from(e.dataTransfer?.files ?? [])
   if (!files.length) return
   try {
@@ -192,13 +192,13 @@ function handleOpenFile(file) {
         />
 
         <Transition name="drop-fade">
-          <div v-if="isDragging" class="drop-overlay" :class="{ 'drop-overlay--allowed': canDrop }">
+          <div v-if="isDragging" class="drop-overlay" :class="{ 'drop-overlay--allowed': canWriteHere }">
             <div class="drop-overlay-inner">
-              <v-icon size="56" :color="canDrop ? 'primary' : 'medium-emphasis'">
-                {{ canDrop ? 'mdi-upload-outline' : 'mdi-upload-off-outline' }}
+              <v-icon size="56" :color="canWriteHere ? 'primary' : 'medium-emphasis'">
+                {{ canWriteHere ? 'mdi-upload-outline' : 'mdi-upload-off-outline' }}
               </v-icon>
               <div class="text-h6 mt-3">
-                {{ canDrop ? t('dropzone.drop') : t('dropzone.notAllowed') }}
+                {{ canWriteHere ? t('dropzone.drop') : t('dropzone.notAllowed') }}
               </div>
             </div>
           </div>

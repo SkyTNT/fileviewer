@@ -5,7 +5,7 @@ router = APIRouter()
 
 
 @router.get("/content")
-def read_text(path: str = Query(...), max_bytes: int = Query(5 * 1024 * 1024)):
+def get_text_content(path: str = Query(...), max_bytes: int = Query(5 * 1024 * 1024)):
     file_path = validate_path(path)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")

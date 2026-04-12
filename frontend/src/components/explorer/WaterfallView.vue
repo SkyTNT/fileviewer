@@ -4,6 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { useFileStore } from '../../stores/fileStore.js'
 import { useWriteActions } from '../../composables/useWriteActions.js'
 import { useRubberBand } from '../../composables/useRubberBand.js'
+import { useContextMenu } from '../../composables/useContextMenu.js'
+import { useExplorerKeyboard } from '../../composables/useExplorerKeyboard.js'
 import FileCard from './FileCard.vue'
 import ContextMenu from './ContextMenu.vue'
 import DialogRename from '../dialogs/DialogRename.vue'
@@ -22,30 +24,12 @@ const {
   deleteDialog, deleteTargets, openDelete, confirmDelete,
 } = useWriteActions()
 
-// ── Single context menu (shared between cards and background) ─────────────────
-const menuOpen   = ref(false)
-const menuX      = ref(0)
-const menuY      = ref(0)
-const menuTarget = ref(null)   // null = background, object = file
+const { menuOpen, menuX, menuY, menuTarget, showMenu, onBgContextMenu } = useContextMenu()
 
-function showMenu(x, y, file = null) {
-  menuTarget.value = file
-  menuX.value = x
-  menuY.value = y
-  menuOpen.value = false
-  setTimeout(() => { menuOpen.value = true }, 10)
-}
+useExplorerKeyboard(() => displayEntries.value, doPaste)
 
 function onCardContextMenu({ file, x, y }) {
   showMenu(x, y, file)
-}
-
-// ── Background context menu ───────────────────────────────────────────────────
-function onBgContextMenu(e) {
-  const canShow = store.writeMode && !store.isAtHome
-  if (!canShow && !store.clipboard) return
-  e.preventDefault()
-  showMenu(e.clientX, e.clientY, null)
 }
 
 const displayEntries = ref([])
@@ -200,40 +184,7 @@ watch(sentinelRef, (el, oldEl) => {
   if (el)    scrollObs?.observe(el)
 })
 
-function onKeyDown(e) {
-  if (!e.ctrlKey && !e.metaKey) return
-  const el = document.activeElement
-  if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.isContentEditable) return
-  if (el?.closest('[role="dialog"]')) return
-
-  switch (e.key) {
-    case 'a':
-      e.preventDefault()
-      store.setSelection([...displayEntries.value])
-      break
-    case 'c':
-      if (store.selectedEntries.length) {
-        e.preventDefault()
-        store.setCopy(store.selectedEntries[0])
-      }
-      break
-    case 'x':
-      if (store.writeMode && store.selectedEntries.length) {
-        e.preventDefault()
-        store.setCut(store.selectedEntries[0])
-      }
-      break
-    case 'v':
-      if (store.writeMode && store.clipboard && !store.isAtHome) {
-        e.preventDefault()
-        doPaste()
-      }
-      break
-  }
-}
-
 onMounted(() => {
-  window.addEventListener('keydown', onKeyDown)
   scrollObs = new IntersectionObserver(
     (entries) => { if (entries[0].isIntersecting) loadMore() },
     { rootMargin: '400px' }
@@ -250,7 +201,6 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  window.removeEventListener('keydown', onKeyDown)
   if (rafId) cancelAnimationFrame(rafId)
   scrollObs?.disconnect()
   containerRO?.disconnect()
@@ -269,9 +219,9 @@ function onRubberSelect(paths, ctrlHeld) {
 }
 
 function onCardSelect({ file, event }) {
-  if (event.shiftKey)               store.shiftSelectTo(file, displayEntries.value)
+  if (event.shiftKey)                   store.shiftSelectTo(file, displayEntries.value)
   else if (event.ctrlKey || event.metaKey) store.toggleEntry(file)
-  else                              store.selectEntry(file)
+  else                                  store.selectEntry(file)
 }
 
 const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
@@ -336,8 +286,7 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
     :x="menuX" :y="menuY"
     :file="menuTarget"
     @rename="openRename(menuTarget)"
-    @delete="openDelete(menuTarget)"
-    @delete-multi="openDelete"
+    @delete="openDelete"
     @mkdir="openMkdir"
     @touch="openTouch"
     @paste="doPaste"

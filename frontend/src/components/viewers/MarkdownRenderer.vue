@@ -7,7 +7,7 @@ import { basicSetup } from 'codemirror'
 import { EditorView } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 import { oneDark } from '@codemirror/theme-one-dark'
-import { getLangByName } from '../../utils/langSupport.js'
+import { getLangByName } from '../../utils/codeMirrorLangs.js'
 
 const props = defineProps({
   content: { type: String, default: '' },

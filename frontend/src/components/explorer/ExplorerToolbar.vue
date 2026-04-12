@@ -7,7 +7,7 @@ import { useAuthStore } from '../../stores/authStore.js'
 import { useAppTheme, ACCENT_COLORS } from '../../composables/useAppTheme.js'
 import { useWriteActions } from '../../composables/useWriteActions.js'
 import { writeApi } from '../../services/api.js'
-import { useNotification } from '../../composables/useNotification.js'
+import { useNotificationStore } from '../../stores/notificationStore.js'
 import DialogNewItem from '../dialogs/DialogNewItem.vue'
 
 const emit = defineEmits(['toggle-sidebar'])
@@ -15,7 +15,7 @@ const store     = useFileStore()
 const authStore = useAuthStore()
 const { isDark, accentColor, toggleMode, setAccent } = useAppTheme()
 const { mobile } = useDisplay()
-const { showError } = useNotification()
+const { showError } = useNotificationStore()
 const { t, locale } = useI18n()
 
 // ── Language ──────────────────────────────────────────────────────────────────

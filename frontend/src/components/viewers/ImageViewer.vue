@@ -9,7 +9,7 @@ const dialog = ref(false)
 const imgUrl = ref('')
 const fileName = ref('')
 
-const t2 = reactive({ scale: 1, x: 0, y: 0 })
+const transform = reactive({ scale: 1, x: 0, y: 0 })
 const dragging  = ref(false)
 const dragStart = reactive({ x: 0, y: 0 })
 let fitScale = 1
@@ -18,7 +18,7 @@ function open(file) {
   imgUrl.value   = imagesApi.fullUrl(file.path)
   fileName.value = file.name
   fitScale = 1
-  t2.scale = 1; t2.x = 0; t2.y = 0
+  transform.scale = 1; transform.x = 0; transform.y = 0
   dialog.value = true
 }
 
@@ -26,32 +26,32 @@ function onImgLoad(e) {
   const { naturalWidth: iw, naturalHeight: ih } = e.target
   if (iw && ih) {
     fitScale = Math.min(window.innerWidth / iw, window.innerHeight / ih)
-    t2.scale = fitScale
-    t2.x = 0; t2.y = 0
+    transform.scale = fitScale
+    transform.x = 0; transform.y = 0
   }
 }
 
 function reset() {
-  t2.scale = fitScale; t2.x = 0; t2.y = 0
+  transform.scale = fitScale; transform.x = 0; transform.y = 0
 }
 
 function onWheel(e) {
   e.preventDefault()
   const factor = e.deltaY < 0 ? 1.12 : 0.89
-  t2.scale = Math.max(0.05, Math.min(20, t2.scale * factor))
+  transform.scale = Math.max(0.05, Math.min(20, transform.scale * factor))
 }
 
 function onMouseDown(e) {
   if (e.button !== 0) return
   dragging.value = true
-  dragStart.x = e.clientX - t2.x
-  dragStart.y = e.clientY - t2.y
+  dragStart.x = e.clientX - transform.x
+  dragStart.y = e.clientY - transform.y
 }
 
 function onMouseMove(e) {
   if (!dragging.value) return
-  t2.x = e.clientX - dragStart.x
-  t2.y = e.clientY - dragStart.y
+  transform.x = e.clientX - dragStart.x
+  transform.y = e.clientY - dragStart.y
 }
 
 function onMouseUp() { dragging.value = false }
@@ -78,7 +78,7 @@ defineExpose({ open })
         draggable="false"
         @load="onImgLoad"
         :style="{
-          transform: `translate(${t2.x}px, ${t2.y}px) scale(${t2.scale})`,
+          transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
           cursor: dragging ? 'grabbing' : 'grab',
           userSelect: 'none',
           maxWidth: 'none',

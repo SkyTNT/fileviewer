@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { imagesApi, filesApi } from '../services/api.js'
-import { useNotification } from './useNotification.js'
+import { useNotificationStore } from '../stores/notificationStore.js'
 
 const TEXT_SIZE_LIMIT  = 5  * 1024 * 1024  // 5 MB
 const IMAGE_SIZE_LIMIT = 20 * 1024 * 1024  // 20 MB
@@ -39,7 +39,7 @@ export async function copyFileToClipboard(file) {
 }
 
 export function useCopyToClipboard() {
-  const { showError, showSuccess } = useNotification()
+  const { showError, showSuccess } = useNotificationStore()
   const { t } = useI18n()
   const copyLoading = ref(false)
 

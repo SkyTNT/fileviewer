@@ -3,9 +3,11 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFileStore } from '../../stores/fileStore.js'
 import { imagesApi, filesApi, textApi } from '../../services/api.js'
+
 import { useCopyToClipboard } from '../../composables/useCopyToClipboard.js'
 import { useWriteActions } from '../../composables/useWriteActions.js'
-import { TYPE_ICON, TYPE_COLOR, formatBytes } from '../../utils/fileTypes.js'
+import { TYPE_ICON, TYPE_COLOR, formatBytes, formatDate } from '../../utils/fileTypes.js'
+import { downloadFiles } from '../../utils/download.js'
 import JsonNode from '../viewers/JsonNode.vue'
 import DialogRename from '../dialogs/DialogRename.vue'
 import DialogConfirmDelete from '../dialogs/DialogConfirmDelete.vue'
@@ -25,18 +27,8 @@ const multiDirs   = computed(() => store.selectedEntries.filter(e =>  e.is_dir))
 const multiSize   = computed(() => multiFiles.value.reduce((s, e) => s + (e.size ?? 0), 0))
 
 function downloadSelected() {
-  multiFiles.value.forEach(f => {
-    const a = document.createElement('a')
-    a.href = filesApi.downloadUrl(f.path)
-    a.download = f.name
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-  })
+  downloadFiles(multiFiles.value)
 }
-
-function copySelected() { if (store.selectedEntries.length) store.setCopy(store.selectedEntries[0]) }
-function cutSelected()  { if (store.selectedEntries.length) store.setCut(store.selectedEntries[0])  }
 
 function openEntry() {
   if (!file.value) return
@@ -75,14 +67,10 @@ watch(file, async (f) => {
   }
 }, { immediate: true })
 
-const typeIcon  = computed(() => TYPE_ICON[file.value?.type] || 'mdi-file-outline')
-const typeColor = computed(() => TYPE_COLOR[file.value?.type] || 'surface-variant')
+const typeIcon   = computed(() => TYPE_ICON[file.value?.type] || 'mdi-file-outline')
+const typeColor  = computed(() => TYPE_COLOR[file.value?.type] || 'surface-variant')
 const formatSize = (bytes) => formatBytes(bytes, '—')
-
-function formatDate(ts) {
-  if (!ts) return '—'
-  return new Date(ts * 1000).toLocaleString()
-}
+const fmtDate    = (ts) => formatDate(ts, '—')
 
 const {
   renameDialog, renameName, renameLoading, renameError, openRename, confirmRename,
@@ -130,7 +118,7 @@ const {
             variant="tonal"
             style="flex:1"
             prepend-icon="mdi-content-copy"
-            @click="copySelected"
+            @click="store.setCopy(store.selectedEntries)"
           >
             {{ t('detail.copy') }}
           </v-btn>
@@ -139,7 +127,7 @@ const {
             variant="tonal"
             style="flex:1"
             prepend-icon="mdi-content-cut"
-            @click="cutSelected"
+            @click="store.setCut(store.selectedEntries)"
           >
             {{ t('detail.cut') }}
           </v-btn>
@@ -265,7 +253,7 @@ const {
             variant="tonal"
             style="flex:1"
             prepend-icon="mdi-content-copy"
-            @click="store.setCopy(file)"
+            @click="store.setCopy([file])"
           >
             {{ t('detail.copy') }}
           </v-btn>
@@ -274,7 +262,7 @@ const {
             variant="tonal"
             style="flex:1"
             prepend-icon="mdi-content-cut"
-            @click="store.setCut(file)"
+            @click="store.setCut([file])"
           >
             {{ t('detail.cut') }}
           </v-btn>
@@ -326,7 +314,7 @@ const {
 
       <div class="info-row">
         <span class="info-label text-caption text-medium-emphasis">{{ t('detail.modified') }}</span>
-        <span class="info-value text-body-2">{{ formatDate(file.modified) }}</span>
+        <span class="info-value text-body-2">{{ fmtDate(file.modified) }}</span>
       </div>
 
       <div class="info-row">

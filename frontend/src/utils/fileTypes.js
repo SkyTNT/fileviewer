@@ -30,3 +30,8 @@ export function formatBytes(bytes, fallback = '') {
   if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB'
   return (bytes / 1073741824).toFixed(1) + ' GB'
 }
+
+export function formatDate(ts, fallback = '') {
+  if (!ts) return fallback
+  return new Date(ts * 1000).toLocaleString()
+}

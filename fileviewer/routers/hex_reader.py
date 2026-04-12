@@ -8,7 +8,7 @@ ROWS_PER_PAGE = 512   # 8 KB per page
 
 
 @router.get("/dump")
-def hex_dump(path: str = Query(...), page: int = Query(1, ge=1)):
+def get_hex_dump(path: str = Query(...), page: int = Query(1, ge=1)):
     file_path = validate_path(path)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")

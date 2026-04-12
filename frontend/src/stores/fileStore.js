@@ -62,15 +62,11 @@ export const useFileStore = defineStore('file', () => {
   function clearSelection()       { selectedEntries.value = []; selectionAnchor.value = null }
   function setSelection(entries)  { selectedEntries.value = [...entries]; selectionAnchor.value = entries.at(-1) ?? null }
 
-  function setCopy(entry) {
-    const all = selectedEntries.value
-    const entries = (all.length > 1 && all.some(e => e.path === entry.path)) ? [...all] : [entry]
-    clipboard.value = { entries, action: 'copy' }
+  function setCopy(entries) {
+    clipboard.value = { entries: Array.isArray(entries) ? entries : [entries], action: 'copy' }
   }
-  function setCut(entry) {
-    const all = selectedEntries.value
-    const entries = (all.length > 1 && all.some(e => e.path === entry.path)) ? [...all] : [entry]
-    clipboard.value = { entries, action: 'cut' }
+  function setCut(entries) {
+    clipboard.value = { entries: Array.isArray(entries) ? entries : [entries], action: 'cut' }
   }
   function clearClipboard() { clipboard.value = null }
 
@@ -95,11 +91,14 @@ export const useFileStore = defineStore('file', () => {
 
   async function deleteEntries(entries) {
     deleteProgress.value = { done: 0, total: entries.length }
+    const errors = []
     try {
       const response = await writeApi.delete(entries.map(e => e.path))
       await _readSSE(response, (ev) => {
         if (ev.type === 'progress' || ev.type === 'error')
           deleteProgress.value = { done: ev.done, total: ev.total }
+        if (ev.type === 'error')
+          errors.push(ev.name ? `${ev.name}: ${ev.message}` : ev.message)
         if (ev.type === 'done') {
           clearSelection()
           invalidateTree()
@@ -109,15 +108,20 @@ export const useFileStore = defineStore('file', () => {
     } finally {
       deleteProgress.value = null
     }
+    if (errors.length)
+      throw new Error(errors.length === 1 ? errors[0] : `${errors.length} items failed:\n${errors.join('\n')}`)
   }
 
   async function _executePaste(entries, action, destDir, onConflict) {
     pasteProgress.value = { done: 0, total: entries.length, action }
+    const errors = []
     try {
       const response = await writeApi.paste(entries, action, destDir, onConflict)
       await _readSSE(response, (ev) => {
         if (ev.type === 'progress' || ev.type === 'error')
           pasteProgress.value = { done: ev.done, total: ev.total, action }
+        if (ev.type === 'error')
+          errors.push(ev.name ? `${ev.name}: ${ev.message}` : ev.message)
         if (ev.type === 'done') {
           if (action === 'cut') clipboard.value = null
           invalidateTree()
@@ -127,6 +131,8 @@ export const useFileStore = defineStore('file', () => {
     } finally {
       pasteProgress.value = null
     }
+    if (errors.length)
+      throw new Error(errors.length === 1 ? errors[0] : `${errors.length} items failed:\n${errors.join('\n')}`)
   }
 
   async function paste() {

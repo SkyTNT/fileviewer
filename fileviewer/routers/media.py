@@ -6,7 +6,7 @@ router = APIRouter()
 
 
 @router.get("/stream")
-def stream_media(path: str = Query(...)):
+def get_media_stream(path: str = Query(...)):
     """Stream a video or audio file with range-request support for seeking."""
     file_path = validate_path(path)
     suffix = file_path.suffix.lower()

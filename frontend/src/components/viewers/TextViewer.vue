@@ -8,7 +8,7 @@ import { EditorView, keymap } from '@codemirror/view'
 import { EditorState, Prec } from '@codemirror/state'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { completeAnyWord, acceptCompletion } from '@codemirror/autocomplete'
-import { getLangByExt } from '../../utils/langSupport.js'
+import { getLangByExt } from '../../utils/codeMirrorLangs.js'
 
 // Register word-from-document completion as a global language-data source.
 // This runs alongside language-specific completions (JS globals, CSS props, etc.)
