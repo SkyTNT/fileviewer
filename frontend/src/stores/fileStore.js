@@ -243,7 +243,14 @@ export const useFileStore = defineStore('file', () => {
           nameConflicts.value = { conflicts: data.conflicts, resolve }
         })
         if (!strategy) return
-        _startUploads(parent, files, strategy)
+        if (strategy === 'skip') {
+          // Don't send conflicting files at all — filter them out client-side
+          const conflictNames = new Set(data.conflicts.map(c => c.name))
+          const toUpload = files.filter(f => !conflictNames.has(f.name))
+          if (toUpload.length) _startUploads(parent, toUpload, 'overwrite')
+        } else {
+          _startUploads(parent, files, strategy)
+        }
         return
       }
     } catch {
