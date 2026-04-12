@@ -1,9 +1,11 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 import { useFileStore } from '../stores/fileStore.js'
 
 const store     = useFileStore()
+const { mobile } = useDisplay()
 const { t }     = useI18n()
 const collapsed = ref(false)
 
@@ -35,8 +37,8 @@ function statusColor(task) {
 
 <template>
   <Teleport to="body">
-    <div v-if="store.uploadTasks.length" class="upload-panel">
-      <v-card elevation="8" rounded="lg" width="320">
+    <div v-if="store.uploadTasks.length" class="upload-panel" :class="{ 'upload-panel--mobile': mobile }">
+      <v-card elevation="8" rounded="lg" :width="mobile ? undefined : 320">
 
         <!-- Header -->
         <div class="d-flex align-center px-3 py-2" style="cursor:pointer; min-height:44px" @click="collapsed = !collapsed">
@@ -109,6 +111,11 @@ function statusColor(task) {
   bottom: 16px;
   right: 16px;
   z-index: 2000;
+}
+.upload-panel--mobile {
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
 }
 .task-list {
   max-height: 300px;
