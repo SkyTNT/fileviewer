@@ -1,5 +1,6 @@
 <script setup>
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useFileStore } from '../../stores/fileStore.js'
 import { useWriteActions } from '../../composables/useWriteActions.js'
 import { useRubberBand } from '../../composables/useRubberBand.js'
@@ -11,6 +12,7 @@ import DialogNewItem from '../dialogs/DialogNewItem.vue'
 
 const emit  = defineEmits(['open-file'])
 const store = useFileStore()
+const { t } = useI18n()
 
 const {
   mkdirDialog, mkdirName, mkdirLoading, mkdirError, openMkdir, confirmMkdir,
@@ -42,6 +44,18 @@ function onBgContextMenu(e) {
 }
 
 const totalPages = computed(() => Math.ceil(store.total / store.pageSize))
+
+const pageInput = ref(store.page)
+watch(() => store.page, v => { pageInput.value = v })
+
+function goToListPage() {
+  const val = parseInt(pageInput.value)
+  if (!isNaN(val)) {
+    const clamped = Math.max(1, Math.min(val, totalPages.value))
+    if (clamped !== store.page) store.goToPage(clamped)
+  }
+  pageInput.value = store.page
+}
 
 const typeIcon  = t => TYPE_ICON[t]  || 'mdi-file-outline'
 const typeColor = t => TYPE_COLOR[t] || undefined
@@ -135,7 +149,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeyDown))
 
     <div v-if="!store.loading && store.total === 0" class="text-center text-grey pa-12">
       <v-icon size="64" class="mb-2">mdi-folder-open-outline</v-icon>
-      <div>Empty directory</div>
+      <div>{{ t('explorer.emptyDirectory') }}</div>
     </div>
 
     <v-list v-else lines="one" class="pa-2" style="padding-bottom: 72px !important">
@@ -173,13 +187,29 @@ onUnmounted(() => window.removeEventListener('keydown', onKeyDown))
       </v-list-item>
     </v-list>
 
-    <div v-if="totalPages > 1" class="pagination-fab">
-      <v-pagination
-        :model-value="store.page"
-        :length="totalPages"
-        :total-visible="7"
-        @update:model-value="store.goToPage"
+    <div v-if="totalPages > 1" class="pagination-fab d-flex align-center ga-1">
+      <v-btn icon size="small" variant="text" :disabled="store.page <= 1" @click="store.goToPage(1)">
+        <v-icon>mdi-page-first</v-icon>
+      </v-btn>
+      <v-btn icon size="small" variant="text" :disabled="store.page <= 1" @click="store.goToPage(store.page - 1)">
+        <v-icon>mdi-chevron-left</v-icon>
+      </v-btn>
+      <input
+        v-model.number="pageInput"
+        class="page-input"
+        type="number"
+        min="1"
+        :max="totalPages"
+        @keydown.enter.prevent="goToListPage"
+        @blur="goToListPage"
       />
+      <span class="text-body-2">/ {{ totalPages }}</span>
+      <v-btn icon size="small" variant="text" :disabled="store.page >= totalPages" @click="store.goToPage(store.page + 1)">
+        <v-icon>mdi-chevron-right</v-icon>
+      </v-btn>
+      <v-btn icon size="small" variant="text" :disabled="store.page >= totalPages" @click="store.goToPage(totalPages)">
+        <v-icon>mdi-page-last</v-icon>
+      </v-btn>
     </div>
   </div>
 
@@ -213,8 +243,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeyDown))
   <DialogConfirmDelete v-model="deleteDialog" :targets="deleteTargets" @confirm="confirmDelete" />
   <DialogNewItem
     v-model="mkdirDialog"
-    title="New Folder"
-    label="Folder name"
+    :title="t('dialog.newFolder')"
+    :label="t('dialog.folderName')"
     v-model:name="mkdirName"
     :loading="mkdirLoading"
     :error="mkdirError"
@@ -222,8 +252,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeyDown))
   />
   <DialogNewItem
     v-model="touchDialog"
-    title="New File"
-    label="File name"
+    :title="t('dialog.newFile')"
+    :label="t('dialog.fileName')"
     v-model:name="touchName"
     :loading="touchLoading"
     :error="touchError"
@@ -253,4 +283,22 @@ onUnmounted(() => window.removeEventListener('keydown', onKeyDown))
   box-shadow: 0 3px 10px rgba(0,0,0,.2);
   padding: 4px 8px;
 }
+.page-input {
+  width: 52px;
+  text-align: center;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 4px;
+  padding: 3px 4px;
+  font-size: 13px;
+  background: transparent;
+  color: inherit;
+  outline: none;
+}
+.page-input:focus {
+  border-color: rgb(var(--v-theme-primary));
+  border-width: 2px;
+}
+.page-input::-webkit-inner-spin-button,
+.page-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.page-input[type=number] { -moz-appearance: textfield; }
 </style>

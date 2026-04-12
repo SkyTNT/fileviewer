@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
 import { useDisplay } from 'vuetify'
+import { useI18n } from 'vue-i18n'
 import { useFileStore } from './stores/fileStore.js'
 import { useAuthStore } from './stores/authStore.js'
 import { useFileOpener } from './composables/useFileOpener.js'
@@ -26,6 +27,7 @@ const authStore = useAuthStore()
 const { activeViewer, activeFile, openFile, closeViewer } = useFileOpener()
 const appTheme = useAppTheme()
 const { mobile } = useDisplay()
+const { t } = useI18n()
 
 const imageViewerRef = ref(null)
 const dfViewerRef = ref(null)
@@ -113,7 +115,7 @@ function handleOpenFile(file) {
     >
       <v-list-item
         prepend-icon="mdi-folder-multiple-outline"
-        title="File Viewer"
+        :title="t('app.title')"
         nav
         style="min-height: 48px"
       >

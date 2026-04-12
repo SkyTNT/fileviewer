@@ -1,4 +1,6 @@
 <script setup>
+import { useI18n } from 'vue-i18n'
+
 defineProps({
   modelValue: Boolean,
   title:      { type: String,  default: '' },
@@ -8,6 +10,8 @@ defineProps({
   error:      { type: String,  default: '' },
 })
 defineEmits(['update:modelValue', 'update:name', 'confirm'])
+
+const { t } = useI18n()
 </script>
 
 <template>
@@ -27,8 +31,8 @@ defineEmits(['update:modelValue', 'update:name', 'confirm'])
       </v-card-text>
       <v-card-actions>
         <v-spacer />
-        <v-btn variant="text" @click="$emit('update:modelValue', false)">Cancel</v-btn>
-        <v-btn color="primary" :loading="loading" @click="$emit('confirm')">Create</v-btn>
+        <v-btn variant="text" @click="$emit('update:modelValue', false)">{{ t('dialog.cancel') }}</v-btn>
+        <v-btn color="primary" :loading="loading" @click="$emit('confirm')">{{ t('dialog.create') }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>

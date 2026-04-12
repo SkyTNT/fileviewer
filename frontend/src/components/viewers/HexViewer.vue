@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { hexApi } from '../../services/api.js'
 import { formatBytes } from '../../utils/fileTypes.js'
 
@@ -49,6 +50,7 @@ function formatHex(hexArr) {
 }
 
 const formatSize = (bytes) => formatBytes(bytes)
+const { t } = useI18n()
 
 defineExpose({ open })
 </script>
@@ -81,9 +83,9 @@ defineExpose({ open })
         <div v-else class="hex-wrap pa-3">
           <!-- Header row -->
           <div class="hex-row hex-header">
-            <span class="col-offset">Offset</span>
+            <span class="col-offset">{{ t('hexViewer.offset') }}</span>
             <span class="col-bytes">00 01 02 03 04 05 06 07  08 09 0A 0B 0C 0D 0E 0F</span>
-            <span class="col-ascii">ASCII</span>
+            <span class="col-ascii">{{ t('hexViewer.ascii') }}</span>
           </div>
           <!-- Data rows -->
           <div
@@ -110,9 +112,9 @@ defineExpose({ open })
             @click="fetchPage(page - 1)"
           />
           <span class="text-caption text-medium-emphasis">
-            Page {{ page }} / {{ totalPages }}
+            {{ t('hexViewer.page', { page, total: totalPages }) }}
             &nbsp;·&nbsp;
-            rows {{ (page - 1) * 512 + 1 }}–{{ Math.min(page * 512, Math.ceil(fileSize / 16)) }}
+            {{ t('hexViewer.rowRange', { from: (page - 1) * 512 + 1, to: Math.min(page * 512, Math.ceil(fileSize / 16)) }) }}
           </span>
           <v-btn
             icon="mdi-chevron-right"

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useFileStore } from '../../stores/fileStore.js'
 import { imagesApi, filesApi, textApi } from '../../services/api.js'
 import { useCopyToClipboard } from '../../composables/useCopyToClipboard.js'
@@ -11,6 +12,7 @@ import DialogConfirmDelete from '../dialogs/DialogConfirmDelete.vue'
 
 const emit  = defineEmits(['open-file'])
 const store = useFileStore()
+const { t } = useI18n()
 
 // Single-select (when exactly 1 item selected)
 const file     = computed(() => store.selectedEntry)
@@ -92,7 +94,7 @@ const {
   <!-- ── Multi-select panel ───────────────────────────────────────────────── -->
   <div v-if="isMulti" class="detail-panel">
     <div class="d-flex align-center px-3 pt-3 pb-1">
-      <span class="text-subtitle-2 font-weight-bold">{{ store.selectedEntries.length }} items selected</span>
+      <span class="text-subtitle-2 font-weight-bold">{{ t('detail.itemsSelected', { n: store.selectedEntries.length }) }}</span>
       <v-spacer />
       <v-btn icon size="small" variant="text" @click="store.clearSelection()">
         <v-icon size="18">mdi-close</v-icon>
@@ -118,7 +120,7 @@ const {
         prepend-icon="mdi-download"
         @click="downloadSelected"
       >
-        Download {{ multiFiles.length }} files
+        {{ t('detail.downloadFiles', { n: multiFiles.length }) }}
       </v-btn>
 
       <template v-if="canWrite">
@@ -130,7 +132,7 @@ const {
             prepend-icon="mdi-content-copy"
             @click="copySelected"
           >
-            Copy
+            {{ t('detail.copy') }}
           </v-btn>
           <v-btn
             color="secondary"
@@ -139,7 +141,7 @@ const {
             prepend-icon="mdi-content-cut"
             @click="cutSelected"
           >
-            Cut
+            {{ t('detail.cut') }}
           </v-btn>
         </div>
         <v-btn
@@ -149,7 +151,7 @@ const {
           prepend-icon="mdi-delete-outline"
           @click="openDelete(store.selectedEntries)"
         >
-          Delete {{ store.selectedEntries.length }} items
+          {{ t('detail.deleteItems', { n: store.selectedEntries.length }) }}
         </v-btn>
       </template>
     </div>
@@ -157,19 +159,19 @@ const {
     <!-- Summary -->
     <div class="info-list pa-3">
       <div v-if="multiFiles.length" class="info-row">
-        <span class="info-label text-caption text-medium-emphasis">Files</span>
+        <span class="info-label text-caption text-medium-emphasis">{{ t('detail.files') }}</span>
         <span class="info-value text-body-2">{{ multiFiles.length }}</span>
       </div>
       <div v-if="multiDirs.length" class="info-row">
-        <span class="info-label text-caption text-medium-emphasis">Folders</span>
+        <span class="info-label text-caption text-medium-emphasis">{{ t('detail.folders') }}</span>
         <span class="info-value text-body-2">{{ multiDirs.length }}</span>
       </div>
       <div v-if="multiFiles.length" class="info-row">
-        <span class="info-label text-caption text-medium-emphasis">Total size</span>
+        <span class="info-label text-caption text-medium-emphasis">{{ t('detail.totalSize') }}</span>
         <span class="info-value text-body-2">{{ formatSize(multiSize) }}</span>
       </div>
       <div class="info-row">
-        <span class="info-label text-caption text-medium-emphasis">Selected</span>
+        <span class="info-label text-caption text-medium-emphasis">{{ t('detail.selected') }}</span>
         <div class="d-flex flex-column ga-1 mt-1">
           <span
             v-for="entry in store.selectedEntries.slice(0, 10)"
@@ -182,7 +184,7 @@ const {
             </v-icon>{{ entry.name }}
           </span>
           <span v-if="store.selectedEntries.length > 10" class="text-caption text-medium-emphasis">
-            … and {{ store.selectedEntries.length - 10 }} more
+            {{ t('detail.andMore', { n: store.selectedEntries.length - 10 }) }}
           </span>
         </div>
       </div>
@@ -193,7 +195,7 @@ const {
   <div v-else-if="file" class="detail-panel">
     <!-- Header -->
     <div class="d-flex align-center px-3 pt-3 pb-1">
-      <span class="text-subtitle-2 font-weight-bold">Details</span>
+      <span class="text-subtitle-2 font-weight-bold">{{ t('detail.details') }}</span>
       <v-spacer />
       <v-btn icon size="small" variant="text" @click="store.selectEntry(null)">
         <v-icon size="18">mdi-close</v-icon>
@@ -226,7 +228,7 @@ const {
         :prepend-icon="file.is_dir ? 'mdi-folder-open-outline' : 'mdi-open-in-app'"
         @click="openEntry"
       >
-        Open
+        {{ t('detail.open') }}
       </v-btn>
 
       <!-- Download (files only) -->
@@ -239,7 +241,7 @@ const {
         block
         prepend-icon="mdi-download"
       >
-        Download
+        {{ t('detail.download') }}
       </v-btn>
 
       <!-- Copy to clipboard -->
@@ -252,7 +254,7 @@ const {
         prepend-icon="mdi-clipboard-outline"
         @click="copyToClipboard"
       >
-        Copy to clipboard
+        {{ t('detail.copyToClipboard') }}
       </v-btn>
 
       <!-- Write mode actions -->
@@ -265,7 +267,7 @@ const {
             prepend-icon="mdi-content-copy"
             @click="store.setCopy(file)"
           >
-            Copy
+            {{ t('detail.copy') }}
           </v-btn>
           <v-btn
             color="secondary"
@@ -274,7 +276,7 @@ const {
             prepend-icon="mdi-content-cut"
             @click="store.setCut(file)"
           >
-            Cut
+            {{ t('detail.cut') }}
           </v-btn>
         </div>
         <v-btn
@@ -284,7 +286,7 @@ const {
           prepend-icon="mdi-pencil-outline"
           @click="openRename(file, () => store.selectEntry(null))"
         >
-          Rename
+          {{ t('detail.rename') }}
         </v-btn>
         <v-btn
           color="error"
@@ -293,7 +295,7 @@ const {
           prepend-icon="mdi-delete-outline"
           @click="openDelete(file)"
         >
-          Delete
+          {{ t('detail.delete') }}
         </v-btn>
       </template>
     </div>
@@ -301,34 +303,34 @@ const {
     <!-- Info rows -->
     <div class="info-list pa-3">
       <div class="info-row">
-        <span class="info-label text-caption text-medium-emphasis">Name</span>
+        <span class="info-label text-caption text-medium-emphasis">{{ t('detail.name') }}</span>
         <span class="info-value text-body-2 text-wrap">{{ file.name }}</span>
       </div>
 
       <div class="info-row">
-        <span class="info-label text-caption text-medium-emphasis">Type</span>
+        <span class="info-label text-caption text-medium-emphasis">{{ t('detail.type') }}</span>
         <v-chip size="x-small" :color="typeColor" variant="tonal" label>
           {{ file.type }}
         </v-chip>
       </div>
 
       <div v-if="file.extension" class="info-row">
-        <span class="info-label text-caption text-medium-emphasis">Extension</span>
+        <span class="info-label text-caption text-medium-emphasis">{{ t('detail.extension') }}</span>
         <span class="info-value text-body-2">{{ file.extension }}</span>
       </div>
 
       <div class="info-row">
-        <span class="info-label text-caption text-medium-emphasis">Size</span>
+        <span class="info-label text-caption text-medium-emphasis">{{ t('detail.size') }}</span>
         <span class="info-value text-body-2">{{ formatSize(file.size) }}</span>
       </div>
 
       <div class="info-row">
-        <span class="info-label text-caption text-medium-emphasis">Modified</span>
+        <span class="info-label text-caption text-medium-emphasis">{{ t('detail.modified') }}</span>
         <span class="info-value text-body-2">{{ formatDate(file.modified) }}</span>
       </div>
 
       <div class="info-row">
-        <span class="info-label text-caption text-medium-emphasis">Path</span>
+        <span class="info-label text-caption text-medium-emphasis">{{ t('detail.path') }}</span>
         <span class="info-value text-body-2 text-wrap path-text">{{ file.path || '/' }}</span>
       </div>
     </div>
@@ -337,9 +339,9 @@ const {
     <template v-if="isImage">
       <v-divider class="mt-1" />
       <div class="px-3 pt-3 pb-1 d-flex align-center">
-        <span class="text-caption text-medium-emphasis" style="text-transform:uppercase;letter-spacing:.05em;font-size:11px">Meta</span>
+        <span class="text-caption text-medium-emphasis" style="text-transform:uppercase;letter-spacing:.05em;font-size:11px">{{ t('detail.meta') }}</span>
         <v-progress-circular v-if="metaLoading" indeterminate size="12" width="2" class="ml-2" />
-        <span v-else-if="!metaData" class="text-caption text-disabled ml-2">no .json found</span>
+        <span v-else-if="!metaData" class="text-caption text-disabled ml-2">{{ t('detail.noJsonFound') }}</span>
       </div>
       <div v-if="metaData" class="px-3 pb-3 meta-tree">
         <JsonNode :value="metaData" :depth="0" />

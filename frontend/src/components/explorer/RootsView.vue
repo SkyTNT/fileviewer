@@ -1,7 +1,9 @@
 <script setup>
+import { useI18n } from 'vue-i18n'
 import { useFileStore } from '../../stores/fileStore.js'
 
 const store = useFileStore()
+const { t } = useI18n()
 
 function fmt(bytes) {
   if (bytes == null) return '—'
@@ -39,7 +41,7 @@ function barColor(pct) {
 
         <v-list-item-title class="text-body-2 font-weight-medium">{{ root.name }}</v-list-item-title>
         <v-list-item-subtitle class="text-caption">
-          {{ root.disk ? fmt(root.disk.free) + ' free of ' + fmt(root.disk.total) : 'Disk info unavailable' }}
+          {{ root.disk ? t('roots.freeOf', { free: fmt(root.disk.free), total: fmt(root.disk.total) }) : t('roots.unavailable') }}
         </v-list-item-subtitle>
 
         <template #append>
@@ -74,7 +76,7 @@ function barColor(pct) {
           <div style="min-width:0">
             <div class="text-subtitle-1 font-weight-bold text-truncate">{{ root.name }}</div>
             <div class="text-caption text-medium-emphasis">
-              {{ root.disk ? fmt(root.disk.free) + ' free' : 'N/A' }}
+              {{ root.disk ? fmt(root.disk.free) + ' ' + t('roots.free') : t('roots.na') }}
             </div>
           </div>
         </div>
@@ -89,11 +91,11 @@ function barColor(pct) {
             class="mb-2"
           />
           <div class="d-flex justify-space-between text-caption text-medium-emphasis">
-            <span>{{ fmt(root.disk.used) }} used</span>
-            <span>{{ fmt(root.disk.total) }} total</span>
+            <span>{{ fmt(root.disk.used) }} {{ t('roots.used') }}</span>
+            <span>{{ fmt(root.disk.total) }} {{ t('roots.total') }}</span>
           </div>
         </template>
-        <div v-else class="text-caption text-disabled">Disk info unavailable</div>
+        <div v-else class="text-caption text-disabled">{{ t('roots.unavailable') }}</div>
       </v-card-text>
     </v-card>
   </div>

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useTheme } from 'vuetify'
 import { Codemirror } from 'vue-codemirror'
 import { basicSetup } from 'codemirror'
@@ -21,6 +22,7 @@ const props = defineProps({ file: { type: Object, default: null } })
 const emit  = defineEmits(['error', 'open-hex'])
 
 const store = useFileStore()
+const { t } = useI18n()
 const vuetifyTheme = useTheme()
 const isDark = computed(() => vuetifyTheme.global.current.value.dark)
 
@@ -91,14 +93,14 @@ async function open(file) {
 }
 
 function close() {
-  if (isDirty.value && !confirm('You have unsaved changes. Close anyway?')) return
+  if (isDirty.value && !confirm(t('textViewer.confirmClose'))) return
   dialog.value   = false
   editMode.value = false
 }
 
 function toggleEdit() {
   if (editMode.value && isDirty.value) {
-    if (!confirm('Discard unsaved changes?')) return
+    if (!confirm(t('textViewer.confirmDiscard'))) return
     editText.value = content.value
   }
   editMode.value = !editMode.value
@@ -149,7 +151,7 @@ defineExpose({ open })
       <v-card-title class="d-flex align-center pa-3 flex-shrink-0" style="gap:6px">
         <v-icon size="20">mdi-file-document-outline</v-icon>
         <span class="text-truncate" style="max-width:55%; font-size:14px">{{ currentFile?.name }}</span>
-        <span v-if="isDirty" class="text-warning" style="font-size:18px; line-height:1" title="Unsaved changes">●</span>
+        <span v-if="isDirty" class="text-warning" style="font-size:18px; line-height:1" :title="t('textViewer.unsavedChanges')">●</span>
 
         <v-chip v-if="currentFile?.extension" size="x-small" variant="tonal" color="secondary" label>
           {{ currentFile.extension.slice(1).toUpperCase() }}
@@ -164,7 +166,7 @@ defineExpose({ open })
           :color="previewMode ? 'primary' : undefined"
           prepend-icon="mdi-language-markdown-outline"
           @click="previewMode = !previewMode"
-        >{{ previewMode ? 'Source' : 'Preview' }}</v-btn>
+        >{{ previewMode ? t('textViewer.source') : t('textViewer.preview') }}</v-btn>
 
         <!-- Write-mode controls -->
         <template v-if="store.writeMode && !loading && !error && !truncated && !previewMode">
@@ -174,7 +176,7 @@ defineExpose({ open })
             :color="editMode ? 'primary' : undefined"
             :prepend-icon="editMode ? 'mdi-eye-outline' : 'mdi-pencil-outline'"
             @click="toggleEdit"
-          >{{ editMode ? 'View' : 'Edit' }}</v-btn>
+          >{{ editMode ? t('textViewer.view') : t('textViewer.edit') }}</v-btn>
 
           <v-btn
             v-if="editMode"
@@ -185,7 +187,7 @@ defineExpose({ open })
             :loading="saving"
             :disabled="!isDirty"
             @click="save"
-          >Save</v-btn>
+          >{{ t('textViewer.save') }}</v-btn>
         </template>
 
         <v-btn icon size="small" variant="text" @click="close">
@@ -206,7 +208,7 @@ defineExpose({ open })
 
         <template v-else>
           <v-alert v-if="truncated" type="warning" density="compact" class="ma-2">
-            File truncated at 5 MB — editing disabled
+            {{ t('textViewer.truncatedWarning') }}
           </v-alert>
           <v-alert
             v-if="saveError"
@@ -239,18 +241,18 @@ defineExpose({ open })
         <v-divider />
         <div class="d-flex align-center px-3 text-caption text-medium-emphasis"
              style="height:26px; font-family:'Roboto Mono',monospace; font-size:11px; gap:16px">
-          <span>{{ lineCount }} lines</span>
+          <span>{{ t('textViewer.lines', { n: lineCount }) }}</span>
           <span v-if="currentFile?.size != null">
             {{ currentFile.size < 1048576
               ? (currentFile.size / 1024).toFixed(1) + ' KB'
               : (currentFile.size / 1048576).toFixed(1) + ' MB' }}
           </span>
           <span v-if="editMode">
-            <v-icon size="12" class="mr-1">mdi-keyboard-outline</v-icon>Ctrl+S to save
+            <v-icon size="12" class="mr-1">mdi-keyboard-outline</v-icon>{{ t('textViewer.ctrlSToSave') }}
           </span>
           <v-spacer />
-          <span v-if="editMode && isDirty" class="text-warning">Unsaved</span>
-          <span v-else-if="editMode" class="text-success">Saved</span>
+          <span v-if="editMode && isDirty" class="text-warning">{{ t('textViewer.unsaved') }}</span>
+          <span v-else-if="editMode" class="text-success">{{ t('textViewer.saved') }}</span>
           <span v-if="currentFile?.extension">
             {{ { '.js':'JavaScript', '.mjs':'JavaScript', '.cjs':'JavaScript',
                  '.jsx':'JSX', '.ts':'TypeScript', '.tsx':'TSX',

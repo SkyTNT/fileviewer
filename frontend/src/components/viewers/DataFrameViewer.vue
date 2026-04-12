@@ -1,5 +1,6 @@
 <script setup>
-import { ref, computed, nextTick, onUnmounted, watch } from 'vue'
+import { ref, computed, nextTick, onUnmounted, watch, watchEffect } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { EditorState, Compartment } from '@codemirror/state'
 import { sql, StandardSQL } from '@codemirror/lang-sql'
@@ -9,6 +10,7 @@ import { dataframeApi, imagesApi } from '../../services/api.js'
 import JsonNode from './JsonNode.vue'
 
 const emit = defineEmits(['open-image'])
+const { t } = useI18n()
 
 const dialog   = ref(false)
 const fileName = ref('')
@@ -19,8 +21,9 @@ const columns  = ref([])
 const dtypes   = ref([])
 const rows     = ref([])
 const total    = ref(0)
-const page     = ref(1)
-const pageSize = ref(100)
+const page      = ref(1)
+const pageInput = ref(1)
+const pageSize  = ref(100)
 const sortCol  = ref(null)
 const sortAsc  = ref(true)
 const loading  = ref(false)
@@ -309,6 +312,19 @@ function onPageSizeChange() {
   page.value = 1
   loadParquet()
 }
+function goToPageInput() {
+  const val = parseInt(pageInput.value)
+  if (!isNaN(val)) {
+    const clamped = Math.max(1, Math.min(val, totalPages.value))
+    if (clamped !== page.value) {
+      page.value = clamped
+      loadParquet()
+    }
+  }
+  pageInput.value = page.value
+}
+
+watchEffect(() => { pageInput.value = page.value })
 
 // ── Row detail ────────────────────────────────────────────────────────────────
 
@@ -346,7 +362,7 @@ defineExpose({ open })
           {{ fileType.toUpperCase() }}
         </v-chip>
         <v-spacer />
-        <v-chip size="small" class="mr-2">{{ total.toLocaleString() }} rows</v-chip>
+        <v-chip size="small" class="mr-2">{{ t('dataframe.rows', { n: total.toLocaleString() }) }}</v-chip>
         <v-btn icon size="small" @click="close"><v-icon>mdi-close</v-icon></v-btn>
       </v-card-title>
       <v-divider />
@@ -354,13 +370,13 @@ defineExpose({ open })
       <!-- SQL editor bar -->
       <div class="pa-2 d-flex align-center ga-2">
         <div ref="sqlEditorRef" class="sql-editor-wrap" />
-        <v-btn size="small" color="primary" @click="applyFilter">Filter</v-btn>
-        <v-btn size="small" variant="tonal" @click="clearFilter">Clear</v-btn>
+        <v-btn size="small" color="primary" @click="applyFilter">{{ t('dataframe.filter') }}</v-btn>
+        <v-btn size="small" variant="tonal" @click="clearFilter">{{ t('dataframe.clear') }}</v-btn>
         <v-spacer />
         <v-select
           v-model="pageSize"
           :items="[50, 100, 250, 500]"
-          label="Rows/page"
+          :label="t('dataframe.rowsPerPage')"
           density="compact"
           hide-details
           variant="outlined"
@@ -392,11 +408,11 @@ defineExpose({ open })
       <v-divider />
 
       <!-- Table -->
-      <v-card-text class="pa-0" style="overflow:auto; max-height:58vh">
-        <div v-if="loading" class="d-flex justify-center pa-12">
+      <v-card-text class="pa-0 table-area" style="overflow:auto; max-height:58vh">
+        <div v-if="loading" class="loading-overlay">
           <v-progress-circular indeterminate />
         </div>
-        <v-alert v-else-if="error" type="error" class="ma-4">{{ error }}</v-alert>
+        <v-alert v-if="error" type="error" class="ma-4">{{ error }}</v-alert>
         <table v-else-if="rows.length" class="df-table">
           <thead>
             <tr>
@@ -434,18 +450,33 @@ defineExpose({ open })
             </tr>
           </tbody>
         </table>
-        <div v-else class="text-center text-medium-emphasis pa-12">No data</div>
+        <div v-else-if="!loading" class="text-center text-medium-emphasis pa-12">{{ t('dataframe.noData') }}</div>
       </v-card-text>
 
       <!-- Pagination -->
       <v-divider />
       <v-card-actions class="justify-center ga-2">
+        <v-btn icon size="small" variant="tonal" :disabled="page <= 1" @click="page = 1; loadParquet()">
+          <v-icon>mdi-page-first</v-icon>
+        </v-btn>
         <v-btn icon size="small" variant="tonal" :disabled="page <= 1" @click="prevPage">
           <v-icon>mdi-chevron-left</v-icon>
         </v-btn>
-        <span class="text-body-2">Page {{ page }} / {{ totalPages }}</span>
+        <input
+          v-model.number="pageInput"
+          class="page-input"
+          type="number"
+          min="1"
+          :max="totalPages"
+          @keydown.enter.prevent="goToPageInput"
+          @blur="goToPageInput"
+        />
+        <span class="text-body-2">/ {{ totalPages }}</span>
         <v-btn icon size="small" variant="tonal" :disabled="page >= totalPages" @click="nextPage">
           <v-icon>mdi-chevron-right</v-icon>
+        </v-btn>
+        <v-btn icon size="small" variant="tonal" :disabled="page >= totalPages" @click="page = totalPages; loadParquet()">
+          <v-icon>mdi-page-last</v-icon>
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -456,7 +487,7 @@ defineExpose({ open })
     <v-card>
       <v-card-title class="d-flex align-center">
         <v-icon class="mr-2">mdi-code-json</v-icon>
-        Row detail
+        {{ t('dataframe.rowDetail') }}
         <v-spacer />
         <v-btn icon size="small" @click="rowDialog = false">
           <v-icon>mdi-close</v-icon>
@@ -473,6 +504,39 @@ defineExpose({ open })
 </template>
 
 <style scoped>
+.table-area { position: relative; }
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4;
+  pointer-events: none;
+}
+.loading-overlay :deep(.v-progress-circular) {
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.3));
+}
+
+.page-input {
+  width: 52px;
+  text-align: center;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 4px;
+  padding: 3px 4px;
+  font-size: 13px;
+  background: transparent;
+  color: inherit;
+  outline: none;
+}
+.page-input:focus {
+  border-color: rgb(var(--v-theme-primary));
+  border-width: 2px;
+}
+.page-input::-webkit-inner-spin-button,
+.page-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.page-input[type=number] { -moz-appearance: textfield; }
+
 .sql-editor-wrap {
   flex: 1;
   max-width: 700px;

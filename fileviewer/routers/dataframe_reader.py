@@ -1,4 +1,5 @@
 import asyncio
+import math
 import os
 import re
 from functools import lru_cache
@@ -23,11 +24,11 @@ router = APIRouter()
 def _load_lazy_frame(abs_path: str, mtime: float) -> pl.LazyFrame:
     suffix = Path(abs_path).suffix.lower()
     if suffix in JSONL_EXTENSIONS:
-        return pl.scan_ndjson(abs_path)
+        return pl.scan_ndjson(abs_path, infer_schema_length=None)
     if suffix in JSON_EXTENSIONS:
         # .json files may be JSONL mis-named — try NDJSON scan
         try:
-            return pl.scan_ndjson(abs_path)
+            return pl.scan_ndjson(abs_path, infer_schema_length=None)
         except Exception as exc:
             raise ValueError(
                 f"'{Path(abs_path).name}' could not be read as JSONL/NDJSON: {exc}"
@@ -109,13 +110,21 @@ def get_data(
         offset = (page - 1) * page_size
         chunk = lf.slice(offset, page_size).collect()
 
+        data = chunk.to_dicts()
+        # Python's json encoder rejects inf/-inf/nan — convert to string so the
+        # frontend can display them as "inf", "-inf", "nan"
+        for row in data:
+            for k, v in row.items():
+                if isinstance(v, float) and not math.isfinite(v):
+                    row[k] = str(v)
+
         return {
             "total": total,
             "page": page,
             "page_size": page_size,
             "columns": chunk.columns,
             "dtypes": [str(dt) for dt in chunk.dtypes],
-            "data": chunk.to_dicts(),
+            "data": data,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

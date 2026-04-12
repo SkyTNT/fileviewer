@@ -1,8 +1,10 @@
 <script setup>
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/authStore.js'
 
 const authStore = useAuthStore()
+const { t } = useI18n()
 
 const username = ref('')
 const password = ref('')
@@ -18,7 +20,7 @@ async function doLogin() {
   try {
     await authStore.login(u, p)
   } catch (e) {
-    error.value = e.response?.data?.detail || 'Login failed'
+    error.value = e.response?.data?.detail || t('login.loginFailed')
   } finally {
     loading.value = false
   }
@@ -30,14 +32,14 @@ async function doLogin() {
     <v-card width="360" class="pa-2">
       <v-card-title class="d-flex align-center justify-center pa-4 pb-2" style="gap:8px">
         <v-icon size="28">mdi-folder-lock-outline</v-icon>
-        File Viewer
+        {{ t('login.title') }}
       </v-card-title>
 
       <v-card-text>
         <v-form @submit.prevent="doLogin">
           <v-text-field
             v-model="username"
-            label="Username"
+            :label="t('login.username')"
             prepend-inner-icon="mdi-account-outline"
             variant="outlined"
             density="comfortable"
@@ -47,7 +49,7 @@ async function doLogin() {
           />
           <v-text-field
             v-model="password"
-            label="Password"
+            :label="t('login.password')"
             type="password"
             prepend-inner-icon="mdi-lock-outline"
             variant="outlined"
@@ -64,7 +66,7 @@ async function doLogin() {
             size="large"
             :loading="loading"
             :disabled="!username.trim() || !password"
-          >Login</v-btn>
+          >{{ t('login.login') }}</v-btn>
         </v-form>
       </v-card-text>
     </v-card>

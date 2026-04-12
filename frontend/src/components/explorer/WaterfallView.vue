@@ -1,5 +1,6 @@
 <script setup>
 import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useFileStore } from '../../stores/fileStore.js'
 import { useWriteActions } from '../../composables/useWriteActions.js'
 import { useRubberBand } from '../../composables/useRubberBand.js'
@@ -11,6 +12,7 @@ import DialogNewItem from '../dialogs/DialogNewItem.vue'
 
 const emit = defineEmits(['open-file'])
 const store = useFileStore()
+const { t } = useI18n()
 
 const {
   mkdirDialog, mkdirName, mkdirLoading, mkdirError, openMkdir, confirmMkdir,
@@ -286,7 +288,7 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
     <div v-else-if="!store.loading && store.total === 0"
          class="text-center text-grey pa-12">
       <v-icon size="64" class="mb-2">mdi-folder-open-outline</v-icon>
-      <div>Empty directory</div>
+      <div>{{ t('explorer.emptyDirectory') }}</div>
     </div>
 
     <template v-else>
@@ -316,7 +318,7 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
 
       <div v-else-if="displayEntries.length >= store.total && store.total > 0"
            class="text-center text-caption text-medium-emphasis pa-3">
-        — {{ store.total }} items —
+        {{ t('explorer.totalItems', { n: store.total }) }}
       </div>
     </template>
   </div>
@@ -351,8 +353,8 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
   <DialogConfirmDelete v-model="deleteDialog" :targets="deleteTargets" @confirm="confirmDelete" />
   <DialogNewItem
     v-model="mkdirDialog"
-    title="New Folder"
-    label="Folder name"
+    :title="t('dialog.newFolder')"
+    :label="t('dialog.folderName')"
     v-model:name="mkdirName"
     :loading="mkdirLoading"
     :error="mkdirError"
@@ -360,8 +362,8 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
   />
   <DialogNewItem
     v-model="touchDialog"
-    title="New File"
-    label="File name"
+    :title="t('dialog.newFile')"
+    :label="t('dialog.fileName')"
     v-model:name="touchName"
     :loading="touchLoading"
     :error="touchError"

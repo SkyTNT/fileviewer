@@ -1,9 +1,13 @@
 <script setup>
+import { useI18n } from 'vue-i18n'
+
 defineProps({
   modelValue: Boolean,
   targets:    { type: Array, default: () => [] },
 })
 defineEmits(['update:modelValue', 'confirm'])
+
+const { t } = useI18n()
 </script>
 
 <template>
@@ -11,23 +15,25 @@ defineEmits(['update:modelValue', 'confirm'])
             @update:model-value="$emit('update:modelValue', $event)">
     <v-card>
       <v-card-title class="pa-4">
-        Delete{{ targets.length > 1 ? ` ${targets.length} items` : '' }}
+        {{ targets.length > 1 ? t('dialog.deleteTitleN', { n: targets.length }) : t('dialog.deleteTitle') }}
       </v-card-title>
       <v-card-text class="pt-0">
         <template v-if="targets.length === 1">
-          Are you sure you want to delete <strong>{{ targets[0]?.name }}</strong>?
+          <i18n-t keypath="dialog.confirmDeleteSingle" tag="span">
+            <template #name><strong>{{ targets[0]?.name }}</strong></template>
+          </i18n-t>
           <span v-if="targets[0]?.is_dir" class="text-error d-block mt-1 text-body-2">
-            This will delete the folder and all its contents.
+            {{ t('dialog.folderWarning') }}
           </span>
         </template>
         <template v-else>
-          Are you sure you want to delete {{ targets.length }} items? This cannot be undone.
+          {{ t('dialog.confirmDeleteMulti', { n: targets.length }) }}
         </template>
       </v-card-text>
       <v-card-actions>
         <v-spacer />
-        <v-btn variant="text" @click="$emit('update:modelValue', false)">Cancel</v-btn>
-        <v-btn color="error" @click="$emit('confirm')">Delete</v-btn>
+        <v-btn variant="text" @click="$emit('update:modelValue', false)">{{ t('dialog.cancel') }}</v-btn>
+        <v-btn color="error" @click="$emit('confirm')">{{ t('dialog.delete') }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useDisplay } from 'vuetify'
+import { useI18n } from 'vue-i18n'
 import { useFileStore } from '../../stores/fileStore.js'
 import { useAuthStore } from '../../stores/authStore.js'
 import { useAppTheme, ACCENT_COLORS } from '../../composables/useAppTheme.js'
@@ -15,6 +16,13 @@ const authStore = useAuthStore()
 const { isDark, accentColor, toggleMode, setAccent } = useAppTheme()
 const { mobile } = useDisplay()
 const { showError } = useNotification()
+const { t, locale } = useI18n()
+
+// ── Language ──────────────────────────────────────────────────────────────────
+function setLocale(lang) {
+  locale.value = lang
+  localStorage.setItem('fv-locale', lang)
+}
 
 // ── Filter ────────────────────────────────────────────────────────────────────
 const showFilter  = ref(false)
@@ -27,7 +35,7 @@ watch(filterInput, (v) => {
   clearTimeout(filterTimer)
   if (v) {
     try { new RegExp(v) }
-    catch { filterError.value = 'Invalid regex'; return }
+    catch { filterError.value = t('toolbar.invalidRegex'); return }
   }
   filterTimer = setTimeout(() => store.setFilter(v || ''), 300)
 })
@@ -106,6 +114,13 @@ async function onFilesSelected(e) {
     uploadLoading.value = false
   }
 }
+
+// ── Clipboard label ────────────────────────────────────────────────────────────
+const clipboardLabel = computed(() => {
+  if (!store.clipboard) return ''
+  const n = store.clipboard.entries.length
+  return n > 1 ? t('toolbar.nItems', { n }) : store.clipboard.entries[0].name
+})
 </script>
 
 <template>
@@ -145,7 +160,7 @@ async function onFilesSelected(e) {
   <template v-if="!mobile">
     <!-- Entry count -->
     <span class="text-caption text-medium-emphasis mr-2" style="white-space:nowrap">
-      {{ store.total }} items
+      {{ t('toolbar.items', { n: store.total }) }}
     </span>
 
     <!-- Filter input -->
@@ -154,7 +169,7 @@ async function onFilesSelected(e) {
       v-model="filterInput"
       density="compact"
       variant="outlined"
-      placeholder="regex filter…"
+      :placeholder="t('toolbar.regexFilter')"
       hide-details
       clearable
       autofocus
@@ -172,7 +187,7 @@ async function onFilesSelected(e) {
     <!-- Filter toggle button -->
     <v-btn icon size="small" class="mr-1" :color="showFilter ? 'primary' : undefined" @click="toggleFilter">
       <v-icon size="20">{{ showFilter ? 'mdi-filter' : 'mdi-filter-outline' }}</v-icon>
-      <v-tooltip activator="parent">{{ showFilter ? 'Close filter' : 'Filter files' }}</v-tooltip>
+      <v-tooltip activator="parent">{{ showFilter ? t('toolbar.closeFilter') : t('toolbar.filterFiles') }}</v-tooltip>
     </v-btn>
 
     <!-- Write mode actions (hidden at multi-root virtual root) -->
@@ -182,15 +197,15 @@ async function onFilesSelected(e) {
       </v-chip>
       <v-btn icon size="small" class="mr-1" :loading="uploadLoading" @click="openUpload">
         <v-icon size="20">mdi-upload-outline</v-icon>
-        <v-tooltip activator="parent">Upload files</v-tooltip>
+        <v-tooltip activator="parent">{{ t('toolbar.upload') }}</v-tooltip>
       </v-btn>
       <v-btn icon size="small" class="mr-1" @click="openTouch">
         <v-icon size="20">mdi-file-plus-outline</v-icon>
-        <v-tooltip activator="parent">New file</v-tooltip>
+        <v-tooltip activator="parent">{{ t('toolbar.newFile') }}</v-tooltip>
       </v-btn>
       <v-btn icon size="small" class="mr-1" @click="openMkdir">
         <v-icon size="20">mdi-folder-plus-outline</v-icon>
-        <v-tooltip activator="parent">New folder</v-tooltip>
+        <v-tooltip activator="parent">{{ t('toolbar.newFolder') }}</v-tooltip>
       </v-btn>
     </template>
 
@@ -205,11 +220,11 @@ async function onFilesSelected(e) {
         @click:close="store.clearClipboard"
       >
         <v-icon start size="14">{{ store.clipboard.action === 'cut' ? 'mdi-content-cut' : 'mdi-content-copy' }}</v-icon>
-        {{ store.clipboard.entries.length > 1 ? store.clipboard.entries.length + ' items' : store.clipboard.entries[0].name }}
+        {{ clipboardLabel }}
       </v-chip>
       <v-btn icon size="small" class="mr-2" color="primary" :loading="pasteLoading" @click="doPaste">
         <v-icon size="20">mdi-content-paste</v-icon>
-        <v-tooltip activator="parent">Paste here</v-tooltip>
+        <v-tooltip activator="parent">{{ t('toolbar.paste') }}</v-tooltip>
       </v-btn>
     </template>
 
@@ -217,36 +232,76 @@ async function onFilesSelected(e) {
     <v-btn-toggle v-model="store.viewMode" mandatory density="compact" rounded="lg" class="mr-2" color="primary">
       <v-btn value="waterfall" size="small">
         <v-icon size="18">mdi-view-dashboard-outline</v-icon>
-        <v-tooltip activator="parent">Waterfall</v-tooltip>
+        <v-tooltip activator="parent">{{ t('toolbar.waterfall') }}</v-tooltip>
       </v-btn>
       <v-btn value="list" size="small">
         <v-icon size="18">mdi-view-list-outline</v-icon>
-        <v-tooltip activator="parent">List</v-tooltip>
+        <v-tooltip activator="parent">{{ t('toolbar.list') }}</v-tooltip>
       </v-btn>
     </v-btn-toggle>
 
     <!-- Logout -->
     <v-btn v-if="authStore.authRequired" icon size="small" class="mr-1" @click="authStore.logout">
       <v-icon size="20">mdi-logout</v-icon>
-      <v-tooltip activator="parent">Logout</v-tooltip>
+      <v-tooltip activator="parent">{{ t('toolbar.logout') }}</v-tooltip>
     </v-btn>
 
     <!-- Dark / Light toggle -->
     <v-btn icon size="small" class="mr-1" @click="toggleMode">
       <v-icon size="20">{{ isDark ? 'mdi-weather-sunny' : 'mdi-weather-night' }}</v-icon>
-      <v-tooltip activator="parent">{{ isDark ? 'Light mode' : 'Dark mode' }}</v-tooltip>
+      <v-tooltip activator="parent">{{ isDark ? t('toolbar.lightMode') : t('toolbar.darkMode') }}</v-tooltip>
     </v-btn>
+
+    <!-- Language picker -->
+    <v-menu :close-on-content-click="true" location="bottom end">
+      <template #activator="{ props }">
+        <v-btn icon size="small" class="mr-1" v-bind="props">
+          <v-icon size="20">mdi-translate</v-icon>
+          <v-tooltip activator="parent">{{ t('toolbar.language') }}</v-tooltip>
+        </v-btn>
+      </template>
+      <v-list density="compact" min-width="120">
+        <v-list-item
+          title="English"
+          :active="locale === 'en'"
+          color="primary"
+          rounded="lg"
+          @click="setLocale('en')"
+        />
+        <v-list-item
+          title="简体中文"
+          :active="locale === 'zh-CN'"
+          color="primary"
+          rounded="lg"
+          @click="setLocale('zh-CN')"
+        />
+        <v-list-item
+          title="繁體中文"
+          :active="locale === 'zh-TW'"
+          color="primary"
+          rounded="lg"
+          @click="setLocale('zh-TW')"
+        />
+        <v-list-item
+          title="日本語"
+          :active="locale === 'ja'"
+          color="primary"
+          rounded="lg"
+          @click="setLocale('ja')"
+        />
+      </v-list>
+    </v-menu>
 
     <!-- Accent color picker -->
     <v-menu :close-on-content-click="false" location="bottom end">
       <template #activator="{ props }">
         <v-btn icon size="small" v-bind="props">
           <v-icon size="20" :color="accentColor">mdi-palette-outline</v-icon>
-          <v-tooltip activator="parent">Accent color</v-tooltip>
+          <v-tooltip activator="parent">{{ t('toolbar.accentColor') }}</v-tooltip>
         </v-btn>
       </template>
       <v-card min-width="180" class="pa-3">
-        <div class="text-caption text-medium-emphasis mb-2">Accent color</div>
+        <div class="text-caption text-medium-emphasis mb-2">{{ t('toolbar.accentColor') }}</div>
         <div class="d-flex flex-wrap ga-2">
           <v-btn
             v-for="c in ACCENT_COLORS"
@@ -275,13 +330,13 @@ async function onFilesSelected(e) {
     <v-card min-width="240" class="pa-1">
 
       <!-- Entry count + filter -->
-      <div class="text-caption text-medium-emphasis px-3 pt-2 pb-1">{{ store.total }} items</div>
+      <div class="text-caption text-medium-emphasis px-3 pt-2 pb-1">{{ t('toolbar.items', { n: store.total }) }}</div>
       <div class="px-2 pb-2">
         <v-text-field
           v-model="filterInput"
           density="compact"
           variant="outlined"
-          placeholder="regex filter…"
+          :placeholder="t('toolbar.regexFilter')"
           hide-details
           clearable
           :error="!!filterError"
@@ -302,11 +357,11 @@ async function onFilesSelected(e) {
         <v-btn-toggle v-model="store.viewMode" mandatory density="compact" rounded="lg" color="primary" style="width:100%">
           <v-btn value="waterfall" size="small" style="flex:1">
             <v-icon size="18" class="mr-1">mdi-view-dashboard-outline</v-icon>
-            Waterfall
+            {{ t('toolbar.waterfall') }}
           </v-btn>
           <v-btn value="list" size="small" style="flex:1">
             <v-icon size="18" class="mr-1">mdi-view-list-outline</v-icon>
-            List
+            {{ t('toolbar.list') }}
           </v-btn>
         </v-btn-toggle>
       </div>
@@ -319,21 +374,21 @@ async function onFilesSelected(e) {
         </div>
         <v-list-item
           prepend-icon="mdi-upload-outline"
-          title="Upload files"
+          :title="t('toolbar.upload')"
           density="compact"
           rounded="lg"
           @click="openUpload"
         />
         <v-list-item
           prepend-icon="mdi-file-plus-outline"
-          title="New file"
+          :title="t('toolbar.newFile')"
           density="compact"
           rounded="lg"
           @click="openTouch"
         />
         <v-list-item
           prepend-icon="mdi-folder-plus-outline"
-          title="New folder"
+          :title="t('toolbar.newFolder')"
           density="compact"
           rounded="lg"
           @click="openMkdir"
@@ -341,7 +396,7 @@ async function onFilesSelected(e) {
         <template v-if="store.clipboard && !store.isAtHome">
           <v-list-item
             :prepend-icon="store.clipboard.action === 'cut' ? 'mdi-content-cut' : 'mdi-content-copy'"
-            :title="'Paste ' + (store.clipboard.entries.length > 1 ? store.clipboard.entries.length + ' items' : store.clipboard.entries[0].name)"
+            :title="t('toolbar.pasteName', { name: clipboardLabel })"
             density="compact"
             rounded="lg"
             color="primary"
@@ -350,7 +405,7 @@ async function onFilesSelected(e) {
           />
           <v-list-item
             prepend-icon="mdi-close-circle-outline"
-            title="Clear clipboard"
+            :title="t('toolbar.clearClipboard')"
             density="compact"
             rounded="lg"
             @click="store.clearClipboard"
@@ -363,15 +418,52 @@ async function onFilesSelected(e) {
       <!-- Dark / Light -->
       <v-list-item
         :prepend-icon="isDark ? 'mdi-weather-sunny' : 'mdi-weather-night'"
-        :title="isDark ? 'Light mode' : 'Dark mode'"
+        :title="isDark ? t('toolbar.lightMode') : t('toolbar.darkMode')"
         density="compact"
         rounded="lg"
         @click="toggleMode"
       />
 
+      <!-- Language -->
+      <v-list-item
+        prepend-icon="mdi-translate"
+        :title="t('toolbar.language')"
+        density="compact"
+        rounded="lg"
+      >
+        <template #append>
+          <div class="d-flex ga-1">
+            <v-btn
+              size="x-small"
+              :variant="locale === 'en' ? 'tonal' : 'text'"
+              :color="locale === 'en' ? 'primary' : undefined"
+              @click.stop="setLocale('en')"
+            >EN</v-btn>
+            <v-btn
+              size="x-small"
+              :variant="locale === 'zh-CN' ? 'tonal' : 'text'"
+              :color="locale === 'zh-CN' ? 'primary' : undefined"
+              @click.stop="setLocale('zh-CN')"
+            >简体</v-btn>
+            <v-btn
+              size="x-small"
+              :variant="locale === 'zh-TW' ? 'tonal' : 'text'"
+              :color="locale === 'zh-TW' ? 'primary' : undefined"
+              @click.stop="setLocale('zh-TW')"
+            >繁中</v-btn>
+            <v-btn
+              size="x-small"
+              :variant="locale === 'ja' ? 'tonal' : 'text'"
+              :color="locale === 'ja' ? 'primary' : undefined"
+              @click.stop="setLocale('ja')"
+            >日本語</v-btn>
+          </div>
+        </template>
+      </v-list-item>
+
       <!-- Accent color -->
       <v-list-item density="compact" class="pa-2">
-        <div class="text-caption text-medium-emphasis mb-1 ml-1">Accent color</div>
+        <div class="text-caption text-medium-emphasis mb-1 ml-1">{{ t('toolbar.accentColor') }}</div>
         <div class="d-flex flex-wrap ga-2">
           <v-btn
             v-for="c in ACCENT_COLORS"
@@ -392,7 +484,7 @@ async function onFilesSelected(e) {
         <v-divider />
         <v-list-item
           prepend-icon="mdi-logout"
-          title="Logout"
+          :title="t('toolbar.logout')"
           density="compact"
           rounded="lg"
           base-color="error"
@@ -404,8 +496,8 @@ async function onFilesSelected(e) {
 
   <DialogNewItem
     v-model="touchDialog"
-    title="New File"
-    label="File name"
+    :title="t('dialog.newFile')"
+    :label="t('dialog.fileName')"
     v-model:name="touchName"
     :loading="touchLoading"
     :error="touchError"
@@ -413,8 +505,8 @@ async function onFilesSelected(e) {
   />
   <DialogNewItem
     v-model="mkdirDialog"
-    title="New Folder"
-    label="Folder name"
+    :title="t('dialog.newFolder')"
+    :label="t('dialog.folderName')"
     v-model:name="mkdirName"
     :loading="mkdirLoading"
     :error="mkdirError"

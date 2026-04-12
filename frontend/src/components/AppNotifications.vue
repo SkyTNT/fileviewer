@@ -1,9 +1,11 @@
 <script setup>
+import { useI18n } from 'vue-i18n'
 import { useFileStore } from '../stores/fileStore.js'
 import { useNotification } from '../composables/useNotification.js'
 
 const store = useFileStore()
 const { notifMsg, notifColor, notifVisible } = useNotification()
+const { t } = useI18n()
 </script>
 
 <template>
@@ -25,7 +27,7 @@ const { notifMsg, notifColor, notifVisible } = useNotification()
     <template v-if="store.deleteProgress">
       <div class="d-flex align-center ga-2 mb-1">
         <v-icon size="18" color="error">mdi-delete-outline</v-icon>
-        <span class="text-body-2 font-weight-medium">Deleting files</span>
+        <span class="text-body-2 font-weight-medium">{{ t('notify.deletingFiles') }}</span>
         <v-spacer />
         <span class="text-caption text-medium-emphasis">
           {{ store.deleteProgress.done }} / {{ store.deleteProgress.total }}
@@ -42,7 +44,7 @@ const { notifMsg, notifColor, notifVisible } = useNotification()
           {{ store.pasteProgress.action === 'cut' ? 'mdi-content-cut' : 'mdi-content-copy' }}
         </v-icon>
         <span class="text-body-2 font-weight-medium">
-          {{ store.pasteProgress.action === 'cut' ? 'Moving' : 'Copying' }} files
+          {{ store.pasteProgress.action === 'cut' ? t('notify.movingFiles') : t('notify.copyingFiles') }}
         </span>
         <v-spacer />
         <span class="text-caption text-medium-emphasis">
@@ -59,10 +61,10 @@ const { notifMsg, notifColor, notifVisible } = useNotification()
   <!-- Paste conflict dialog -->
   <v-dialog :model-value="!!store.pasteConflicts" max-width="480" persistent>
     <v-card>
-      <v-card-title class="pa-4">Name conflict</v-card-title>
+      <v-card-title class="pa-4">{{ t('notify.conflict') }}</v-card-title>
       <v-card-text class="pt-0">
         <p class="mb-3 text-body-2">
-          {{ store.pasteConflicts?.conflicts.length }} item(s) already exist in the destination:
+          {{ t('notify.alreadyExist', { n: store.pasteConflicts?.conflicts.length }) }}
         </p>
         <v-list density="compact" class="rounded mb-3" max-height="160" style="overflow-y:auto">
           <v-list-item
@@ -73,17 +75,17 @@ const { notifMsg, notifColor, notifVisible } = useNotification()
           />
           <v-list-item
             v-if="(store.pasteConflicts?.conflicts.length ?? 0) > 100"
-            :title="`… and ${store.pasteConflicts.conflicts.length - 100} more`"
+            :title="t('notify.andMore', { n: store.pasteConflicts.conflicts.length - 100 })"
           />
         </v-list>
-        <p class="text-body-2">What would you like to do?</p>
+        <p class="text-body-2">{{ t('notify.whatToDo') }}</p>
       </v-card-text>
       <v-card-actions class="pa-4 pt-0 flex-wrap ga-2">
-        <v-btn variant="text" @click="store.pasteConflicts = null">Cancel</v-btn>
+        <v-btn variant="text" @click="store.pasteConflicts = null">{{ t('notify.cancel') }}</v-btn>
         <v-spacer />
-        <v-btn variant="tonal" @click="store.resolvePaste('skip')">Skip</v-btn>
-        <v-btn variant="tonal" color="warning" @click="store.resolvePaste('coexist')">Keep both</v-btn>
-        <v-btn variant="tonal" color="error" @click="store.resolvePaste('overwrite')">Overwrite</v-btn>
+        <v-btn variant="tonal" @click="store.resolvePaste('skip')">{{ t('notify.skip') }}</v-btn>
+        <v-btn variant="tonal" color="warning" @click="store.resolvePaste('coexist')">{{ t('notify.keepBoth') }}</v-btn>
+        <v-btn variant="tonal" color="error" @click="store.resolvePaste('overwrite')">{{ t('notify.overwrite') }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>

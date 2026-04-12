@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useFileStore } from '../../stores/fileStore.js'
 import { filesApi } from '../../services/api.js'
 import { copyFileToClipboard } from '../../composables/useCopyToClipboard.js'
@@ -15,6 +16,7 @@ const props = defineProps({
 const emit  = defineEmits(['update:modelValue', 'rename', 'delete', 'delete-multi', 'mkdir', 'touch', 'paste'])
 const store = useFileStore()
 const { showError, showSuccess } = useNotification()
+const { t } = useI18n()
 
 const canWrite = () => store.writeMode && !store.isAtHome
 
@@ -32,7 +34,7 @@ const multiDownloadFiles = computed(() =>
 async function copyClipboard() {
   try {
     await copyFileToClipboard(props.file)
-    showSuccess('Copied to clipboard')
+    showSuccess(t('notify.copiedToClipboard'))
   } catch (e) {
     showError(e.message)
   }
@@ -63,7 +65,7 @@ function downloadMulti() {
       <v-list-item
         v-if="isMultiTarget && multiDownloadFiles.length"
         prepend-icon="mdi-download-outline"
-        :title="`Download ${multiDownloadFiles.length} files`"
+        :title="t('menu.downloadFiles', { n: multiDownloadFiles.length })"
         @click="downloadMulti"
       />
 
@@ -71,7 +73,7 @@ function downloadMulti() {
       <v-list-item
         v-else-if="file && !file.is_dir"
         prepend-icon="mdi-download-outline"
-        title="Download"
+        :title="t('menu.download')"
         :href="filesApi.downloadUrl(file.path)"
         :download="file.name"
       />
@@ -80,7 +82,7 @@ function downloadMulti() {
       <v-list-item
         v-if="file && !file.is_dir && !isMultiTarget"
         prepend-icon="mdi-clipboard-outline"
-        title="Copy to clipboard"
+        :title="t('menu.copyToClipboard')"
         @click="copyClipboard"
       />
 
@@ -89,27 +91,40 @@ function downloadMulti() {
         <!-- File-specific write operations -->
         <template v-if="file">
           <v-divider v-if="!file.is_dir || isMultiTarget" />
-          <v-list-item prepend-icon="mdi-content-copy" :title="isMultiTarget ? `Copy ${store.selectedEntries.length} items` : 'Copy'" @click="store.setCopy(file)" />
-          <v-list-item prepend-icon="mdi-content-cut"  :title="isMultiTarget ? `Cut ${store.selectedEntries.length} items` : 'Cut'"  @click="store.setCut(file)" />
+          <v-list-item
+            prepend-icon="mdi-content-copy"
+            :title="isMultiTarget ? t('menu.copyItems', { n: store.selectedEntries.length }) : t('menu.copy')"
+            @click="store.setCopy(file)"
+          />
+          <v-list-item
+            prepend-icon="mdi-content-cut"
+            :title="isMultiTarget ? t('menu.cutItems', { n: store.selectedEntries.length }) : t('menu.cut')"
+            @click="store.setCut(file)"
+          />
           <template v-if="isMultiTarget">
             <v-divider />
-            <v-list-item prepend-icon="mdi-delete-outline" :title="`Delete ${store.selectedEntries.length} items`" base-color="error" @click="$emit('delete-multi', store.selectedEntries)" />
+            <v-list-item
+              prepend-icon="mdi-delete-outline"
+              :title="t('menu.deleteItems', { n: store.selectedEntries.length })"
+              base-color="error"
+              @click="$emit('delete-multi', store.selectedEntries)"
+            />
           </template>
           <template v-else>
             <v-divider />
-            <v-list-item prepend-icon="mdi-pencil-outline" title="Rename" @click="$emit('rename')" />
-            <v-list-item prepend-icon="mdi-delete-outline" title="Delete" base-color="error" @click="$emit('delete')" />
+            <v-list-item prepend-icon="mdi-pencil-outline" :title="t('menu.rename')" @click="$emit('rename')" />
+            <v-list-item prepend-icon="mdi-delete-outline" :title="t('menu.delete')" base-color="error" @click="$emit('delete')" />
           </template>
           <v-divider />
         </template>
 
         <!-- Background operations (always visible in write mode) -->
-        <v-list-item prepend-icon="mdi-folder-plus-outline" title="New Folder" @click="$emit('mkdir')" />
-        <v-list-item prepend-icon="mdi-file-plus-outline"   title="New File"   @click="$emit('touch')" />
+        <v-list-item prepend-icon="mdi-folder-plus-outline" :title="t('menu.newFolder')" @click="$emit('mkdir')" />
+        <v-list-item prepend-icon="mdi-file-plus-outline"   :title="t('menu.newFile')"   @click="$emit('touch')" />
 
         <template v-if="store.clipboard">
           <v-divider />
-          <v-list-item prepend-icon="mdi-content-paste" title="Paste here" @click="$emit('paste')" />
+          <v-list-item prepend-icon="mdi-content-paste" :title="t('menu.paste')" @click="$emit('paste')" />
         </template>
 
       </template>

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps({
   value: { required: true },
@@ -8,6 +9,7 @@ const props = defineProps({
   initialExpanded: { type: Boolean, default: true },
 })
 
+const { t } = useI18n()
 const expanded = ref(props.depth < 2 ? props.initialExpanded : false)
 
 const isObject = computed(() => props.value !== null && typeof props.value === 'object' && !Array.isArray(props.value))
@@ -48,7 +50,7 @@ const valueClass = computed(() => {
     <template v-if="isComplex">
       <span class="bracket toggle" @click="expanded = !expanded">
         {{ expanded ? (isArray ? '[' : '{') : (isArray ? '[...]' : '{...}') }}
-        <span class="count text-grey" v-if="!expanded"> {{ childCount }} items</span>
+        <span class="count text-grey" v-if="!expanded"> {{ t('jsonNode.items', { n: childCount }) }}</span>
       </span>
       <template v-if="expanded">
         <div class="children">

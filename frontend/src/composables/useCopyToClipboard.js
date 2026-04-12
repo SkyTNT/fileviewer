@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { imagesApi, filesApi } from '../services/api.js'
 import { useNotification } from './useNotification.js'
 
@@ -39,13 +40,14 @@ export async function copyFileToClipboard(file) {
 
 export function useCopyToClipboard() {
   const { showError, showSuccess } = useNotification()
+  const { t } = useI18n()
   const copyLoading = ref(false)
 
   async function copyToClipboard(file) {
     copyLoading.value = true
     try {
       await copyFileToClipboard(file)
-      showSuccess('Copied to clipboard')
+      showSuccess(t('notify.copiedToClipboard'))
     } catch (e) {
       showError(e.message)
     } finally {

@@ -1,9 +1,11 @@
 <script setup>
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { textApi } from '../../services/api.js'
 import JsonNode from './JsonNode.vue'
 
 const emit = defineEmits(['open-dataframe'])
+const { t } = useI18n()
 
 const dialog   = ref(false)
 const fileName = ref('')
@@ -110,13 +112,13 @@ defineExpose({ open })
       <v-card-text style="max-height:80vh; overflow:auto">
         <!-- JSONL mode picker -->
         <div v-if="picking" class="d-flex flex-column align-center justify-center pa-12 ga-4">
-          <p class="text-h6 mb-2">Open as…</p>
+          <p class="text-h6 mb-2">{{ t('jsonViewer.openAs') }}</p>
           <div class="d-flex ga-4">
             <v-btn prepend-icon="mdi-file-tree-outline" color="primary" variant="tonal" size="large" @click="chooseTree">
-              JSON Tree
+              {{ t('jsonViewer.jsonTree') }}
             </v-btn>
             <v-btn prepend-icon="mdi-table-large" color="secondary" variant="tonal" size="large" @click="chooseDataframe">
-              DataFrame
+              {{ t('jsonViewer.dataframe') }}
             </v-btn>
           </div>
         </div>
