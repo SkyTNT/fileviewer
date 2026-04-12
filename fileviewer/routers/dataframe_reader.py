@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -86,8 +87,12 @@ def get_data(
         lf = get_lazy_frame(str(file_path))
 
         if filter_sql and filter_sql.strip():
+            sql_str = filter_sql.strip()
             ctx = pl.SQLContext({"df": lf})
-            lf = ctx.execute(f"SELECT * FROM df WHERE {filter_sql}", eager=False)
+            if re.match(r'^\s*SELECT\b', sql_str, re.IGNORECASE):
+                lf = ctx.execute(sql_str, eager=False)
+            else:
+                lf = ctx.execute(f"SELECT * FROM df WHERE {sql_str}", eager=False)
 
         if sort_col:
             lf = lf.sort(sort_col, descending=not sort_asc)

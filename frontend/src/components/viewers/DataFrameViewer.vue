@@ -1,5 +1,10 @@
 <script setup>
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, onUnmounted, watch } from 'vue'
+import { EditorView, keymap, placeholder } from '@codemirror/view'
+import { EditorState, Compartment } from '@codemirror/state'
+import { sql, StandardSQL } from '@codemirror/lang-sql'
+import { history, historyKeymap, defaultKeymap } from '@codemirror/commands'
+import { autocompletion, completionKeymap, acceptCompletion } from '@codemirror/autocomplete'
 import { dataframeApi, imagesApi } from '../../services/api.js'
 import JsonNode from './JsonNode.vue'
 
@@ -22,86 +27,152 @@ const loading  = ref(false)
 const error    = ref(null)
 const schema   = ref([])
 
-// Image columns: { colName: 'path' | 'url' }
 const imageCols = ref({})
+const filterSql = ref('')
+const schemaTree = ref([])
 
-// Parquet-only filter
-const filterInput    = ref('')
-const filterSql      = ref('')
+// ── CodeMirror SQL editor ─────────────────────────────────────────────────────
 
-// Autocomplete
-const filterFieldRef  = ref(null)
-const wrapperRef      = ref(null)
-const suggestionListRef = ref(null)
-const suggestions     = ref([])   // [{ label, insert, kind, detail }]
-const suggestionIdx   = ref(-1)
-const showSuggestions = ref(false)
-const wordStart       = ref(0)
+const sqlEditorRef = ref(null)
+const schemaCompartment = new Compartment()
+let editorView = null
+let pendingColumns = null
 
-const SQL_FUNCTIONS = [
-  'ABS', 'AVG', 'CAST', 'CEIL', 'COALESCE', 'COUNT', 'DATE',
-  'DAY', 'FLOOR', 'LENGTH', 'LOWER', 'LTRIM', 'MAX', 'MIN',
-  'MONTH', 'NULLIF', 'ROUND', 'RTRIM', 'STRFTIME', 'SUBSTR',
-  'SUM', 'TRIM', 'UPPER', 'YEAR',
-]
-
-// Suggestions shown after a column name
-const OPERATOR_SUGGESTIONS = [
-  { label: '=',           insert: '= ',            kind: 'operator', detail: 'equals' },
-  { label: '!=',          insert: '!= ',           kind: 'operator', detail: 'not equals' },
-  { label: '>',           insert: '> ',            kind: 'operator', detail: 'greater than' },
-  { label: '<',           insert: '< ',            kind: 'operator', detail: 'less than' },
-  { label: '>=',          insert: '>= ',           kind: 'operator', detail: 'greater or equal' },
-  { label: '<=',          insert: '<= ',           kind: 'operator', detail: 'less or equal' },
-  { label: '+',           insert: '+ ',            kind: 'operator', detail: 'add' },
-  { label: '-',           insert: '- ',            kind: 'operator', detail: 'subtract' },
-  { label: '*',           insert: '* ',            kind: 'operator', detail: 'multiply' },
-  { label: '/',           insert: '/ ',            kind: 'operator', detail: 'divide' },
-  { label: 'LIKE',        insert: 'LIKE ',         kind: 'keyword',  detail: 'pattern match' },
-  { label: 'ILIKE',       insert: 'ILIKE ',        kind: 'keyword',  detail: 'case-insensitive' },
-  { label: 'BETWEEN',     insert: 'BETWEEN ',      kind: 'keyword',  detail: 'range' },
-  { label: 'IN',          insert: 'IN (',          kind: 'keyword',  detail: 'in list' },
-  { label: 'NOT IN',      insert: 'NOT IN (',      kind: 'keyword',  detail: 'not in list' },
-  { label: 'IS NULL',     insert: 'IS NULL',       kind: 'keyword',  detail: 'is null' },
-  { label: 'IS NOT NULL', insert: 'IS NOT NULL',   kind: 'keyword',  detail: 'is not null' },
-  { label: 'AND',         insert: 'AND ',          kind: 'keyword',  detail: '' },
-  { label: 'OR',          insert: 'OR ',           kind: 'keyword',  detail: '' },
-]
-
-// Suggestions shown after a comparison operator
-const VALUE_SUGGESTIONS = [
-  { label: 'NULL',  insert: 'NULL',  kind: 'keyword', detail: '' },
-  { label: 'TRUE',  insert: 'TRUE',  kind: 'keyword', detail: '' },
-  { label: 'FALSE', insert: 'FALSE', kind: 'keyword', detail: '' },
-]
-
-// Suggestions shown after a value / closing expression
-const CONJUNCTION_SUGGESTIONS = [
-  { label: 'AND', insert: 'AND ', kind: 'keyword', detail: '' },
-  { label: 'OR',  insert: 'OR ',  kind: 'keyword', detail: '' },
-]
-
-// Determine what kind of token precedes the current word
-function detectContext(textBeforeWord) {
-  const t = textBeforeWord.trimEnd()
-  if (!t) return 'start'
-
-  if (/"[^"]*"$/.test(t))                          return 'after_column'
-  if (/[!=<>]+$/.test(t))                          return 'after_operator'
-  if (/\b(LIKE|ILIKE|BETWEEN)$/i.test(t))          return 'after_operator'
-  if (/\b(NULL|TRUE|FALSE)$/i.test(t))             return 'after_value'
-  if (/'[^']*'$/.test(t))                          return 'after_value'
-  if (/(?<![a-zA-Z_])\d+(\.\d+)?$/.test(t))       return 'after_value'
-  if (/[)]$/.test(t))                              return 'after_value'
-  if (/\b(AND|OR)$/i.test(t))                      return 'start'
-  if (/\bNOT$/i.test(t))                           return 'start'
-  if (/[,(]$/.test(t))                             return 'start'
-  if (/\b[a-zA-Z_][\w.]*$/.test(t))               return 'after_column'
-  return 'start'
+function buildSqlExt(columnNames) {
+  return sql({
+    dialect: StandardSQL,
+    schema: { df: columnNames },
+    defaultTable: 'df',
+    upperCaseKeywords: true,
+  })
 }
 
-// Flat list of all dotted paths built from schema_tree
-const schemaTree = ref([])
+function createEditor(container) {
+  editorView = new EditorView({
+    state: EditorState.create({
+      doc: '',
+      extensions: [
+        history(),
+        schemaCompartment.of(buildSqlExt([])),
+        autocompletion({ closeOnBlur: true }),
+        keymap.of([
+          {
+            key: 'Enter',
+            run: (view) => {
+              if (acceptCompletion(view)) return true
+              applyFilter()
+              return true
+            },
+          },
+          {
+            key: 'Shift-Enter',
+            run: (view) => {
+              view.dispatch(view.state.replaceSelection('\n'))
+              return true
+            },
+          },
+          ...completionKeymap,
+          ...defaultKeymap,
+          ...historyKeymap,
+        ]),
+        placeholder('SELECT * FROM df WHERE age > 30  — or just:  age > 30'),
+        EditorView.lineWrapping,
+        EditorView.theme({
+          // All colors use Vuetify CSS vars so they adapt to light/dark theme.
+          // EditorView.theme() injects a <style> into <head> where the vars
+          // resolve correctly via the cascade from .v-application.
+          '&': {
+            backgroundColor: 'rgb(var(--v-theme-surface))',
+            color: 'rgb(var(--v-theme-on-surface))',
+            borderRadius: '3px',
+            maxHeight: '120px',
+          },
+          '.cm-scroller': {
+            fontFamily: "'Roboto Mono', 'Courier New', monospace",
+            fontSize: '13px',
+            lineHeight: '1.6',
+            overflow: 'auto',
+          },
+          '.cm-content': {
+            padding: '6px 10px',
+            minHeight: '26px',
+            caretColor: 'rgb(var(--v-theme-primary))',
+          },
+          '.cm-line': { padding: '0' },
+          '.cm-focused': { outline: 'none' },
+          '.cm-placeholder': {
+            color: 'rgba(var(--v-theme-on-surface), 0.35)',
+            fontStyle: 'italic',
+          },
+          '.cm-selectionBackground': {
+            backgroundColor: 'rgba(var(--v-theme-primary), 0.2) !important',
+          },
+          '&.cm-focused .cm-selectionBackground': {
+            backgroundColor: 'rgba(var(--v-theme-primary), 0.3) !important',
+          },
+          '.cm-cursor, .cm-dropCursor': {
+            borderLeftColor: 'rgb(var(--v-theme-primary))',
+          },
+          // Completion tooltip — inherits Vuetify vars since it's inside .v-application
+          '.cm-tooltip': {
+            backgroundColor: 'rgb(var(--v-theme-surface))',
+            color: 'rgb(var(--v-theme-on-surface))',
+            border: '1px solid rgba(var(--v-border-color), var(--v-border-opacity))',
+            borderRadius: '6px',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+            overflow: 'hidden',
+          },
+          '.cm-tooltip.cm-tooltip-autocomplete > ul': {
+            fontFamily: "'Roboto Mono', 'Courier New', monospace",
+            fontSize: '13px',
+          },
+          '.cm-tooltip.cm-tooltip-autocomplete > ul > li': {
+            padding: '4px 10px',
+          },
+          '.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]': {
+            backgroundColor: 'rgba(var(--v-theme-primary), 0.2)',
+            color: 'rgb(var(--v-theme-on-surface))',
+          },
+        }),
+      ],
+    }),
+    parent: container,
+  })
+  if (pendingColumns !== null) {
+    updateEditorSchema(pendingColumns)
+  }
+}
+
+function updateEditorSchema(columnNames) {
+  if (!editorView) {
+    pendingColumns = columnNames
+    return
+  }
+  pendingColumns = null
+  editorView.dispatch({
+    effects: schemaCompartment.reconfigure(buildSqlExt(columnNames)),
+  })
+}
+
+watch(dialog, async (newVal) => {
+  if (!newVal) return
+  await nextTick()
+  const container = sqlEditorRef.value
+  if (!container) return
+  // Vuetify unmounts dialog content on close, so the container is a fresh empty
+  // element each time the dialog reopens. Recreate the editor whenever it's gone.
+  if (!container.querySelector('.cm-editor')) {
+    editorView?.destroy()
+    editorView = null
+    createEditor(container)
+  }
+})
+
+onUnmounted(() => {
+  editorView?.destroy()
+})
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 const allPaths = computed(() => {
   const result = []
@@ -130,178 +201,45 @@ function displayValue(val) {
   return String(val)
 }
 
-function onFilterInput() {
-  const el = filterFieldRef.value?.$el?.querySelector('input')
-  if (!el) return
-  const text   = el.value
-  const cursor = el.selectionStart ?? text.length
-
-  // Walk back over word chars and dots (for nested column paths)
-  let s = cursor
-  while (s > 0 && /[\w.]/.test(text[s - 1])) s--
-  wordStart.value  = s
-  const word       = text.slice(s, cursor)
-  const textBefore = text.slice(0, s)
-  const context    = detectContext(textBefore)
-
-  // Nothing typed at all → hide
-  if (!word && !textBefore.trim()) {
-    showSuggestions.value = false
-    return
-  }
-  // No word typed, start context (cursor right after opening) → hide
-  if (!word && context === 'start') {
-    showSuggestions.value = false
-    return
-  }
-
-  const lower = word.toLowerCase()
-  const pfx   = (label) => !word || label.toLowerCase().startsWith(lower)
-  const sub   = (path)  => !word || path.toLowerCase().includes(lower)
-  const items = []
-
-  if (context === 'after_column') {
-    for (const op of OPERATOR_SUGGESTIONS)
-      if (pfx(op.label)) items.push(op)
-
-  } else if (context === 'after_operator') {
-    for (const v of VALUE_SUGGESTIONS)
-      if (pfx(v.label)) items.push(v)
-    for (const { path, dtype } of allPaths.value)
-      if (sub(path)) items.push({ label: path, insert: quoteCol(path), kind: 'column', detail: shortDtype(dtype) })
-    for (const fn of SQL_FUNCTIONS)
-      if (pfx(fn)) items.push({ label: fn + '()', insert: fn + '(', kind: 'function', detail: '' })
-
-  } else if (context === 'after_value') {
-    for (const kw of CONJUNCTION_SUGGESTIONS)
-      if (pfx(kw.label)) items.push(kw)
-
-  } else {
-    // start: columns first, then NOT, then functions
-    for (const { path, dtype } of allPaths.value)
-      if (sub(path)) items.push({ label: path, insert: quoteCol(path), kind: 'column', detail: shortDtype(dtype) })
-    if (pfx('NOT')) items.push({ label: 'NOT', insert: 'NOT ', kind: 'keyword', detail: '' })
-    for (const fn of SQL_FUNCTIONS)
-      if (pfx(fn)) items.push({ label: fn + '()', insert: fn + '(', kind: 'function', detail: '' })
-  }
-
-  suggestions.value   = items.slice(0, 16)
-  suggestionIdx.value = -1
-  showSuggestions.value = items.length > 0
-}
-
-function scrollSuggestionIntoView() {
-  nextTick(() => {
-    const list = suggestionListRef.value?.$el
-    if (!list) return
-    const items = list.querySelectorAll('.v-list-item')
-    items[suggestionIdx.value]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  })
-}
-
-const skipNextBlur = ref(false)
-
-function onFilterKeydown(e) {
-  if (e.key === 'Tab' && !showSuggestions.value) {
-    e.preventDefault()
-    e.stopPropagation()
-    if (!filterInput.value.trim()) {
-      // Empty input: show all columns + NOT + functions (start context, no filter)
-      const items = [
-        ...allPaths.value.map(({ path, dtype }) => ({ label: path, insert: quoteCol(path), kind: 'column', detail: shortDtype(dtype) })),
-        { label: 'NOT', insert: 'NOT ', kind: 'keyword', detail: '' },
-        ...SQL_FUNCTIONS.map(fn => ({ label: fn + '()', insert: fn + '(', kind: 'function', detail: '' })),
-      ]
-      suggestions.value     = items.slice(0, 16)
-      suggestionIdx.value   = -1
-      showSuggestions.value = suggestions.value.length > 0
-    } else {
-      onFilterInput()
-    }
-    return
-  }
-  if (!showSuggestions.value) return
-  if (e.key === 'ArrowDown') {
-    e.preventDefault()
-    e.stopPropagation()
-    suggestionIdx.value = Math.min(suggestionIdx.value + 1, suggestions.value.length - 1)
-    scrollSuggestionIntoView()
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault()
-    e.stopPropagation()
-    suggestionIdx.value = Math.max(suggestionIdx.value - 1, -1)
-    scrollSuggestionIntoView()
-  } else if (e.key === 'Tab') {
-    e.preventDefault()
-    e.stopPropagation()
-    const idx = suggestionIdx.value >= 0 ? suggestionIdx.value : 0
-    selectSuggestion(suggestions.value[idx])
-  } else if (e.key === 'Enter' && suggestionIdx.value >= 0) {
-    e.preventDefault()
-    selectSuggestion(suggestions.value[suggestionIdx.value])
-  } else if (e.key === 'Escape') {
-    showSuggestions.value = false
-  }
-}
-
-function onFilterBlur() {
-  if (skipNextBlur.value) {
-    skipNextBlur.value = false
-    return
-  }
-  showSuggestions.value = false
-}
-
-function quoteCol(col) {
-  return /[^a-zA-Z0-9_]/.test(col) ? `"${col}"` : col
-}
-
-function selectSuggestion(item) {
-  const el = filterFieldRef.value?.$el?.querySelector('input')
-  if (!el) return
-  const cursor = el.selectionStart ?? filterInput.value.length
-  const before = filterInput.value.slice(0, wordStart.value)
-  const after  = filterInput.value.slice(cursor)
-  filterInput.value = before + item.insert + after
-  showSuggestions.value = false
-  nextTick(() => {
-    const pos = wordStart.value + item.insert.length
-    el.setSelectionRange(pos, pos)
-    el.focus()
-  })
-}
-
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 
-// ── open ────────────────────────────────────────────────────────────────────
+// ── open ──────────────────────────────────────────────────────────────────────
+
 async function open(file, type = 'parquet') {
-  fileType.value    = type
-  filePath.value    = file.path
-  fileName.value    = file.name
-  page.value        = 1
-  sortCol.value     = null
-  sortAsc.value     = true
-  filterInput.value = ''
-  filterSql.value   = ''
-  columns.value       = []
-  rows.value          = []
-  schema.value        = []
-  imageCols.value     = {}
-  error.value         = null
-  dialog.value        = true
+  fileType.value   = type
+  filePath.value   = file.path
+  fileName.value   = file.name
+  page.value       = 1
+  sortCol.value    = null
+  sortAsc.value    = true
+  filterSql.value  = ''
+  columns.value    = []
+  rows.value       = []
+  schema.value     = []
+  schemaTree.value = []
+  imageCols.value  = {}
+  error.value      = null
+  dialog.value     = true
+
+  if (editorView) {
+    editorView.dispatch({
+      changes: { from: 0, to: editorView.state.doc.length, insert: '' },
+    })
+  }
 
   await loadSchema()
   await loadParquet()
 }
 
-// ── Server-side pagination, SQL filter, sort (parquet + jsonl) ───────────────
+// ── Data loading ──────────────────────────────────────────────────────────────
+
 async function loadSchema() {
   try {
-    const res    = await dataframeApi.getSchema(filePath.value)
-    schema.value = res.data.columns.map((c, i) => ({ name: c, dtype: res.data.dtypes[i] }))
+    const res = await dataframeApi.getSchema(filePath.value)
+    schema.value     = res.data.columns.map((c, i) => ({ name: c, dtype: res.data.dtypes[i] }))
     schemaTree.value = res.data.schema_tree ?? []
+    updateEditorSchema(res.data.columns)
   } catch {}
-  // Detect image columns in parallel (non-blocking)
   dataframeApi.detectImageCols(filePath.value)
     .then(res => {
       imageCols.value = Object.fromEntries(res.data.image_cols.map(({ col, kind }) => [col, kind]))
@@ -313,7 +251,7 @@ async function loadParquet() {
   loading.value = true
   error.value   = null
   try {
-    const res     = await dataframeApi.getData(filePath.value, {
+    const res = await dataframeApi.getData(filePath.value, {
       page:       page.value,
       page_size:  pageSize.value,
       filter_sql: filterSql.value || undefined,
@@ -331,15 +269,21 @@ async function loadParquet() {
   }
 }
 
-// ── Controls ─────────────────────────────────────────────────────────────────
+// ── Controls ──────────────────────────────────────────────────────────────────
+
 function applyFilter() {
-  filterSql.value = filterInput.value
+  filterSql.value = editorView ? editorView.state.doc.toString().trim() : ''
   page.value = 1
   loadParquet()
 }
+
 function clearFilter() {
-  filterInput.value = ''
-  filterSql.value   = ''
+  filterSql.value = ''
+  if (editorView) {
+    editorView.dispatch({
+      changes: { from: 0, to: editorView.state.doc.length, insert: '' },
+    })
+  }
   page.value = 1
   loadParquet()
 }
@@ -366,8 +310,9 @@ function onPageSizeChange() {
   loadParquet()
 }
 
-// ── Row detail ───────────────────────────────────────────────────────────────
-const rowDialog  = ref(false)
+// ── Row detail ────────────────────────────────────────────────────────────────
+
+const rowDialog   = ref(false)
 const selectedRow = ref(null)
 
 function openRow(row) {
@@ -375,11 +320,11 @@ function openRow(row) {
   rowDialog.value   = true
 }
 
-// ── Image cell helpers ────────────────────────────────────────────────────────
+// ── Image helpers ─────────────────────────────────────────────────────────────
+
 function cellThumbUrl(value) {
   return value ? imagesApi.thumbnailUrl(value, 200) : ''
 }
-
 function openImgPreview(value) {
   if (value) emit('open-image', { path: value, name: value })
 }
@@ -406,57 +351,9 @@ defineExpose({ open })
       </v-card-title>
       <v-divider />
 
-      <!-- SQL filter bar with column autocomplete -->
+      <!-- SQL editor bar -->
       <div class="pa-2 d-flex align-center ga-2">
-        <div ref="wrapperRef" style="flex:1; max-width:560px;">
-          <v-text-field
-            ref="filterFieldRef"
-            v-model="filterInput"
-            density="compact"
-            hide-details
-            placeholder='WHERE clause, e.g. age > 30 AND name = "Alice"'
-            prepend-inner-icon="mdi-filter-outline"
-            variant="outlined"
-            autocomplete="off"
-            @input="onFilterInput"
-            @keydown="onFilterKeydown"
-            @blur="onFilterBlur"
-            @keyup.enter="applyFilter"
-          />
-          <v-menu
-            v-model="showSuggestions"
-            :activator="wrapperRef"
-            :open-on-click="false"
-            :close-on-content-click="false"
-            :open-on-hover="false"
-            no-click-animation
-            offset="2"
-          >
-            <v-list ref="suggestionListRef" density="compact" nav min-width="300" max-height="280">
-              <v-list-item
-                v-for="(item, idx) in suggestions"
-                :key="item.label"
-                :active="idx === suggestionIdx"
-                color="primary"
-                rounded="lg"
-                @mousedown.prevent
-                @click="selectSuggestion(item)"
-              >
-                <template #prepend>
-                  <v-icon size="14" class="mr-1" :color="{ column: 'primary', keyword: 'warning', function: 'deep-purple', operator: 'teal' }[item.kind]">
-                    {{ { column: 'mdi-table-column', keyword: 'mdi-code-tags', function: 'mdi-function', operator: 'mdi-approximately-equal' }[item.kind] }}
-                  </v-icon>
-                </template>
-                <v-list-item-title class="text-body-2" style="font-family:monospace">
-                  {{ item.label }}
-                </v-list-item-title>
-                <template #append>
-                  <v-chip v-if="item.detail" size="x-small" variant="tonal" label>{{ item.detail }}</v-chip>
-                </template>
-              </v-list-item>
-            </v-list>
-          </v-menu>
-        </div>
+        <div ref="sqlEditorRef" class="sql-editor-wrap" />
         <v-btn size="small" color="primary" @click="applyFilter">Filter</v-btn>
         <v-btn size="small" variant="tonal" @click="clearFilter">Clear</v-btn>
         <v-spacer />
@@ -576,6 +473,21 @@ defineExpose({ open })
 </template>
 
 <style scoped>
+.sql-editor-wrap {
+  flex: 1;
+  max-width: 700px;
+  min-height: 36px;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 4px;
+  /* overflow: visible so the autocomplete tooltip can extend outside the border */
+  cursor: text;
+  transition: border-color 0.15s;
+}
+.sql-editor-wrap:focus-within {
+  border-color: rgb(var(--v-theme-primary));
+  border-width: 2px;
+}
+
 .df-table {
   width: 100%;
   border-collapse: collapse;
@@ -611,3 +523,4 @@ defineExpose({ open })
   font-family: 'Roboto Mono', monospace;
 }
 </style>
+
