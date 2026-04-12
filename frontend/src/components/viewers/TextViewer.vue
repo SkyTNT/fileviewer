@@ -4,7 +4,7 @@ import { useTheme } from 'vuetify'
 import { Codemirror } from 'vue-codemirror'
 import { basicSetup } from 'codemirror'
 import { EditorView, keymap } from '@codemirror/view'
-import { EditorState } from '@codemirror/state'
+import { EditorState, Prec } from '@codemirror/state'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { completeAnyWord, acceptCompletion } from '@codemirror/autocomplete'
 import { getLangByExt } from '../../utils/langSupport.js'
@@ -48,12 +48,12 @@ const fillTheme = EditorView.theme({
   '.cm-gutters': { fontFamily: "'Roboto Mono','Courier New',monospace", fontSize: '13px', minHeight: '100%' },
 })
 
-const tabAccept = keymap.of([{ key: 'Tab', run: acceptCompletion }])
+const tabAccept = Prec.high(keymap.of([{ key: 'Tab', run: acceptCompletion }]))
 
 const extensions = computed(() => {
   const exts = [basicSetup, fillTheme, EditorView.lineWrapping, wordCompletion, tabAccept]
   if (isDark.value) exts.push(oneDark)
-  if (!editMode.value) exts.push(EditorState.readOnly.of(true))
+  if (!editMode.value) exts.push(EditorView.editable.of(false))
   const lang = getLangByExt(currentFile.value?.extension)
   if (lang) exts.push(lang)
   return exts
