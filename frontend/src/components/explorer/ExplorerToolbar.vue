@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 import { useFileStore } from '../../stores/fileStore.js'
@@ -25,10 +25,22 @@ function setLocale(lang) {
 }
 
 // ── Filter ────────────────────────────────────────────────────────────────────
-const showFilter  = ref(false)
-const filterInput = ref('')
-const filterError = ref('')
-let filterTimer   = null
+const showFilter     = ref(false)
+const filterInput    = ref('')
+const filterError    = ref('')
+const filterFieldRef = ref(null)
+let filterTimer      = null
+
+function onDocMousedown(e) {
+  if (!showFilter.value) return
+  const el = filterFieldRef.value?.$el
+  if (el && !el.contains(e.target)) {
+    el.querySelector('input')?.blur()
+  }
+}
+
+onMounted(() => document.addEventListener('mousedown', onDocMousedown))
+onUnmounted(() => document.removeEventListener('mousedown', onDocMousedown))
 
 watch(filterInput, (v) => {
   filterError.value = ''
@@ -166,6 +178,7 @@ const clipboardLabel = computed(() => {
     <!-- Filter input -->
     <v-text-field
       v-if="showFilter"
+      ref="filterFieldRef"
       v-model="filterInput"
       density="compact"
       variant="outlined"
