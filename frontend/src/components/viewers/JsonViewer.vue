@@ -11,17 +11,19 @@ const fileRef  = ref(null)
 const isJsonl  = ref(false)
 
 // tree state
-const treeData  = ref(null)
-const loading   = ref(false)
-const error     = ref(null)
-const picking   = ref(false)   // JSONL mode picker
+const treeData       = ref(null)
+const loading        = ref(false)
+const error          = ref(null)
+const picking        = ref(false)   // JSONL mode picker
+const cachedContent  = ref(null)    // content cached when JSON→JSONL fallback
 
 async function open(file) {
-  fileRef.value  = file
-  fileName.value = file.name
-  isJsonl.value  = file.extension === '.jsonl'
-  treeData.value = null
-  error.value    = null
+  fileRef.value       = file
+  fileName.value      = file.name
+  isJsonl.value       = file.extension === '.jsonl' || file.extension === '.ndjson'
+  treeData.value      = null
+  error.value         = null
+  cachedContent.value = null
 
   if (isJsonl.value) {
     // JSONL: let user choose tree or dataframe
@@ -35,17 +37,42 @@ async function open(file) {
   }
 }
 
+function _looksLikeJsonl(content) {
+  const lines = content.trim().split('\n').filter(l => l.trim())
+  if (lines.length < 2) return false
+  const valid = lines.filter(l => { try { JSON.parse(l); return true } catch { return false } }).length
+  return valid / lines.length >= 0.5
+}
+
 async function loadTree() {
   loading.value = true
   error.value   = null
   try {
-    const res = await textApi.getContent(fileRef.value.path)
+    let content
+    if (cachedContent.value !== null) {
+      content = cachedContent.value
+    } else {
+      const res = await textApi.getContent(fileRef.value.path)
+      content = res.data.content
+    }
+
     if (isJsonl.value) {
-      treeData.value = res.data.content
+      treeData.value = content
         .trim().split('\n').filter(l => l.trim())
         .flatMap(l => { try { return [JSON.parse(l)] } catch { return [] } })
     } else {
-      treeData.value = JSON.parse(res.data.content)
+      try {
+        treeData.value = JSON.parse(content)
+      } catch {
+        // JSON parse failed — check if it's actually JSONL mis-named as .json
+        if (_looksLikeJsonl(content)) {
+          isJsonl.value       = true
+          cachedContent.value = content
+          picking.value       = true
+          return
+        }
+        throw new Error('Invalid JSON')
+      }
     }
   } catch (e) {
     error.value = e.response?.data?.detail || e.message

@@ -11,7 +11,7 @@ from fastapi import APIRouter, Query, HTTPException
 
 from fileviewer.config import (
     validate_path, schema_to_tree,
-    JSONL_EXTENSIONS, CSV_EXTENSIONS, IMAGE_EXTENSIONS,
+    JSONL_EXTENSIONS, JSON_EXTENSIONS, CSV_EXTENSIONS, IMAGE_EXTENSIONS,
 )
 
 router = APIRouter()
@@ -24,6 +24,14 @@ def _load_lazy_frame(abs_path: str, mtime: float) -> pl.LazyFrame:
     suffix = Path(abs_path).suffix.lower()
     if suffix in JSONL_EXTENSIONS:
         return pl.scan_ndjson(abs_path)
+    if suffix in JSON_EXTENSIONS:
+        # .json files may be JSONL mis-named — try NDJSON scan
+        try:
+            return pl.scan_ndjson(abs_path)
+        except Exception as exc:
+            raise ValueError(
+                f"'{Path(abs_path).name}' could not be read as JSONL/NDJSON: {exc}"
+            ) from exc
     if suffix in CSV_EXTENSIONS:
         sample = pl.read_csv(
             abs_path,
