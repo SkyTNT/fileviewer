@@ -2,6 +2,10 @@ export default {
   app: {
     title: '文件查看器',
   },
+  dropzone: {
+    drop: '拖放文件以上传',
+    notAllowed: '写入模式未启用',
+  },
   toolbar: {
     items: '{n} 项',
     regexFilter: '正则过滤…',

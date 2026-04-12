@@ -2,6 +2,10 @@ export default {
   app: {
     title: 'File Viewer',
   },
+  dropzone: {
+    drop: 'Drop files to upload',
+    notAllowed: 'Write mode is disabled',
+  },
   toolbar: {
     items: '{n} items',
     regexFilter: 'regex filter…',

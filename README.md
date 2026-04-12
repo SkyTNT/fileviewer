@@ -14,7 +14,7 @@ A web-based file browser and viewer with a modern UI. Browse local directories, 
   - Hex dump for binary files
 - **File management** (optional write mode)
   - Create, rename, delete files and directories
-  - Upload via drag & drop or file picker
+  - Upload via drag & drop onto the file browser or file picker
   - Copy / move with conflict resolution (overwrite / skip / keep both)
   - Real-time progress via Server-Sent Events
 - **Authentication** — optional username/password login with secure session tokens

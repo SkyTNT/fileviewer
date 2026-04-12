@@ -2,6 +2,10 @@ export default {
   app: {
     title: '檔案檢視器',
   },
+  dropzone: {
+    drop: '拖放檔案以上傳',
+    notAllowed: '未啟用寫入模式',
+  },
   toolbar: {
     items: '{n} 項',
     regexFilter: '正規表示式篩選…',

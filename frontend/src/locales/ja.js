@@ -2,6 +2,10 @@ export default {
   app: {
     title: 'ファイルビューア',
   },
+  dropzone: {
+    drop: 'ファイルをドロップしてアップロード',
+    notAllowed: '書き込みモードが無効です',
+  },
   toolbar: {
     items: '{n} 件',
     regexFilter: '正規表現フィルター…',

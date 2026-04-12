@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 import { useFileStore } from './stores/fileStore.js'
@@ -7,6 +7,7 @@ import { useAuthStore } from './stores/authStore.js'
 import { useFileOpener } from './composables/useFileOpener.js'
 import { useAppTheme } from './composables/useAppTheme.js'
 import { useNotification } from './composables/useNotification.js'
+import { writeApi } from './services/api.js'
 import DirectoryTree from './components/sidebar/DirectoryTree.vue'
 import FileDetail from './components/sidebar/FileDetail.vue'
 import ExplorerToolbar from './components/explorer/ExplorerToolbar.vue'
@@ -44,6 +45,38 @@ const MIN_SIDEBAR = 160
 const MAX_SIDEBAR = 600
 
 const { showError } = useNotification()
+
+// ── Drag & drop upload ────────────────────────────────────────────────────────
+const dragCounter   = ref(0)
+const isDragging    = ref(false)
+const canDrop       = computed(() => store.writeMode && !store.isAtHome)
+
+function onDragEnter(e) {
+  if (!e.dataTransfer?.types?.includes('Files')) return
+  dragCounter.value++
+  isDragging.value = true
+}
+
+function onDragLeave() {
+  if (--dragCounter.value <= 0) {
+    dragCounter.value = 0
+    isDragging.value = false
+  }
+}
+
+async function onDrop(e) {
+  dragCounter.value = 0
+  isDragging.value = false
+  if (!canDrop.value) return
+  const files = Array.from(e.dataTransfer?.files ?? [])
+  if (!files.length) return
+  try {
+    await writeApi.upload(store.currentPath, files)
+    store.loadDirectory(store.currentPath)
+  } catch (err) {
+    showError(err.response?.data?.detail || err.message)
+  }
+}
 
 function startResize(e) {
   e.preventDefault()
@@ -141,15 +174,36 @@ function handleOpenFile(file) {
     </v-app-bar>
 
     <v-main>
-      <RootsView v-if="store.isAtHome" />
-      <WaterfallView
-        v-else-if="store.viewMode === 'waterfall'"
-        @open-file="handleOpenFile"
-      />
-      <ListView
-        v-else
-        @open-file="handleOpenFile"
-      />
+      <div
+        style="position:relative; height:100%"
+        @dragenter="onDragEnter"
+        @dragleave="onDragLeave"
+        @dragover.prevent
+        @drop.prevent="onDrop"
+      >
+        <RootsView v-if="store.isAtHome" />
+        <WaterfallView
+          v-else-if="store.viewMode === 'waterfall'"
+          @open-file="handleOpenFile"
+        />
+        <ListView
+          v-else
+          @open-file="handleOpenFile"
+        />
+
+        <Transition name="drop-fade">
+          <div v-if="isDragging" class="drop-overlay" :class="{ 'drop-overlay--allowed': canDrop }">
+            <div class="drop-overlay-inner">
+              <v-icon size="56" :color="canDrop ? 'primary' : 'medium-emphasis'">
+                {{ canDrop ? 'mdi-upload-outline' : 'mdi-upload-off-outline' }}
+              </v-icon>
+              <div class="text-h6 mt-3">
+                {{ canDrop ? t('dropzone.drop') : t('dropzone.notAllowed') }}
+              </div>
+            </div>
+          </div>
+        </Transition>
+      </div>
     </v-main>
 
     <!-- Right detail drawer -->
@@ -178,6 +232,37 @@ function handleOpenFile(file) {
 </template>
 
 <style>
+.drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--v-theme-surface), 0.85);
+  backdrop-filter: blur(4px);
+  border: 3px dashed rgba(var(--v-theme-on-surface), 0.25);
+  pointer-events: none;
+}
+.drop-overlay--allowed {
+  border-color: rgba(var(--v-theme-primary), 0.6);
+  background: rgba(var(--v-theme-primary), 0.06);
+}
+.drop-overlay-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.drop-fade-enter-active,
+.drop-fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+.drop-fade-enter-from,
+.drop-fade-leave-to {
+  opacity: 0;
+}
+
 .sidebar-resizer {
   position: absolute;
   top: 0;
