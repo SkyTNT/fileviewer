@@ -11,8 +11,8 @@ export function useContextMenu() {
 
   function showMenu(x, y, file = null) {
     menuTarget.value = file
-    menuX.value = Math.min(x, window.innerWidth - 220)
-    menuY.value = Math.min(y, window.innerHeight - 320)
+    menuX.value      = x
+    menuY.value      = y
     menuOpen.value   = false
     setTimeout(() => { menuOpen.value = true }, 10)
   }

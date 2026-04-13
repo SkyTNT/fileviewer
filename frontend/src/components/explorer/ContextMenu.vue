@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFileStore } from '../../stores/fileStore.js'
 import { copyFileToClipboard } from '../../composables/useCopyToClipboard.js'
@@ -17,6 +17,8 @@ const emit  = defineEmits(['update:modelValue', 'rename', 'delete', 'mkdir', 'to
 const store = useFileStore()
 const { showError, showSuccess } = useNotificationStore()
 const { t } = useI18n()
+
+const anchorEl = ref(null)
 
 const canWrite = () => store.writeMode && !store.isAtHome
 
@@ -50,9 +52,15 @@ async function copyClipboard() {
 </script>
 
 <template>
+  <!-- Zero-size anchor at the click position; Vuetify uses it for overflow-aware placement -->
+  <div
+    ref="anchorEl"
+    :style="{ position: 'fixed', left: x + 'px', top: y + 'px', width: 0, height: 0, pointerEvents: 'none' }"
+  />
   <v-menu
     :model-value="modelValue"
-    :style="{ position: 'fixed', left: x + 'px', top: y + 'px' }"
+    :activator="anchorEl"
+    location="bottom start"
     close-on-content-click
     @update:model-value="$emit('update:modelValue', $event)"
   >
