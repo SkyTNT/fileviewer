@@ -12,7 +12,7 @@ const rootNodes = computed(() =>
 </script>
 
 <template>
-  <div style="overflow-x:auto">
+  <div style="height:100%; overflow:auto">
     <v-list density="compact" nav class="pa-2" style="width:max-content; min-width:100%">
       <v-list-item
         :active="store.isAtHome"

@@ -139,20 +139,24 @@ function handleOpenFile(file) {
       v-model="sidebarVisible"
       :width="sidebarWidth"
       :permanent="!mobile"
+      class="tree-sidebar"
     >
-      <v-list-item
-        prepend-icon="mdi-folder-multiple-outline"
-        :title="t('app.title')"
-        nav
-        style="min-height: 48px"
-      >
-        <template v-if="mobile" #append>
-          <v-btn icon size="small" variant="text" @click="sidebarVisible = false">
-            <v-icon size="20">mdi-close</v-icon>
-          </v-btn>
-        </template>
-      </v-list-item>
-      <v-divider />
+      <template #prepend>
+        <v-list-item
+          prepend-icon="mdi-folder-multiple-outline"
+          :title="t('app.title')"
+          nav
+          style="min-height: 48px"
+        >
+          <template v-if="mobile" #append>
+            <v-btn icon size="small" variant="text" @click="sidebarVisible = false">
+              <v-icon size="20">mdi-close</v-icon>
+            </v-btn>
+          </template>
+        </v-list-item>
+        <v-divider />
+      </template>
+
       <DirectoryTree />
 
       <!-- Drag handle -->
@@ -263,6 +267,10 @@ function handleOpenFile(file) {
 .drop-fade-enter-from,
 .drop-fade-leave-to {
   opacity: 0;
+}
+
+.tree-sidebar .v-navigation-drawer__content {
+  overflow: hidden;
 }
 
 .sidebar-resizer {
