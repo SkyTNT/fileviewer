@@ -29,7 +29,7 @@ export function useExplorerKeyboard(getEntries, doPaste) {
         store.setSelection([...getEntries()])
         break
       case 'c':
-        if (store.selectedEntries.length) {
+        if (store.selectedEntries.length && !window.getSelection()?.toString()) {
           e.preventDefault()
           store.setCopy(store.selectedEntries)
         }

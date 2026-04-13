@@ -38,7 +38,13 @@ function reset() {
 function onWheel(e) {
   e.preventDefault()
   const factor = e.deltaY < 0 ? 1.12 : 0.89
-  transform.scale = Math.max(0.05, Math.min(20, transform.scale * factor))
+  const newScale = Math.max(0.05, Math.min(20, transform.scale * factor))
+  const ratio = newScale / transform.scale
+  const cx = window.innerWidth / 2
+  const cy = window.innerHeight / 2
+  transform.x = e.clientX - cx - (e.clientX - cx - transform.x) * ratio
+  transform.y = e.clientY - cy - (e.clientY - cy - transform.y) * ratio
+  transform.scale = newScale
 }
 
 function onMouseDown(e) {
