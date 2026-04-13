@@ -127,7 +127,7 @@ const clipboardLabel = computed(() => {
   <v-app-bar-nav-icon @click="$emit('toggle-sidebar')" />
 
   <!-- Breadcrumbs (shrinkable so long paths don't squash buttons) -->
-  <div style="flex-shrink:1; min-width:0; overflow:hidden">
+  <div style="flex-shrink:1; min-width:0; overflow-x:auto; overflow-y:hidden">
     <v-breadcrumbs :items="displayCrumbs" density="compact" class="pa-0" style="flex-wrap:nowrap">
       <template #prepend>
         <v-icon size="16" class="mr-1" color="medium-emphasis">mdi-folder-outline</v-icon>
@@ -135,7 +135,7 @@ const clipboardLabel = computed(() => {
       <template #item="{ item }">
         <v-breadcrumbs-item
           class="text-body-2"
-          :style="item.path != null ? { cursor:'pointer' } : { cursor:'default', opacity:0.5 }"
+          :style="item.path != null ? { cursor:'pointer', whiteSpace:'nowrap' } : { cursor:'default', opacity:0.5, whiteSpace:'nowrap' }"
           @click="item.path != null && store.navigate(item.path)"
         >
           {{ item.displayName ?? item.name }}

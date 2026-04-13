@@ -12,25 +12,27 @@ const rootNodes = computed(() =>
 </script>
 
 <template>
-  <v-list density="compact" nav class="pa-2">
-    <v-list-item
-      :active="store.isAtHome"
-      color="primary"
-      rounded="lg"
-      prepend-icon="mdi-home-outline"
-      :title="store.rootName"
-      @click="store.navigate('')"
-    />
+  <div style="overflow-x:auto">
+    <v-list density="compact" nav class="pa-2" style="width:max-content; min-width:100%">
+      <v-list-item
+        :active="store.isAtHome"
+        color="primary"
+        rounded="lg"
+        prepend-icon="mdi-home-outline"
+        :title="store.rootName"
+        @click="store.navigate('')"
+      />
 
-    <v-divider class="my-1" />
+      <v-divider class="my-1" />
 
-    <TreeNode
-      v-for="node in rootNodes"
-      :key="node.path"
-      :node="node"
-      :depth="0"
-      :reveal-path="store.currentPath"
-      :is-root="true"
-    />
-  </v-list>
+      <TreeNode
+        v-for="node in rootNodes"
+        :key="node.path"
+        :node="node"
+        :depth="0"
+        :reveal-path="store.currentPath"
+        :is-root="true"
+      />
+    </v-list>
+  </div>
 </template>
