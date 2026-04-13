@@ -4,7 +4,7 @@ from pathlib import Path
 
 from async_lru import alru_cache
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response, FileResponse
 from PIL import Image
 
@@ -84,10 +84,14 @@ async def _url_thumbnail(url: str, size: int) -> bytes:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/thumbnail")
-async def get_thumbnail(path: str = Query(...), size: int = Query(300)):
+async def get_thumbnail(request: Request, path: str = Query(...), size: int = Query(300)):
     if path.startswith(("http://", "https://")):
         try:
-            return Response(content=await _url_thumbnail(path, size), media_type="image/jpeg")
+            return Response(
+                content=await _url_thumbnail(path, size),
+                media_type="image/jpeg",
+                headers={"Cache-Control": "public, max-age=31536000, immutable"},
+            )
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
         except Exception:
@@ -98,12 +102,17 @@ async def get_thumbnail(path: str = Query(...), size: int = Query(300)):
         raise HTTPException(status_code=404, detail="File not found")
 
     if file_path.suffix.lower() == ".svg":
-        return FileResponse(str(file_path), media_type="image/svg+xml")
+        return FileResponse(str(file_path), media_type="image/svg+xml",
+                            headers={"Cache-Control": "no-cache"})
 
     try:
         mtime = file_path.stat().st_mtime
+        etag = f'"{mtime}"'
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304)
         data = _generate_thumbnail(str(file_path), size, mtime)
-        return Response(content=data, media_type="image/jpeg")
+        return Response(content=data, media_type="image/jpeg",
+                        headers={"Cache-Control": "no-cache", "ETag": etag})
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to generate thumbnail")
 
@@ -113,7 +122,11 @@ async def get_full_image(path: str = Query(...)):
     if path.startswith(("http://", "https://")):
         try:
             data, ct = await _fetch_url(path)
-            return Response(content=data, media_type=ct)
+            return Response(
+                content=data,
+                media_type=ct,
+                headers={"Cache-Control": "public, max-age=31536000, immutable"},
+            )
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
         except Exception:
@@ -124,6 +137,6 @@ async def get_full_image(path: str = Query(...)):
         raise HTTPException(status_code=404, detail="File not found")
 
     mt = IMAGE_MIME_TYPES.get(file_path.suffix.lower(), "application/octet-stream")
-    return FileResponse(str(file_path), media_type=mt)
+    return FileResponse(str(file_path), media_type=mt, headers={"Cache-Control": "no-cache"})
 
 
