@@ -193,7 +193,7 @@ let containerRO = null
 
 function updateContainerMetrics(w) {
   if (w === 0) return
-  const n  = widthToColCount(w)
+  const n  = widthToColCount(window.innerWidth)
   const cw = Math.floor((w - GAP * (n - 1)) / n)
   const colCountChanged = n  !== colCount.value
   const colWidthChanged = cw !== colWidth.value
