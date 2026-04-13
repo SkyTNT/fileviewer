@@ -173,6 +173,9 @@ def paste(req: BatchPasteRequest):
                         yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': name, 'skipped': True})
                         continue
                     elif req.on_conflict == "overwrite":
+                        if dest == src:
+                            yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': name})
+                            continue
                         shutil.rmtree(dest) if dest.is_dir() else dest.unlink()
                     elif req.on_conflict == "coexist":
                         name = _coexist_name(dest_dir, name)
@@ -227,12 +230,15 @@ async def upload(
         raise HTTPException(status_code=400, detail="Not a directory")
     saved = []
     for f in files:
-        dest = dir_path / f.filename
+        filename = Path(f.filename).name  # strip any directory components
+        if not filename:
+            raise HTTPException(status_code=400, detail="Invalid filename")
+        dest = dir_path / filename
         if dest.exists():
             if on_conflict == 'skip':
                 continue
             elif on_conflict == 'coexist':
-                dest = dir_path / _coexist_name(dir_path, f.filename)
+                dest = dir_path / _coexist_name(dir_path, filename)
             # 'overwrite' falls through
         content = await f.read()
         dest.write_bytes(content)

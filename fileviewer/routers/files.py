@@ -1,9 +1,12 @@
 import os
 import re
+import concurrent.futures
 from pathlib import Path
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import FileResponse
 from fileviewer.config import parse_path, build_entry_path, get_file_type, get_roots
+
+_FILTER_MAX_LEN = 200
 
 router = APIRouter()
 
@@ -64,10 +67,18 @@ def list_directory(
 
     pattern = None
     if filter:
+        if len(filter) > _FILTER_MAX_LEN:
+            raise HTTPException(status_code=400, detail=f"Filter pattern too long (max {_FILTER_MAX_LEN} chars)")
         try:
             pattern = re.compile(filter)
         except re.error as e:
             raise HTTPException(status_code=400, detail=f"Invalid regex: {e}")
+        # Guard against catastrophic backtracking (ReDoS)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as exe:
+            try:
+                exe.submit(pattern.search, "a" * 100 + "!").result(timeout=1.0)
+            except concurrent.futures.TimeoutError:
+                raise HTTPException(status_code=400, detail="Filter pattern is too complex")
 
     try:
         with os.scandir(abs_path) as it:

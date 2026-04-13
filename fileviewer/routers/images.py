@@ -14,6 +14,7 @@ from fileviewer.http_client import client as _client
 router = APIRouter()
 
 
+
 # ── Local image helpers ───────────────────────────────────────────────────────
 
 @lru_cache(maxsize=512)
@@ -44,10 +45,18 @@ def _resolve_local_path(path: str) -> Path | None:
 
 # ── URL helpers ───────────────────────────────────────────────────────────────
 
+def _assert_image_content_type(headers) -> str:
+    ct = headers.get("content-type", "").split(";")[0].strip().lower()
+    if not ct.startswith("image/"):
+        raise ValueError(f"URL did not return an image (content-type: {ct!r})")
+    return ct
+
+
+@alru_cache(maxsize=32)
 async def _fetch_url(url: str) -> tuple[bytes, str]:
     resp = await _client.get(url)
     resp.raise_for_status()
-    ct = resp.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+    ct = _assert_image_content_type(resp.headers)
     return resp.content, ct
 
 
@@ -65,11 +74,10 @@ def _pil_to_jpeg(img: Image.Image, size: int) -> bytes:
     return buf.getvalue()
 
 
-@alru_cache(maxsize=256)
+@alru_cache(maxsize=128)
 async def _url_thumbnail(url: str, size: int) -> bytes:
-    resp = await _client.get(url)
-    resp.raise_for_status()
-    with Image.open(io.BytesIO(resp.content)) as img:
+    data, _ = await _fetch_url(url)
+    with Image.open(io.BytesIO(data)) as img:
         return _pil_to_jpeg(img, size)
 
 
@@ -80,8 +88,10 @@ async def get_thumbnail(path: str = Query(...), size: int = Query(300)):
     if path.startswith(("http://", "https://")):
         try:
             return Response(content=await _url_thumbnail(path, size), media_type="image/jpeg")
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        except Exception:
+            raise HTTPException(status_code=502, detail="Failed to fetch remote image")
 
     file_path = _resolve_local_path(path)
     if file_path is None:
@@ -94,8 +104,8 @@ async def get_thumbnail(path: str = Query(...), size: int = Query(300)):
         mtime = file_path.stat().st_mtime
         data = _generate_thumbnail(str(file_path), size, mtime)
         return Response(content=data, media_type="image/jpeg")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to generate thumbnail")
 
 
 @router.get("/full")
@@ -104,8 +114,10 @@ async def get_full_image(path: str = Query(...)):
         try:
             data, ct = await _fetch_url(path)
             return Response(content=data, media_type=ct)
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        except Exception:
+            raise HTTPException(status_code=502, detail="Failed to fetch remote image")
 
     file_path = _resolve_local_path(path)
     if file_path is None:
