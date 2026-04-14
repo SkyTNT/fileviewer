@@ -13,7 +13,7 @@ const props = defineProps({
   file: { type: Object, default: null },  // null = background (no file selected)
 })
 
-const emit  = defineEmits(['update:modelValue', 'rename', 'delete', 'mkdir', 'touch', 'paste', 'compare-images'])
+const emit  = defineEmits(['update:modelValue', 'rename', 'delete', 'mkdir', 'touch', 'paste', 'open-file'])
 const store = useFileStore()
 const { showError, showSuccess } = useNotificationStore()
 const { t } = useI18n()
@@ -78,7 +78,7 @@ async function copyClipboard() {
         v-if="canCompare"
         prepend-icon="mdi-image-multiple-outline"
         :title="t('menu.compareImages')"
-        @click="$emit('compare-images')"
+        @click="$emit('open-file', store.selectedEntries)"
       />
 
       <!-- Download -->

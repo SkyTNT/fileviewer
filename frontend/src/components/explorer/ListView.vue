@@ -13,7 +13,7 @@ import DialogConfirmDelete from '../dialogs/DialogConfirmDelete.vue'
 import DialogNewItem from '../dialogs/DialogNewItem.vue'
 import PaginationBar from '../PaginationBar.vue'
 
-const emit  = defineEmits(['open-file', 'compare-images'])
+const emit  = defineEmits(['open-file'])
 const store = useFileStore()
 const { t } = useI18n()
 
@@ -148,7 +148,7 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
     @mkdir="openMkdir"
     @touch="openTouch"
     @paste="doPaste"
-    @compare-images="$emit('compare-images', store.selectedEntries)"
+    @open-file="$emit('open-file', $event)"
   />
 
   <DialogRename

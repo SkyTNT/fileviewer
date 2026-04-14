@@ -122,18 +122,24 @@ watch(() => authStore.loggedIn, (v) => {
   if (v) store.init()
 })
 
-function openComparison(files) {
-  imageComparisonViewerRef.value?.open(files)
-}
+function handleOpenFile(fileOrFiles) {
+  const files = Array.isArray(fileOrFiles) ? fileOrFiles : [fileOrFiles]
 
-function handleOpenFile(file) {
+  // Two images → comparison viewer
+  if (files.length === 2 && files.every(f => f.type === 'image')) {
+    imageComparisonViewerRef.value?.open(files)
+    return
+  }
+
+  const file = files[0]
+  if (!file) return
   openFile(file)
   switch (file.type) {
     case 'image':              imageViewerRef.value?.open(file);        break
     case 'parquet':            dfViewerRef.value?.open(file);           break
     case 'csv':                dfViewerRef.value?.open(file, 'csv');    break
     case 'json': case 'jsonl': jsonViewerRef.value?.open(file);         break
-    case 'video': case 'audio': mediaPlayerRef.value?.open(file); break
+    case 'video': case 'audio': mediaPlayerRef.value?.open(file);       break
     default:                   textViewerRef.value?.open(file)
   }
 }
@@ -196,12 +202,10 @@ function handleOpenFile(file) {
         <WaterfallView
           v-else-if="store.viewMode === 'waterfall'"
           @open-file="handleOpenFile"
-          @compare-images="openComparison"
         />
         <ListView
           v-else
           @open-file="handleOpenFile"
-          @compare-images="openComparison"
         />
 
         <Transition name="drop-fade">
@@ -226,7 +230,7 @@ function handleOpenFile(file) {
       :width="280"
       @update:model-value="v => { if (!v) store.selectEntry(null) }"
     >
-      <FileDetail @open-file="handleOpenFile" @compare-images="openComparison" />
+      <FileDetail @open-file="handleOpenFile" />
     </v-navigation-drawer>
 
     <!-- Viewers (portals / dialogs) -->

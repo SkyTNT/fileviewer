@@ -12,7 +12,7 @@ import JsonNode from '../viewers/JsonNode.vue'
 import DialogRename from '../dialogs/DialogRename.vue'
 import DialogConfirmDelete from '../dialogs/DialogConfirmDelete.vue'
 
-const emit  = defineEmits(['open-file', 'compare-images'])
+const emit  = defineEmits(['open-file'])
 const store = useFileStore()
 const { t } = useI18n()
 
@@ -121,7 +121,7 @@ const {
         variant="tonal"
         block
         prepend-icon="mdi-image-multiple-outline"
-        @click="$emit('compare-images', store.selectedEntries)"
+        @click="$emit('open-file', store.selectedEntries)"
       >
         {{ t('detail.compareImages') }}
       </v-btn>
