@@ -12,7 +12,7 @@ import JsonNode from '../viewers/JsonNode.vue'
 import DialogRename from '../dialogs/DialogRename.vue'
 import DialogConfirmDelete from '../dialogs/DialogConfirmDelete.vue'
 
-const emit  = defineEmits(['open-file'])
+const emit  = defineEmits(['open-file', 'compare-images'])
 const store = useFileStore()
 const { t } = useI18n()
 
@@ -25,6 +25,10 @@ const isMulti     = computed(() => store.selectedEntries.length > 1)
 const multiFiles  = computed(() => store.selectedEntries.filter(e => !e.is_dir))
 const multiDirs   = computed(() => store.selectedEntries.filter(e =>  e.is_dir))
 const multiSize   = computed(() => multiFiles.value.reduce((s, e) => s + (e.size ?? 0), 0))
+const canCompare  = computed(() =>
+  store.selectedEntries.length === 2 &&
+  store.selectedEntries.every(e => e.type === 'image')
+)
 
 function downloadSelected() {
   downloadFiles(multiFiles.value)
@@ -109,6 +113,17 @@ const {
         @click="downloadSelected"
       >
         {{ t('detail.downloadFiles', { n: multiFiles.length }) }}
+      </v-btn>
+
+      <v-btn
+        v-if="canCompare"
+        color="primary"
+        variant="tonal"
+        block
+        prepend-icon="mdi-image-multiple-outline"
+        @click="$emit('compare-images', store.selectedEntries)"
+      >
+        {{ t('detail.compareImages') }}
       </v-btn>
 
       <template v-if="canWrite">

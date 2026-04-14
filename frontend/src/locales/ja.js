@@ -52,6 +52,7 @@ export default {
     andMore: '… さらに {n} 件',
     meta: 'メタデータ',
     noJsonFound: '.json ファイルが見つかりません',
+    compareImages: '画像を比較',
   },
   menu: {
     download: 'ダウンロード',
@@ -67,6 +68,7 @@ export default {
     newFolder: '新規フォルダ',
     newFile: '新規ファイル',
     paste: 'ここに貼り付け',
+    compareImages: '画像比較',
   },
   dialog: {
     cancel: 'キャンセル',
@@ -122,6 +124,9 @@ export default {
     resetView: 'ビューをリセット',
     close: '閉じる',
     zoomHint: 'スクロールでズーム · ドラッグで移動 · ダブルクリックでリセット',
+  },
+  imageComparison: {
+    hint: 'スライダーをドラッグして比較 · スクロールでズーム · ドラッグで移動 · ダブルクリックでリセット',
   },
   jsonViewer: {
     openAs: '開き方を選択…',

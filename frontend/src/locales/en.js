@@ -52,6 +52,7 @@ export default {
     andMore: '… and {n} more',
     meta: 'Meta',
     noJsonFound: 'no .json found',
+    compareImages: 'Compare Images',
   },
   menu: {
     download: 'Download',
@@ -67,6 +68,7 @@ export default {
     newFolder: 'New Folder',
     newFile: 'New File',
     paste: 'Paste here',
+    compareImages: 'Compare Images',
   },
   dialog: {
     cancel: 'Cancel',
@@ -122,6 +124,9 @@ export default {
     resetView: 'Reset view',
     close: 'Close',
     zoomHint: 'Scroll to zoom · Drag to pan · Double-click to reset',
+  },
+  imageComparison: {
+    hint: 'Drag slider to compare · Scroll to zoom · Drag to pan · Double-click to reset',
   },
   jsonViewer: {
     openAs: 'Open as…',

@@ -52,6 +52,7 @@ export default {
     andMore: '… 还有 {n} 项',
     meta: '元数据',
     noJsonFound: '未找到 .json 文件',
+    compareImages: '比较图片',
   },
   menu: {
     download: '下载',
@@ -67,6 +68,7 @@ export default {
     newFolder: '新建文件夹',
     newFile: '新建文件',
     paste: '粘贴到此处',
+    compareImages: '图片比较',
   },
   dialog: {
     cancel: '取消',
@@ -122,6 +124,9 @@ export default {
     resetView: '重置视图',
     close: '关闭',
     zoomHint: '滚轮缩放 · 拖动平移 · 双击重置',
+  },
+  imageComparison: {
+    hint: '拖动滑块比较 · 滚轮缩放 · 拖动平移 · 双击重置',
   },
   jsonViewer: {
     openAs: '打开方式…',

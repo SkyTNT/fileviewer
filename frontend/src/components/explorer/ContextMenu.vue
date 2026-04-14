@@ -13,7 +13,7 @@ const props = defineProps({
   file: { type: Object, default: null },  // null = background (no file selected)
 })
 
-const emit  = defineEmits(['update:modelValue', 'rename', 'delete', 'mkdir', 'touch', 'paste'])
+const emit  = defineEmits(['update:modelValue', 'rename', 'delete', 'mkdir', 'touch', 'paste', 'compare-images'])
 const store = useFileStore()
 const { showError, showSuccess } = useNotificationStore()
 const { t } = useI18n()
@@ -41,6 +41,13 @@ const deleteTargets = computed(() =>
   isMultiTarget.value ? store.selectedEntries : (props.file ? [props.file] : [])
 )
 
+// Can compare: exactly 2 images in multi-selection
+const canCompare = computed(() =>
+  isMultiTarget.value &&
+  store.selectedEntries.length === 2 &&
+  store.selectedEntries.every(e => e.type === 'image')
+)
+
 async function copyClipboard() {
   try {
     await copyFileToClipboard(props.file)
@@ -65,6 +72,14 @@ async function copyClipboard() {
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <v-list density="compact" min-width="180">
+
+      <!-- Compare Images (exactly 2 images selected) -->
+      <v-list-item
+        v-if="canCompare"
+        prepend-icon="mdi-image-multiple-outline"
+        :title="t('menu.compareImages')"
+        @click="$emit('compare-images')"
+      />
 
       <!-- Download -->
       <v-list-item

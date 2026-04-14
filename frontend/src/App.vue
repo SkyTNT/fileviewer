@@ -14,6 +14,7 @@ import WaterfallView from './components/explorer/WaterfallView.vue'
 import ListView from './components/explorer/ListView.vue'
 import RootsView from './components/explorer/RootsView.vue'
 import ImageViewer from './components/viewers/ImageViewer.vue'
+import ImageComparisonViewer from './components/viewers/ImageComparisonViewer.vue'
 import DataFrameViewer from './components/viewers/DataFrameViewer.vue'
 import JsonViewer from './components/viewers/JsonViewer.vue'
 import TextViewer from './components/viewers/TextViewer.vue'
@@ -30,7 +31,8 @@ const appTheme = useAppTheme()
 const { mobile } = useDisplay()
 const { t } = useI18n()
 
-const imageViewerRef = ref(null)
+const imageViewerRef           = ref(null)
+const imageComparisonViewerRef = ref(null)
 const dfViewerRef = ref(null)
 const jsonViewerRef = ref(null)
 const textViewerRef = ref(null)
@@ -120,6 +122,10 @@ watch(() => authStore.loggedIn, (v) => {
   if (v) store.init()
 })
 
+function openComparison(files) {
+  imageComparisonViewerRef.value?.open(files)
+}
+
 function handleOpenFile(file) {
   openFile(file)
   switch (file.type) {
@@ -190,10 +196,12 @@ function handleOpenFile(file) {
         <WaterfallView
           v-else-if="store.viewMode === 'waterfall'"
           @open-file="handleOpenFile"
+          @compare-images="openComparison"
         />
         <ListView
           v-else
           @open-file="handleOpenFile"
+          @compare-images="openComparison"
         />
 
         <Transition name="drop-fade">
@@ -218,11 +226,12 @@ function handleOpenFile(file) {
       :width="280"
       @update:model-value="v => { if (!v) store.selectEntry(null) }"
     >
-      <FileDetail @open-file="handleOpenFile" />
+      <FileDetail @open-file="handleOpenFile" @compare-images="openComparison" />
     </v-navigation-drawer>
 
     <!-- Viewers (portals / dialogs) -->
     <ImageViewer ref="imageViewerRef" />
+    <ImageComparisonViewer ref="imageComparisonViewerRef" />
     <DataFrameViewer ref="dfViewerRef" @open-image="imageViewerRef?.open($event)" />
     <JsonViewer ref="jsonViewerRef" @open-dataframe="dfViewerRef?.open($event, 'jsonl')" />
     <TextViewer ref="textViewerRef" :file="activeFile" @error="showError" @open-hex="hexViewerRef?.open($event)" />
