@@ -18,8 +18,7 @@ import { textApi, writeApi } from '../../services/api.js'
 import MarkdownRenderer from './MarkdownRenderer.vue'
 import { useFileStore } from '../../stores/fileStore.js'
 
-const props = defineProps({ file: { type: Object, default: null } })
-const emit  = defineEmits(['error', 'open-hex'])
+const emit = defineEmits(['open-file'])
 
 const store = useFileStore()
 const { t } = useI18n()
@@ -83,7 +82,7 @@ async function open(file) {
   } catch (e) {
     if (e.response?.status === 415) {
       dialog.value = false
-      emit('open-hex', file)
+      emit('open-file', file, { viewer: 'hex' })
     } else {
       error.value = e.response?.data?.detail || e.message
     }

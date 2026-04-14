@@ -10,7 +10,7 @@ import { dataframeApi, imagesApi } from '../../services/api.js'
 import JsonNode from './JsonNode.vue'
 import PaginationBar from '../PaginationBar.vue'
 
-const emit = defineEmits(['open-image'])
+const emit = defineEmits(['open-file'])
 const { t } = useI18n()
 
 const dialog   = ref(false)
@@ -327,7 +327,7 @@ function cellThumbUrl(value) {
   return value ? imagesApi.thumbnailUrl(value, 400) : ''
 }
 function openImgPreview(value) {
-  if (value) emit('open-image', { path: value, name: value })
+  if (value) emit('open-file', { path: value, name: value }, { viewer: 'image' })
 }
 
 function close() { dialog.value = false }

@@ -4,40 +4,24 @@ import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 import { useFileStore } from './stores/fileStore.js'
 import { useAuthStore } from './stores/authStore.js'
-import { useFileOpener } from './composables/useFileOpener.js'
+import { useViewerRegistry } from './composables/useViewerRegistry.js'
 import { useAppTheme } from './composables/useAppTheme.js'
-import { useNotificationStore } from './stores/notificationStore.js'
 import DirectoryTree from './components/sidebar/DirectoryTree.vue'
 import FileDetail from './components/sidebar/FileDetail.vue'
 import ExplorerToolbar from './components/explorer/ExplorerToolbar.vue'
 import WaterfallView from './components/explorer/WaterfallView.vue'
 import ListView from './components/explorer/ListView.vue'
 import RootsView from './components/explorer/RootsView.vue'
-import ImageViewer from './components/viewers/ImageViewer.vue'
-import ImageComparisonViewer from './components/viewers/ImageComparisonViewer.vue'
-import DataFrameViewer from './components/viewers/DataFrameViewer.vue'
-import JsonViewer from './components/viewers/JsonViewer.vue'
-import TextViewer from './components/viewers/TextViewer.vue'
-import MediaPlayer from './components/viewers/MediaPlayer.vue'
-import HexViewer from './components/viewers/HexViewer.vue'
 import LoginPage from './components/LoginPage.vue'
 import AppNotifications from './components/AppNotifications.vue'
 import UploadPanel from './components/UploadPanel.vue'
 
 const store     = useFileStore()
 const authStore = useAuthStore()
-const { activeViewer, activeFile, openFile, closeViewer } = useFileOpener()
+const { VIEWERS, refs, open } = useViewerRegistry()
 const appTheme = useAppTheme()
 const { mobile } = useDisplay()
 const { t } = useI18n()
-
-const imageViewerRef           = ref(null)
-const imageComparisonViewerRef = ref(null)
-const dfViewerRef = ref(null)
-const jsonViewerRef = ref(null)
-const textViewerRef = ref(null)
-const mediaPlayerRef = ref(null)
-const hexViewerRef   = ref(null)
 
 const sidebarWidth   = ref(260)
 const sidebarVisible = ref(true)
@@ -45,8 +29,6 @@ const resizing       = ref(false)
 
 const MIN_SIDEBAR = 160
 const MAX_SIDEBAR = 600
-
-const { showError } = useNotificationStore()
 
 // ── Drag & drop upload ────────────────────────────────────────────────────────
 const dragCounter     = ref(0)
@@ -122,27 +104,6 @@ watch(() => authStore.loggedIn, (v) => {
   if (v) store.init()
 })
 
-function handleOpenFile(fileOrFiles) {
-  const files = Array.isArray(fileOrFiles) ? fileOrFiles : [fileOrFiles]
-
-  // Two images → comparison viewer
-  if (files.length === 2 && files.every(f => f.type === 'image')) {
-    imageComparisonViewerRef.value?.open(files)
-    return
-  }
-
-  const file = files[0]
-  if (!file) return
-  openFile(file)
-  switch (file.type) {
-    case 'image':              imageViewerRef.value?.open(file);        break
-    case 'parquet':            dfViewerRef.value?.open(file);           break
-    case 'csv':                dfViewerRef.value?.open(file, 'csv');    break
-    case 'json': case 'jsonl': jsonViewerRef.value?.open(file);         break
-    case 'video': case 'audio': mediaPlayerRef.value?.open(file);       break
-    default:                   textViewerRef.value?.open(file)
-  }
-}
 </script>
 
 <template>
@@ -201,11 +162,11 @@ function handleOpenFile(fileOrFiles) {
         <RootsView v-if="store.isAtHome" />
         <WaterfallView
           v-else-if="store.viewMode === 'waterfall'"
-          @open-file="handleOpenFile"
+          @open-file="open"
         />
         <ListView
           v-else
-          @open-file="handleOpenFile"
+          @open-file="open"
         />
 
         <Transition name="drop-fade">
@@ -230,17 +191,18 @@ function handleOpenFile(fileOrFiles) {
       :width="280"
       @update:model-value="v => { if (!v) store.selectEntry(null) }"
     >
-      <FileDetail @open-file="handleOpenFile" />
+      <FileDetail @open-file="open" />
     </v-navigation-drawer>
 
-    <!-- Viewers (portals / dialogs) -->
-    <ImageViewer ref="imageViewerRef" />
-    <ImageComparisonViewer ref="imageComparisonViewerRef" />
-    <DataFrameViewer ref="dfViewerRef" @open-image="imageViewerRef?.open($event)" />
-    <JsonViewer ref="jsonViewerRef" @open-dataframe="dfViewerRef?.open($event, 'jsonl')" />
-    <TextViewer ref="textViewerRef" :file="activeFile" @error="showError" @open-hex="hexViewerRef?.open($event)" />
-    <MediaPlayer ref="mediaPlayerRef" />
-    <HexViewer ref="hexViewerRef" />
+    <!-- Viewers — rendered generically from the registry. To add a new viewer,
+         register its descriptor in useViewerRegistry.js. -->
+    <component
+      v-for="v in VIEWERS"
+      :key="v.key"
+      :is="v.component"
+      :ref="(el) => refs[v.key].value = el"
+      @open-file="open"
+    />
 
     <AppNotifications />
     <UploadPanel />

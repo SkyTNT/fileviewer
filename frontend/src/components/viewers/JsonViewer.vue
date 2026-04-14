@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { textApi } from '../../services/api.js'
 import JsonNode from './JsonNode.vue'
 
-const emit = defineEmits(['open-dataframe'])
+const emit = defineEmits(['open-file'])
 const { t } = useI18n()
 
 const dialog   = ref(false)
@@ -90,7 +90,7 @@ function chooseTree() {
 
 function chooseDataframe() {
   dialog.value = false
-  emit('open-dataframe', fileRef.value)
+  emit('open-file', fileRef.value, { viewer: 'dataframe', mode: 'jsonl' })
 }
 
 function close() { dialog.value = false }
