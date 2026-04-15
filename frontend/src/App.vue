@@ -2,24 +2,23 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
-import { useFileStore } from './stores/fileStore.js'
-import { useAuthStore } from './stores/authStore.js'
-import { useViewerRegistry } from './composables/useViewerRegistry.js'
-import { useAppTheme } from './composables/useAppTheme.js'
-import DirectoryTree from './components/sidebar/DirectoryTree.vue'
-import FileDetail from './components/sidebar/FileDetail.vue'
-import ExplorerToolbar from './components/explorer/ExplorerToolbar.vue'
-import WaterfallView from './components/explorer/WaterfallView.vue'
-import ListView from './components/explorer/ListView.vue'
-import RootsView from './components/explorer/RootsView.vue'
-import LoginPage from './components/LoginPage.vue'
-import AppNotifications from './components/AppNotifications.vue'
-import UploadPanel from './components/UploadPanel.vue'
-import AppDialogs from './components/dialogs/AppDialogs.vue'
+import { useFileStore } from '@/plugins/file/store.js'
+import { useAuthStore } from '@/plugins/auth/store.js'
+import { useUploadStore } from '@/plugins/upload/store.js'
+import { useViewerStore } from '@/plugins/viewer/store.js'
+import { useAppTheme } from '@/plugins/theme/index.js'
+import DirectoryTree    from '@/plugins/file/components/DirectoryTree.vue'
+import FileDetail       from '@/plugins/file/components/FileDetail.vue'
+import ExplorerToolbar  from '@/plugins/file/components/ExplorerToolbar.vue'
+import WaterfallView    from '@/plugins/file/components/WaterfallView.vue'
+import ListView         from '@/plugins/file/components/ListView.vue'
+import RootsView        from '@/plugins/file/components/RootsView.vue'
 
-const store     = useFileStore()
-const authStore = useAuthStore()
-const { VIEWERS, refs, open } = useViewerRegistry()
+const store       = useFileStore()
+const authStore   = useAuthStore()
+const uploadStore = useUploadStore()
+const viewerStore = useViewerStore()
+const { VIEWERS, viewerRefs } = viewerStore
 const appTheme = useAppTheme()
 const { mobile } = useDisplay()
 const { t } = useI18n()
@@ -54,7 +53,7 @@ function onDrop(e) {
   isDragging.value = false
   if (!canWriteHere.value) return
   const files = Array.from(e.dataTransfer?.files ?? [])
-  if (files.length) store.addUploads(store.currentPath, files)
+  if (files.length) uploadStore.addUploads(store.currentPath, files)
 }
 
 function startResize(e) {
@@ -161,14 +160,8 @@ watch(() => authStore.loggedIn, (v) => {
         @drop.prevent="onDrop"
       >
         <RootsView v-if="store.isAtHome" />
-        <WaterfallView
-          v-else-if="store.viewMode === 'waterfall'"
-          @open-file="open"
-        />
-        <ListView
-          v-else
-          @open-file="open"
-        />
+        <WaterfallView v-else-if="store.viewMode === 'waterfall'" />
+        <ListView v-else />
 
         <Transition name="drop-fade">
           <div v-if="isDragging" class="drop-overlay" :class="{ 'drop-overlay--allowed': canWriteHere }">
@@ -192,22 +185,22 @@ watch(() => authStore.loggedIn, (v) => {
       :width="280"
       @update:model-value="v => { if (!v) store.selectEntry(null) }"
     >
-      <FileDetail @open-file="open" />
+      <FileDetail />
     </v-navigation-drawer>
 
     <!-- Viewers — rendered generically from the registry. To add a new viewer,
-         register its descriptor in useViewerRegistry.js. -->
+         add a descriptor in plugins/viewer/descriptors.js. -->
     <component
       v-for="v in VIEWERS"
       :key="v.key"
       :is="v.component"
-      :ref="(el) => refs[v.key].value = el"
-      @open-file="open"
+      :ref="(el) => viewerRefs[v.key].value = el"
     />
 
     <AppNotifications />
     <UploadPanel />
-    <AppDialogs />
+    <AppWriteDialogs />
+    <AppArchiveDialogs />
 
     <!-- Login overlay — shown when auth is required and not logged in -->
     <LoginPage v-if="!authStore.checking && authStore.authRequired && !authStore.loggedIn" />
