@@ -37,6 +37,30 @@ onMounted(() => window.addEventListener('resize', onResize))
 onUnmounted(() => window.removeEventListener('resize', onResize))
 function backToTree() { mobileShowViewer.value = false }
 
+// ── selection (partial extract) ──────────────────────────────────────────────
+const checkedPaths = ref(new Set())
+
+const extractEntries = computed(() =>
+  checkedPaths.value.size > 0 ? [...checkedPaths.value] : null
+)
+
+function getAllPaths(node) {
+  const out = [node.path]
+  if (node.children) for (const c of node.children) out.push(...getAllPaths(c))
+  return out
+}
+
+function onToggle(item) {
+  const s = new Set(checkedPaths.value)
+  if (s.has(item.path)) {
+    for (const p of getAllPaths(item)) s.delete(p)
+  } else {
+    if (item.is_dir) for (const p of getAllPaths(item)) s.delete(p)
+    s.add(item.path)
+  }
+  checkedPaths.value = s
+}
+
 // ── selected entry inline viewer ──────────────────────────────────────────────
 const selectedEntry  = ref(null)
 const entryLoading   = ref(false)
@@ -109,6 +133,7 @@ async function open(file) {
   password.value         = ''
   selectedEntry.value    = null
   mobileShowViewer.value = false
+  checkedPaths.value     = new Set()
   extracting.value       = false
   extractFinished.value  = false
   await loadArchive()
@@ -213,9 +238,10 @@ async function doExtract(dest) {
   extractFinished.value = false
 
   // Check for conflicts before starting
+  const entries = extractEntries.value
   let strategy = 'overwrite'
   try {
-    const res = await archiveApi.checkConflicts(currentFile.value.path, dest, password.value || null)
+    const res = await archiveApi.checkConflicts(currentFile.value.path, dest, password.value || null, entries)
     if (res.data.conflicts.length > 0) {
       strategy = await new Promise((resolve) => {
         store.nameConflicts = { conflicts: res.data.conflicts, resolve }
@@ -225,7 +251,7 @@ async function doExtract(dest) {
   } catch { /* ignore, proceed with overwrite */ }
 
   try {
-    const res     = await archiveApi.extract(currentFile.value.path, dest, password.value || null, null, strategy)
+    const res     = await archiveApi.extract(currentFile.value.path, dest, password.value || null, entries, strategy)
     const reader  = res.body.getReader()
     const decoder = new TextDecoder()
     let buf = ''
@@ -383,6 +409,14 @@ defineExpose({ open })
               {{ t('archive.viewer.entries', { n: archiveInfo.entry_count }) }}
             </span>
             <v-spacer />
+            <v-chip
+              v-if="checkedPaths.size > 0"
+              size="x-small" color="primary" variant="tonal" label
+              class="mr-1" style="cursor:pointer"
+              @click="checkedPaths = new Set()"
+            >
+              {{ checkedPaths.size }} <v-icon size="12" end>mdi-close</v-icon>
+            </v-chip>
             <template v-if="isMobile && archiveInfo">
               <v-chip size="x-small" variant="tonal" label class="mr-1">{{ archiveInfo.format.toUpperCase() }}</v-chip>
             </template>
@@ -396,7 +430,9 @@ defineExpose({ open })
               :random-access="archiveInfo.random_access"
               :selected-path="selectedEntry?.path"
               :depth="0"
+              :checked-paths="checkedPaths"
               @select="selectEntry"
+              @toggle="onToggle"
             />
           </div>
           <v-divider />

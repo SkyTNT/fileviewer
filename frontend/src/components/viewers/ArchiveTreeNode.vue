@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { formatBytes } from '../../utils/fileTypes.js'
 
 const props = defineProps({
@@ -7,12 +7,24 @@ const props = defineProps({
   randomAccess: { type: Boolean, default: false },
   selectedPath: { type: String,  default: null },
   depth:        { type: Number,  default: 0 },
+  checkedPaths: { type: Object,  default: () => new Set() },  // Set<string>
 })
-const emit = defineEmits(['select'])
+const emit = defineEmits(['select', 'toggle'])
 
 const expanded = ref(props.depth < 2)
-
 function toggle() { expanded.value = !expanded.value }
+
+const isChecked      = computed(() => props.checkedPaths.has(props.item.path))
+const isIndeterminate = computed(() => {
+  if (!props.item.is_dir || isChecked.value) return false
+  return hasAnyChecked(props.item)
+})
+
+function hasAnyChecked(node) {
+  if (props.checkedPaths.has(node.path)) return true
+  if (!node.is_dir || !node.children) return false
+  return node.children.some(c => hasAnyChecked(c))
+}
 
 function fileIcon(name) {
   const ext = name.split('.').pop().toLowerCase()
@@ -36,6 +48,13 @@ function fileIcon(name) {
       @click.stop="toggle"
     >
       <template #prepend>
+        <v-checkbox-btn
+          :model-value="isChecked"
+          :indeterminate="isIndeterminate"
+          density="compact"
+          class="flex-shrink-0 cb"
+          @click.stop="$emit('toggle', item)"
+        />
         <v-icon size="16" color="primary" class="mr-1">
           {{ expanded ? 'mdi-folder-open' : 'mdi-folder' }}
         </v-icon>
@@ -56,7 +75,9 @@ function fileIcon(name) {
         :random-access="randomAccess"
         :selected-path="selectedPath"
         :depth="depth + 1"
+        :checked-paths="checkedPaths"
         @select="$emit('select', $event)"
+        @toggle="$emit('toggle', $event)"
       />
     </div>
   </div>
@@ -67,10 +88,15 @@ function fileIcon(name) {
     :style="{ paddingLeft: (depth * 16 + 8) + 'px' }"
     density="compact"
     :class="['archive-tree-item', { 'archive-tree-item--selected': item.path === selectedPath }]"
-    :disabled="!randomAccess"
-    @click.stop="$emit('select', item)"
+    @click.stop="randomAccess && $emit('select', item)"
   >
     <template #prepend>
+      <v-checkbox-btn
+        :model-value="checkedPaths.has(item.path)"
+        density="compact"
+        class="flex-shrink-0 cb"
+        @click.stop="$emit('toggle', item)"
+      />
       <v-icon size="16" class="mr-1">{{ fileIcon(item.name) }}</v-icon>
     </template>
     <v-list-item-title class="text-body-2">{{ item.name }}</v-list-item-title>
@@ -92,4 +118,6 @@ function fileIcon(name) {
 .archive-tree-item--selected {
   background: rgba(var(--v-theme-primary), 0.12) !important;
 }
+/* Tighten checkbox width */
+.cb { margin-left: -6px; margin-right: 2px; }
 </style>
