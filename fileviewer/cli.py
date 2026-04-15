@@ -22,8 +22,8 @@ def main():
     parser.add_argument("--port", type=int, default=8000, help="Bind port (default: 8000)")
     parser.add_argument("--no-browser", action="store_true", help="Don't open browser automatically")
     parser.add_argument("--write", action="store_true", help="Enable write mode (create, rename, delete, upload)")
-    parser.add_argument("--name", action="append", dest="names", metavar="NAME",
-                        help="Custom display name for a root directory (one per path, in order)")
+    parser.add_argument("--name", nargs="+", dest="names", metavar="NAME",
+                        help="Custom display names for root directories (one per path, in order)")
     parser.add_argument("--user",     default=None, metavar="USERNAME", help="Require login with this username")
     parser.add_argument("--password", default=None, metavar="PASSWORD", help="Require login with this password")
     args = parser.parse_args()
