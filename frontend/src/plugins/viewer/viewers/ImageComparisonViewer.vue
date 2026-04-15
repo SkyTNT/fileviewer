@@ -23,12 +23,14 @@ const baseScales  = reactive({ left: 1, right: 1 })
 let leftNW = 0, leftNH = 0
 let rightNW = 0, rightNH = 0
 let leftLoaded = false, rightLoaded = false
+const imgsReady = ref(false)
 
 function open(files) {
   leftFile.value  = files[0]
   rightFile.value = files[1]
   sliderPct.value = 50
   leftLoaded = false; rightLoaded = false
+  imgsReady.value = false
   baseScales.left = 1; baseScales.right = 1
   transform.scale = 1; transform.x = 0; transform.y = 0
   dialog.value = true
@@ -51,6 +53,7 @@ function computeBaseScales() {
   baseScales.left  = commonH / leftNH
   baseScales.right = commonH / rightNH
   transform.scale = 1; transform.x = 0; transform.y = 0
+  imgsReady.value = true
 }
 
 function onLeftImgLoad(e) {
@@ -133,6 +136,7 @@ defineExpose({ open })
     <div
       ref="bgEl"
       class="viewer-bg"
+      :style="{ visibility: imgsReady ? 'visible' : 'hidden' }"
       @wheel.prevent="onWheel"
       @mousedown="onMouseDown"
       @mousemove="onMouseMove"
@@ -140,21 +144,20 @@ defineExpose({ open })
       @mouseleave="onMouseUp"
       @dblclick="reset"
     >
-      <!-- Right image (always visible, behind) -->
-      <img
-        :src="rightUrl"
-        :alt="rightFile?.name"
-        draggable="false"
-        @load="onRightImgLoad"
-        class="viewer-img"
-        :style="rightImgStyle"
-      />
+      <!-- Right image — clipped to show only right of the slider -->
+      <div class="img-panel" :style="{ clipPath: `inset(0 0 0 ${sliderPct}%)` }">
+        <img
+          :src="rightUrl"
+          :alt="rightFile?.name"
+          draggable="false"
+          @load="onRightImgLoad"
+          class="viewer-img"
+          :style="rightImgStyle"
+        />
+      </div>
 
-      <!-- Left image clipped to the left side of the slider -->
-      <div
-        class="left-panel"
-        :style="{ clipPath: `inset(0 ${100 - sliderPct}% 0 0)` }"
-      >
+      <!-- Left image — clipped to show only left of the slider -->
+      <div class="img-panel" :style="{ clipPath: `inset(0 ${100 - sliderPct}% 0 0)` }">
         <img
           :src="leftUrl"
           :alt="leftFile?.name"
@@ -214,7 +217,7 @@ defineExpose({ open })
   position: absolute;
   max-width: none;
 }
-.left-panel {
+.img-panel {
   position: absolute;
   inset: 0;
   display: flex;
