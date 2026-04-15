@@ -7,17 +7,19 @@ export function useContextMenu() {
   const menuOpen = ref(false)
   const menuX    = ref(0)
   const menuY    = ref(0)
+  let reopening  = false
 
   function showMenu(x, y, file = null) {
     store.setContextMenuFile(file)
     menuX.value    = x
     menuY.value    = y
-    menuOpen.value   = false
-    setTimeout(() => { menuOpen.value = true }, 10)
+    reopening      = true
+    menuOpen.value = false
+    setTimeout(() => { reopening = false; menuOpen.value = true }, 10)
   }
 
   watch(menuOpen, (open) => {
-    if (!open) store.setContextMenuFile(null)
+    if (!open && !reopening) store.setContextMenuFile(null)
   })
 
   function onBgContextMenu(e) {
