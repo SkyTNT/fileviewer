@@ -37,6 +37,34 @@ onMounted(() => window.addEventListener('resize', onResize))
 onUnmounted(() => window.removeEventListener('resize', onResize))
 function backToTree() { mobileShowViewer.value = false }
 
+// ── tree panel resize ─────────────────────────────────────────────────────────
+const MIN_TREE  = 160
+const MAX_TREE  = 600
+const treeWidth = ref(parseInt(localStorage.getItem('fv-archive-tree-width') || '260'))
+const treeResizing = ref(false)
+
+function startTreeResize(e) {
+  e.preventDefault()
+  treeResizing.value = true
+  document.body.style.userSelect = 'none'
+  document.body.style.cursor = 'col-resize'
+  const startX = e.clientX
+  const startW = treeWidth.value
+  function onMove(e) {
+    treeWidth.value = Math.min(MAX_TREE, Math.max(MIN_TREE, startW + e.clientX - startX))
+  }
+  function onUp() {
+    treeResizing.value = false
+    document.body.style.userSelect = ''
+    document.body.style.cursor = ''
+    localStorage.setItem('fv-archive-tree-width', treeWidth.value)
+    window.removeEventListener('mousemove', onMove)
+    window.removeEventListener('mouseup', onUp)
+  }
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup', onUp)
+}
+
 // ── selection (partial extract) ──────────────────────────────────────────────
 const checkedPaths = ref(new Set())
 
@@ -403,7 +431,11 @@ defineExpose({ open })
       <div v-if="archiveInfo && !error" class="archive-body">
 
         <!-- Tree panel -->
-        <div class="archive-tree" :class="{ 'd-none': isMobile && mobileShowViewer }">
+        <div
+          class="archive-tree"
+          :class="{ 'd-none': isMobile && mobileShowViewer }"
+          :style="isMobile ? {} : { width: treeWidth + 'px' }"
+        >
           <div class="archive-tree-header px-3 d-flex align-center">
             <span class="text-caption text-medium-emphasis">
               {{ t('archive.viewer.entries', { n: archiveInfo.entry_count }) }}
@@ -423,19 +455,28 @@ defineExpose({ open })
           </div>
           <v-divider />
           <div class="archive-tree-scroll">
-            <ArchiveTreeNode
-              v-for="item in treeItems"
-              :key="item.path"
-              :item="item"
-              :random-access="archiveInfo.random_access"
-              :selected-path="selectedEntry?.path"
-              :depth="0"
-              :checked-paths="checkedPaths"
-              @select="selectEntry"
-              @toggle="onToggle"
-            />
+            <div class="archive-tree-inner">
+              <ArchiveTreeNode
+                v-for="item in treeItems"
+                :key="item.path"
+                :item="item"
+                :random-access="archiveInfo.random_access"
+                :selected-path="selectedEntry?.path"
+                :depth="0"
+                :checked-paths="checkedPaths"
+                @select="selectEntry"
+                @toggle="onToggle"
+              />
+            </div>
           </div>
           <v-divider />
+          <!-- Drag resize handle -->
+          <div
+            v-if="!isMobile"
+            class="archive-tree-resizer"
+            :class="{ active: treeResizing }"
+            @mousedown="startTreeResize"
+          />
           <!-- Footer: totals or sequential notice -->
           <div class="px-3 py-2 text-caption text-medium-emphasis d-flex align-center ga-1">
             <template v-if="!archiveInfo.random_access">
@@ -553,11 +594,10 @@ defineExpose({ open })
   overflow: hidden;
 }
 .archive-tree {
-  width: 260px;
-  min-width: 180px;
-  max-width: 380px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
   border-right: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   overflow: hidden;
 }
@@ -567,8 +607,26 @@ defineExpose({ open })
 }
 .archive-tree-scroll {
   flex: 1;
-  overflow-y: auto;
+  overflow: auto;
   padding: 4px;
+}
+.archive-tree-inner {
+  width: max-content;
+  min-width: 100%;
+}
+.archive-tree-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+  transition: background 0.15s;
+}
+.archive-tree-resizer:hover,
+.archive-tree-resizer.active {
+  background: rgba(var(--v-theme-primary), 0.4);
 }
 .archive-viewer-panel {
   flex: 1;
@@ -632,8 +690,6 @@ defineExpose({ open })
 @media (max-width: 639px) {
   .archive-tree {
     width: 100% !important;
-    max-width: none !important;
-    min-width: 0 !important;
     border-right: none !important;
   }
   .archive-viewer-panel {
