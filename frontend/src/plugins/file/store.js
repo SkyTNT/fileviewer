@@ -21,6 +21,8 @@ export const useFileStore = defineStore('file', () => {
   const roots         = ref([])
   const treeRevision  = ref(0)
   const filterPattern = ref('')
+  const sortBy        = ref(localStorage.getItem('fv-sort-by')    || 'name')
+  const sortOrder     = ref(localStorage.getItem('fv-sort-order') || 'asc')
   const clipboard      = ref(null)  // { entries: [...], action: 'copy' | 'cut' }
   const pasteProgress  = ref(null)  // { done, total, action } | null
   const deleteProgress = ref(null)  // { done, total } | null
@@ -173,6 +175,15 @@ export const useFileStore = defineStore('file', () => {
     loadDirectory(currentPath.value)
   }
 
+  function setSort(by, order) {
+    sortBy.value    = by
+    sortOrder.value = order
+    localStorage.setItem('fv-sort-by',    by)
+    localStorage.setItem('fv-sort-order', order)
+    invalidateTree()
+    loadDirectory(currentPath.value)
+  }
+
   const isAtHome = computed(() => currentPath.value === '')
 
   const breadcrumbs = computed(() => {
@@ -220,7 +231,7 @@ export const useFileStore = defineStore('file', () => {
     loading.value = true
     error.value   = null
     try {
-      const res         = await filesApi.listDirectory(path, p, pageSize.value, filterPattern.value || null)
+      const res         = await filesApi.listDirectory(path, p, pageSize.value, filterPattern.value || null, sortBy.value, sortOrder.value)
       currentPath.value = res.data.path
       entries.value     = res.data.entries
       total.value       = res.data.total
@@ -266,12 +277,12 @@ export const useFileStore = defineStore('file', () => {
   return {
     rootName, currentPath, entries, loading, error, viewMode, breadcrumbs,
     page, pageSize, total, selectedEntry, selectedEntries, writeMode, roots,
-    isAtHome, treeRevision, filterPattern,
+    isAtHome, treeRevision, filterPattern, sortBy, sortOrder,
     clipboard, pasteProgress, deleteProgress, nameConflicts,
     contextMenuFile, isContextMenuTarget, setContextMenuFile,
     init, loadDirectory, goToPage, navigate,
     selectEntry, toggleEntry, shiftSelectTo, addToSelection, clearSelection, setSelection,
-    invalidateTree, setFilter,
+    invalidateTree, setFilter, setSort,
     setCopy, setCut, clearClipboard, paste, resolveNameConflicts, cancelNameConflicts, deleteEntries,
     setRefreshHook, refresh,
   }

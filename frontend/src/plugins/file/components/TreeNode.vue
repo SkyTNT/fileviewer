@@ -20,13 +20,13 @@ async function loadChildren(force = false) {
   if (!force && (children.value.length > 0 || loading.value)) return
   loading.value = true
   try {
-    const res  = await filesApi.getTree(props.node.path, 1)
+    const res  = await filesApi.getTree(props.node.path, 1, store.sortBy, store.sortOrder)
     children.value = (res.data.children || []).filter(c => c.is_dir)
   } catch { children.value = [] }
   finally  { loading.value = false }
 }
 
-// When the tree is invalidated (write op), refresh children if expanded
+// Refresh children when tree is invalidated (write op or sort change)
 watch(() => store.treeRevision, () => {
   if (expanded.value) loadChildren(true)
 })

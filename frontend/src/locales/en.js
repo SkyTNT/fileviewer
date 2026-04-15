@@ -26,6 +26,12 @@ export default {
     language: 'Language',
     nItems: '{n} items',
     pasteName: 'Paste {name}',
+    sort: 'Sort',
+    sortBy: 'Sort by',
+    sortName: 'Name',
+    sortSize: 'Size',
+    sortModified: 'Modified',
+    sortType: 'Type',
   },
   detail: {
     itemsSelected: '{n} items selected',

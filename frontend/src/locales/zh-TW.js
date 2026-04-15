@@ -26,6 +26,12 @@ export default {
     language: '語言',
     nItems: '{n} 項',
     pasteName: '貼上 {name}',
+    sort: '排序',
+    sortBy: '排序方式',
+    sortName: '名稱',
+    sortSize: '大小',
+    sortModified: '修改時間',
+    sortType: '類型',
   },
   detail: {
     itemsSelected: '已選取 {n} 項',

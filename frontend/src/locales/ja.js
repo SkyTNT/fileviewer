@@ -26,6 +26,12 @@ export default {
     language: '言語',
     nItems: '{n} 件',
     pasteName: '{name} を貼り付け',
+    sort: '並び替え',
+    sortBy: '並び替え基準',
+    sortName: '名前',
+    sortSize: 'サイズ',
+    sortModified: '更新日時',
+    sortType: '種類',
   },
   detail: {
     itemsSelected: '{n} 件選択中',

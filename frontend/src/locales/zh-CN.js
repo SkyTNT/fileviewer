@@ -26,6 +26,12 @@ export default {
     language: '语言',
     nItems: '{n} 项',
     pasteName: '粘贴 {name}',
+    sort: '排序',
+    sortBy: '排序方式',
+    sortName: '名称',
+    sortSize: '大小',
+    sortModified: '修改时间',
+    sortType: '类型',
   },
   detail: {
     itemsSelected: '已选 {n} 项',

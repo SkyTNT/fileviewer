@@ -36,18 +36,33 @@ def entry_info(p: Path, slug: "str | None", root: Path) -> dict:
         }
 
 
-def build_tree(p: Path, remaining: int, slug: "str | None", root: Path) -> dict:
+def build_tree(p: Path, remaining: int, slug: "str | None", root: Path, sort_by: str = "name", sort_order: str = "asc") -> dict:
     node = entry_info(p, slug, root)
     if p.is_dir() and remaining > 0:
         children = []
         try:
-            for child in sorted(p.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
-                if child.is_dir():
-                    children.append(build_tree(child, remaining - 1, slug, root))
+            def dir_key(x):
+                if sort_by == "modified":
+                    try:
+                        return x.stat().st_mtime or 0
+                    except (PermissionError, OSError):
+                        return 0
+                return x.name.lower()
+
+            dirs = sorted(
+                (c for c in p.iterdir() if c.is_dir()),
+                key=dir_key,
+                reverse=(sort_order == "desc"),
+            )
+            for child in dirs:
+                children.append(build_tree(child, remaining - 1, slug, root, sort_by, sort_order))
         except PermissionError:
             pass
         node["children"] = children
     return node
+
+
+_VALID_SORT = {"name", "size", "modified", "type"}
 
 
 @router.get("/list")
@@ -56,6 +71,8 @@ def list_directory(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
     filter: str | None = Query(None),
+    sort_by: str = Query("name"),
+    sort_order: str = Query("asc"),
 ):
     # Home page — RootsView handles display, no file listing needed.
     if not path:
@@ -80,14 +97,42 @@ def list_directory(
             except concurrent.futures.TimeoutError:
                 raise HTTPException(status_code=400, detail="Filter pattern is too complex")
 
+    if sort_by not in _VALID_SORT:
+        sort_by = "name"
+    reverse = sort_order == "desc"
+
+    def dir_key(e):
+        if sort_by == "modified":
+            try:
+                return e.stat().st_mtime or 0
+            except (PermissionError, OSError):
+                return 0
+        return e.name.lower()  # name / size / type → fall back to name for dirs
+
+    def file_key(e):
+        try:
+            st = e.stat()
+        except (PermissionError, OSError):
+            return 0 if sort_by in ("size", "modified") else ""
+        if sort_by == "size":
+            return st.st_size
+        if sort_by == "modified":
+            return st.st_mtime or 0
+        if sort_by == "type":
+            return Path(e.path).suffix.lower()
+        return e.name.lower()  # name
+
     try:
         with os.scandir(abs_path) as it:
-            all_entries = sorted(
-                (e for e in it if pattern is None or pattern.search(e.name)),
-                key=lambda e: (not e.is_dir(), e.name.lower()),
-            )
+            raw = [e for e in it if pattern is None or pattern.search(e.name)]
     except PermissionError:
-        all_entries = []
+        raw = []
+
+    # Dirs and files sorted independently so dir_key/file_key can return different types.
+    # Dirs always come first.
+    dirs  = sorted([e for e in raw if     e.is_dir()], key=dir_key,  reverse=reverse)
+    files = sorted([e for e in raw if not e.is_dir()], key=file_key, reverse=reverse)
+    all_entries = dirs + files
 
     total = len(all_entries)
     start = (page - 1) * page_size
@@ -103,11 +148,11 @@ def list_directory(
 
 
 @router.get("/tree")
-def get_tree(path: str = Query(""), depth: int = Query(1)):
+def get_tree(path: str = Query(""), depth: int = Query(1), sort_by: str = Query("name"), sort_order: str = Query("asc")):
     if not path:
         children = []
         for slug, display_name, abs_path in get_roots():
-            node = build_tree(abs_path, depth - 1, slug, abs_path)
+            node = build_tree(abs_path, depth - 1, slug, abs_path, sort_by, sort_order)
             node["name"] = display_name
             children.append(node)
         return {
@@ -119,7 +164,7 @@ def get_tree(path: str = Query(""), depth: int = Query(1)):
     abs_path, slug, root = parse_path(path)
     if not abs_path.is_dir():
         raise HTTPException(status_code=400, detail="Not a directory")
-    return build_tree(abs_path, depth, slug, root)
+    return build_tree(abs_path, depth, slug, root, sort_by, sort_order)
 
 
 @router.get("/download")

@@ -10,6 +10,22 @@ import { useWriteStore } from '@/plugins/write/store.js'
 
 const emit = defineEmits(['toggle-sidebar'])
 const store       = useFileStore()
+
+// ── Sort ──────────────────────────────────────────────────────────────────────
+const SORT_OPTIONS = [
+  { value: 'name',     icon: 'mdi-sort-alphabetical-variant', label: 'toolbar.sortName' },
+  { value: 'size',     icon: 'mdi-sort-numeric-variant',      label: 'toolbar.sortSize' },
+  { value: 'modified', icon: 'mdi-sort-clock-ascending-outline', label: 'toolbar.sortModified' },
+  { value: 'type',     icon: 'mdi-file-outline',              label: 'toolbar.sortType' },
+]
+const sortActive = computed(() => store.sortBy !== 'name' || store.sortOrder !== 'asc')
+function onSortClick(by) {
+  if (store.sortBy === by) {
+    store.setSort(by, store.sortOrder === 'asc' ? 'desc' : 'asc')
+  } else {
+    store.setSort(by, 'asc')
+  }
+}
 const authStore   = useAuthStore()
 const uploadStore = useUploadStore()
 const { isDark, accentColor, toggleMode, setAccent } = useAppTheme()
@@ -187,6 +203,49 @@ const clipboardLabel = computed(() => {
       <v-tooltip activator="parent">{{ showFilter ? t('toolbar.closeFilter') : t('toolbar.filterFiles') }}</v-tooltip>
     </v-btn>
 
+    <!-- Sort button -->
+    <v-menu :close-on-content-click="false" location="bottom end">
+      <template #activator="{ props: menuProps }">
+        <v-btn icon size="small" class="mr-1" :color="sortActive ? 'primary' : undefined" v-bind="menuProps">
+          <v-icon size="20">mdi-sort</v-icon>
+          <v-tooltip activator="parent">{{ t('toolbar.sort') }}</v-tooltip>
+        </v-btn>
+      </template>
+      <v-list density="compact" min-width="160">
+        <div class="text-caption text-medium-emphasis px-3 pt-2 pb-1">{{ t('toolbar.sortBy') }}</div>
+        <v-list-item
+          v-for="opt in SORT_OPTIONS"
+          :key="opt.value"
+          :active="store.sortBy === opt.value"
+          color="primary"
+          rounded="lg"
+          @click="onSortClick(opt.value)"
+        >
+          <template #prepend>
+            <v-icon size="18" class="mr-2">{{ opt.icon }}</v-icon>
+          </template>
+          <v-list-item-title>{{ t(opt.label) }}</v-list-item-title>
+          <template #append>
+            <v-icon v-if="store.sortBy === opt.value" size="16" class="ml-2">
+              {{ store.sortOrder === 'asc' ? 'mdi-arrow-up' : 'mdi-arrow-down' }}
+            </v-icon>
+          </template>
+        </v-list-item>
+      </v-list>
+    </v-menu>
+
+    <!-- View toggle -->
+    <v-btn-toggle v-model="store.viewMode" mandatory density="compact" rounded="lg" class="mr-2" color="primary">
+      <v-btn value="waterfall" size="small">
+        <v-icon size="18">mdi-view-dashboard-outline</v-icon>
+        <v-tooltip activator="parent">{{ t('toolbar.waterfall') }}</v-tooltip>
+      </v-btn>
+      <v-btn value="list" size="small">
+        <v-icon size="18">mdi-view-list-outline</v-icon>
+        <v-tooltip activator="parent">{{ t('toolbar.list') }}</v-tooltip>
+      </v-btn>
+    </v-btn-toggle>
+
     <!-- Write mode actions (hidden at multi-root virtual root) -->
     <template v-if="store.writeMode && !store.isAtHome">
       <v-chip size="x-small" color="warning" variant="tonal" class="mr-2 font-weight-bold">
@@ -225,28 +284,10 @@ const clipboardLabel = computed(() => {
       </v-btn>
     </template>
 
-    <!-- View toggle -->
-    <v-btn-toggle v-model="store.viewMode" mandatory density="compact" rounded="lg" class="mr-2" color="primary">
-      <v-btn value="waterfall" size="small">
-        <v-icon size="18">mdi-view-dashboard-outline</v-icon>
-        <v-tooltip activator="parent">{{ t('toolbar.waterfall') }}</v-tooltip>
-      </v-btn>
-      <v-btn value="list" size="small">
-        <v-icon size="18">mdi-view-list-outline</v-icon>
-        <v-tooltip activator="parent">{{ t('toolbar.list') }}</v-tooltip>
-      </v-btn>
-    </v-btn-toggle>
-
     <!-- Logout -->
     <v-btn v-if="authStore.authRequired" icon size="small" class="mr-1" @click="authStore.logout">
       <v-icon size="20">mdi-logout</v-icon>
       <v-tooltip activator="parent">{{ t('toolbar.logout') }}</v-tooltip>
-    </v-btn>
-
-    <!-- Dark / Light toggle -->
-    <v-btn icon size="small" class="mr-1" @click="toggleMode">
-      <v-icon size="20">{{ isDark ? 'mdi-weather-sunny' : 'mdi-weather-night' }}</v-icon>
-      <v-tooltip activator="parent">{{ isDark ? t('toolbar.lightMode') : t('toolbar.darkMode') }}</v-tooltip>
     </v-btn>
 
     <!-- Language picker -->
@@ -288,6 +329,12 @@ const clipboardLabel = computed(() => {
         />
       </v-list>
     </v-menu>
+
+    <!-- Dark / Light toggle -->
+    <v-btn icon size="small" class="mr-1" @click="toggleMode">
+      <v-icon size="20">{{ isDark ? 'mdi-weather-sunny' : 'mdi-weather-night' }}</v-icon>
+      <v-tooltip activator="parent">{{ isDark ? t('toolbar.lightMode') : t('toolbar.darkMode') }}</v-tooltip>
+    </v-btn>
 
     <!-- Accent color picker -->
     <v-menu :close-on-content-click="false" location="bottom end">
@@ -346,6 +393,28 @@ const clipboardLabel = computed(() => {
           </v-tooltip>
         </v-text-field>
       </div>
+
+      <v-divider />
+
+      <!-- Sort -->
+      <div class="text-caption text-medium-emphasis px-3 pt-2 pb-1">{{ t('toolbar.sortBy') }}</div>
+      <v-list-item
+        v-for="opt in SORT_OPTIONS"
+        :key="opt.value"
+        :prepend-icon="opt.icon"
+        :title="t(opt.label)"
+        :active="store.sortBy === opt.value"
+        color="primary"
+        density="compact"
+        rounded="lg"
+        @click="onSortClick(opt.value)"
+      >
+        <template #append>
+          <v-icon v-if="store.sortBy === opt.value" size="16">
+            {{ store.sortOrder === 'asc' ? 'mdi-arrow-up' : 'mdi-arrow-down' }}
+          </v-icon>
+        </template>
+      </v-list-item>
 
       <v-divider />
 
@@ -411,15 +480,6 @@ const clipboardLabel = computed(() => {
 
       <v-divider />
 
-      <!-- Dark / Light -->
-      <v-list-item
-        :prepend-icon="isDark ? 'mdi-weather-sunny' : 'mdi-weather-night'"
-        :title="isDark ? t('toolbar.lightMode') : t('toolbar.darkMode')"
-        density="compact"
-        rounded="lg"
-        @click="toggleMode"
-      />
-
       <!-- Language -->
       <v-list-item
         prepend-icon="mdi-translate"
@@ -456,6 +516,15 @@ const clipboardLabel = computed(() => {
           </div>
         </template>
       </v-list-item>
+
+      <!-- Dark / Light -->
+      <v-list-item
+        :prepend-icon="isDark ? 'mdi-weather-sunny' : 'mdi-weather-night'"
+        :title="isDark ? t('toolbar.lightMode') : t('toolbar.darkMode')"
+        density="compact"
+        rounded="lg"
+        @click="toggleMode"
+      />
 
       <!-- Accent color -->
       <v-list-item density="compact" class="pa-2">
