@@ -4,118 +4,120 @@ import { useNotificationStore } from '../stores/notificationStore.js'
 import { writeApi } from '../services/api.js'
 import { getErrorMessage } from '../utils/errors.js'
 
-function createDialogState() {
+// ── Module-level singletons ────────────────────────────────────────────────────
+// All callers of useWriteActions() share the same dialog state, so dialogs only
+// need to be mounted once (in App.vue).
+
+function _dialogState() {
   return { dialog: ref(false), name: ref(''), loading: ref(false), error: ref('') }
 }
 
-/**
- * All write-mode operations: rename, delete, mkdir, touch, paste.
- */
+const _rename      = _dialogState()
+const _renameTarget = ref(null)
+let   _renameOnSuccess = null
+
+const _deleteDialog  = ref(false)
+const _deleteTargets = ref([])
+
+const _mkdir = _dialogState()
+const _touch = _dialogState()
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function useWriteActions() {
-  const { showError } = useNotificationStore()
   const store = useFileStore()
+  const { showError } = useNotificationStore()
 
-  // ── Rename ───────────────────────────────────────────────────────────────────
-  const rename = createDialogState()
-  const renameTarget  = ref(null)
-  let _renameOnSuccess = null
-
+  // ── Rename ─────────────────────────────────────────────────────────────────
   function openRename(file, onSuccess = null) {
-    renameTarget.value    = file
-    _renameOnSuccess      = onSuccess
-    rename.name.value     = file?.name || ''
-    rename.error.value    = ''
-    rename.dialog.value   = true
+    _renameTarget.value  = file
+    _renameOnSuccess     = onSuccess
+    _rename.name.value   = file?.name || ''
+    _rename.error.value  = ''
+    _rename.dialog.value = true
   }
 
   async function confirmRename() {
-    const newName = rename.name.value.trim()
-    if (!newName || newName === renameTarget.value?.name) { rename.dialog.value = false; return }
-    rename.loading.value = true
-    rename.error.value   = ''
+    const newName = _rename.name.value.trim()
+    if (!newName || newName === _renameTarget.value?.name) { _rename.dialog.value = false; return }
+    _rename.loading.value = true
+    _rename.error.value   = ''
     try {
-      await writeApi.rename(renameTarget.value.path, newName)
-      rename.dialog.value = false
+      await writeApi.rename(_renameTarget.value.path, newName)
+      _rename.dialog.value = false
       store.invalidateTree()
       store.refresh()
       _renameOnSuccess?.()
     } catch (e) {
-      rename.error.value = getErrorMessage(e)
+      _rename.error.value = getErrorMessage(e)
     } finally {
-      rename.loading.value = false
+      _rename.loading.value = false
     }
   }
 
-  // ── Delete ────────────────────────────────────────────────────────────────────
-  const deleteDialog  = ref(false)
-  const deleteTargets = ref([])
-
+  // ── Delete ─────────────────────────────────────────────────────────────────
   function openDelete(entries) {
-    deleteTargets.value = Array.isArray(entries) ? entries : [entries]
-    deleteDialog.value  = true
+    _deleteTargets.value = Array.isArray(entries) ? entries : [entries]
+    _deleteDialog.value  = true
   }
 
   async function confirmDelete() {
-    deleteDialog.value = false
+    _deleteDialog.value = false
     try {
-      await store.deleteEntries(deleteTargets.value)
+      await store.deleteEntries(_deleteTargets.value)
     } catch (e) {
       showError(getErrorMessage(e))
     }
   }
 
-  // ── New Folder ────────────────────────────────────────────────────────────────
-  const mkdir = createDialogState()
-
+  // ── New Folder ─────────────────────────────────────────────────────────────
   function openMkdir() {
-    mkdir.name.value   = ''
-    mkdir.error.value  = ''
-    mkdir.dialog.value = true
+    _mkdir.name.value   = ''
+    _mkdir.error.value  = ''
+    _mkdir.dialog.value = true
   }
 
   async function confirmMkdir() {
-    const name = mkdir.name.value.trim()
+    const name = _mkdir.name.value.trim()
     if (!name) return
-    mkdir.loading.value = true
-    mkdir.error.value   = ''
+    _mkdir.loading.value = true
+    _mkdir.error.value   = ''
     try {
       await writeApi.mkdir(store.currentPath, name)
-      mkdir.dialog.value = false
+      _mkdir.dialog.value = false
       store.invalidateTree()
       store.refresh()
     } catch (e) {
-      mkdir.error.value = getErrorMessage(e)
+      _mkdir.error.value = getErrorMessage(e)
     } finally {
-      mkdir.loading.value = false
+      _mkdir.loading.value = false
     }
   }
 
-  // ── New File ──────────────────────────────────────────────────────────────────
-  const touch = createDialogState()
-
+  // ── New File ───────────────────────────────────────────────────────────────
   function openTouch() {
-    touch.name.value   = ''
-    touch.error.value  = ''
-    touch.dialog.value = true
+    _touch.name.value   = ''
+    _touch.error.value  = ''
+    _touch.dialog.value = true
   }
 
   async function confirmTouch() {
-    const name = touch.name.value.trim()
+    const name = _touch.name.value.trim()
     if (!name) return
-    touch.loading.value = true
-    touch.error.value   = ''
+    _touch.loading.value = true
+    _touch.error.value   = ''
     try {
       await writeApi.touch(store.currentPath, name)
-      touch.dialog.value = false
+      _touch.dialog.value = false
       store.refresh()
     } catch (e) {
-      touch.error.value = getErrorMessage(e)
+      _touch.error.value = getErrorMessage(e)
     } finally {
-      touch.loading.value = false
+      _touch.loading.value = false
     }
   }
 
-  // ── Paste ─────────────────────────────────────────────────────────────────────
+  // ── Paste ──────────────────────────────────────────────────────────────────
   async function doPaste() {
     try {
       await store.paste()
@@ -126,18 +128,19 @@ export function useWriteActions() {
 
   return {
     // rename
-    renameDialog: rename.dialog, renameTarget, renameName: rename.name,
-    renameLoading: rename.loading, renameError: rename.error,
+    renameDialog: _rename.dialog, renameName: _rename.name,
+    renameLoading: _rename.loading, renameError: _rename.error,
     openRename, confirmRename,
     // delete
-    deleteDialog, deleteTargets, openDelete, confirmDelete,
+    deleteDialog: _deleteDialog, deleteTargets: _deleteTargets,
+    openDelete, confirmDelete,
     // mkdir
-    mkdirDialog: mkdir.dialog, mkdirName: mkdir.name,
-    mkdirLoading: mkdir.loading, mkdirError: mkdir.error,
+    mkdirDialog: _mkdir.dialog, mkdirName: _mkdir.name,
+    mkdirLoading: _mkdir.loading, mkdirError: _mkdir.error,
     openMkdir, confirmMkdir,
     // touch
-    touchDialog: touch.dialog, touchName: touch.name,
-    touchLoading: touch.loading, touchError: touch.error,
+    touchDialog: _touch.dialog, touchName: _touch.name,
+    touchLoading: _touch.loading, touchError: _touch.error,
     openTouch, confirmTouch,
     // paste
     doPaste,

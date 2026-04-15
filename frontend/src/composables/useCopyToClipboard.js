@@ -35,22 +35,24 @@ export async function copyFileToClipboard(file) {
   }
 }
 
+// Module-level singleton so copyLoading is shared across all callers.
+const _copyLoading = ref(false)
+
 export function useCopyToClipboard() {
   const { showError, showSuccess } = useNotificationStore()
   const { t } = useI18n()
-  const copyLoading = ref(false)
 
   async function copyToClipboard(file) {
-    copyLoading.value = true
+    _copyLoading.value = true
     try {
       await copyFileToClipboard(file)
       showSuccess(t('notify.copiedToClipboard'))
     } catch (e) {
       showError(e.message)
     } finally {
-      copyLoading.value = false
+      _copyLoading.value = false
     }
   }
 
-  return { copyLoading, copyToClipboard }
+  return { copyLoading: _copyLoading, copyToClipboard }
 }

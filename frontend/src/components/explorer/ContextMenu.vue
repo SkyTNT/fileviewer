@@ -1,69 +1,40 @@
 <script setup>
-import { ref, computed } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { computed, ref } from 'vue'
 import { useFileStore } from '../../stores/fileStore.js'
-import { copyFileToClipboard } from '../../composables/useCopyToClipboard.js'
-import { useNotificationStore } from '../../stores/notificationStore.js'
-import { downloadFiles } from '../../utils/download.js'
+import { useActionContext } from '../../composables/useActionContext.js'
+import { resolveMenuActions } from '../../actions/index.js'
 
 const props = defineProps({
   modelValue: Boolean,
   x: { type: Number, default: 0 },
   y: { type: Number, default: 0 },
-  file: { type: Object, default: null },  // null = background (no file selected)
+  file: { type: Object, default: null },
 })
+const emit = defineEmits(['update:modelValue'])
 
-const emit  = defineEmits(['update:modelValue', 'rename', 'delete', 'mkdir', 'touch', 'paste', 'open-file', 'extract-here', 'extract-to-subfolder', 'compress'])
 const store = useFileStore()
-const { showError, showSuccess } = useNotificationStore()
-const { t } = useI18n()
+const { baseCtx, copyToClipboard } = useActionContext()
 
 const anchorEl = ref(null)
 
-const canWrite = () => store.writeMode && !store.isAtHome
-
-// Is the right-clicked file part of a multi-selection?
-const isMultiTarget = computed(() =>
+// Is the right-clicked file part of the current multi-selection?
+const isTarget = computed(() =>
   props.file != null &&
   store.selectedEntries.length > 1 &&
   store.selectedEntries.some(e => e.path === props.file.path)
 )
 
-// Files to download (excludes dirs)
-const downloadTargets = computed(() =>
-  isMultiTarget.value
-    ? store.selectedEntries.filter(e => !e.is_dir)
-    : (props.file && !props.file.is_dir ? [props.file] : [])
-)
-
-// Entries to delete
-const deleteTargets = computed(() =>
-  isMultiTarget.value ? store.selectedEntries : (props.file ? [props.file] : [])
-)
-
-// Can compare: exactly 2 images in multi-selection
-const canCompare = computed(() =>
-  isMultiTarget.value &&
-  store.selectedEntries.length === 2 &&
-  store.selectedEntries.every(e => e.type === 'image')
-)
-
-// Archive actions
-const isArchive = computed(() =>
-  props.file != null && !isMultiTarget.value && props.file.type === 'archive'
-)
-const compressTargets = computed(() =>
-  isMultiTarget.value ? store.selectedEntries : (props.file ? [props.file] : [])
-)
-
-async function copyClipboard() {
-  try {
-    await copyFileToClipboard(props.file)
-    showSuccess(t('notify.copiedToClipboard'))
-  } catch (e) {
-    showError(e.message)
+const visibleItems = computed(() => {
+  const ctx = {
+    ...baseCtx.value,
+    file: props.file,
+    selection: store.selectedEntries,
+    isMulti: store.selectedEntries.length > 1,
+    isTarget: isTarget.value,
+    copyToClipboard: () => copyToClipboard(props.file),
   }
-}
+  return resolveMenuActions(ctx)
+})
 </script>
 
 <template>
@@ -80,98 +51,15 @@ async function copyClipboard() {
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <v-list density="compact" min-width="180">
-
-      <!-- Compare Images (exactly 2 images selected) -->
-      <v-list-item
-        v-if="canCompare"
-        prepend-icon="mdi-image-multiple-outline"
-        :title="t('menu.compareImages')"
-        @click="$emit('open-file', store.selectedEntries)"
-      />
-
-      <!-- Download -->
-      <v-list-item
-        v-if="downloadTargets.length"
-        prepend-icon="mdi-download-outline"
-        :title="downloadTargets.length > 1 ? t('menu.downloadFiles', { n: downloadTargets.length }) : t('menu.download')"
-        @click="downloadFiles(downloadTargets)"
-      />
-
-      <!-- Copy to clipboard (single file only) -->
-      <v-list-item
-        v-if="file && !file.is_dir && !isMultiTarget"
-        prepend-icon="mdi-clipboard-outline"
-        :title="t('menu.copyToClipboard')"
-        @click="copyClipboard"
-      />
-
-      <!-- Archive: extract (single archive file) -->
-      <template v-if="isArchive">
-        <v-divider />
+      <template v-for="item in visibleItems" :key="item.key">
+        <v-divider v-if="item.divider" />
         <v-list-item
-          prepend-icon="mdi-archive-arrow-down-outline"
-          :title="t('menu.extractHere')"
-          @click="$emit('extract-here', file)"
-        />
-        <v-list-item
-          prepend-icon="mdi-folder-arrow-down-outline"
-          :title="t('menu.extractToSubfolder')"
-          @click="$emit('extract-to-subfolder', file)"
+          :prepend-icon="item.icon"
+          :title="item.label"
+          :base-color="item.color"
+          @click="item.action()"
         />
       </template>
-
-      <!-- Archive: compress (any file/dir selection) -->
-      <template v-if="compressTargets.length">
-        <v-divider />
-        <v-list-item
-          prepend-icon="mdi-archive-plus-outline"
-          :title="t('menu.addToArchive')"
-          @click="$emit('compress', compressTargets)"
-        />
-      </template>
-
-      <template v-if="canWrite()">
-
-        <!-- File-specific write operations -->
-        <template v-if="file">
-          <v-divider v-if="!file.is_dir || isMultiTarget" />
-          <v-list-item
-            prepend-icon="mdi-content-copy"
-            :title="isMultiTarget ? t('menu.copyItems', { n: store.selectedEntries.length }) : t('menu.copy')"
-            @click="store.setCopy(isMultiTarget ? store.selectedEntries : [file])"
-          />
-          <v-list-item
-            prepend-icon="mdi-content-cut"
-            :title="isMultiTarget ? t('menu.cutItems', { n: store.selectedEntries.length }) : t('menu.cut')"
-            @click="store.setCut(isMultiTarget ? store.selectedEntries : [file])"
-          />
-          <v-divider />
-          <v-list-item
-            v-if="!isMultiTarget"
-            prepend-icon="mdi-pencil-outline"
-            :title="t('menu.rename')"
-            @click="$emit('rename')"
-          />
-          <v-list-item
-            prepend-icon="mdi-delete-outline"
-            :title="isMultiTarget ? t('menu.deleteItems', { n: store.selectedEntries.length }) : t('menu.delete')"
-            base-color="error"
-            @click="$emit('delete', deleteTargets)"
-          />
-          <v-divider />
-        </template>
-
-        <!-- Background operations -->
-        <v-list-item prepend-icon="mdi-folder-plus-outline" :title="t('menu.newFolder')" @click="$emit('mkdir')" />
-        <v-list-item prepend-icon="mdi-file-plus-outline"   :title="t('menu.newFile')"   @click="$emit('touch')" />
-
-        <template v-if="store.clipboard">
-          <v-divider />
-          <v-list-item prepend-icon="mdi-content-paste" :title="t('menu.paste')" @click="$emit('paste')" />
-        </template>
-
-      </template>
-
     </v-list>
   </v-menu>
 </template>

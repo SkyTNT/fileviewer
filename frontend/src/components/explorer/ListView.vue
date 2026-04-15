@@ -3,30 +3,18 @@ import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFileStore } from '../../stores/fileStore.js'
 import { useWriteActions } from '../../composables/useWriteActions.js'
-import { useArchiveActions } from '../../composables/useArchiveActions.js'
 import { useRubberBand } from '../../composables/useRubberBand.js'
 import { useContextMenu } from '../../composables/useContextMenu.js'
 import { useExplorerKeyboard } from '../../composables/useExplorerKeyboard.js'
 import { TYPE_ICON, TYPE_COLOR, formatBytes, formatDate } from '../../utils/fileTypes.js'
 import ContextMenu from './ContextMenu.vue'
-import DialogRename from '../dialogs/DialogRename.vue'
-import DialogConfirmDelete from '../dialogs/DialogConfirmDelete.vue'
-import DialogNewItem from '../dialogs/DialogNewItem.vue'
 import PaginationBar from '../PaginationBar.vue'
 
 const emit  = defineEmits(['open-file'])
 const store = useFileStore()
 const { t } = useI18n()
 
-const {
-  mkdirDialog, mkdirName, mkdirLoading, mkdirError, openMkdir, confirmMkdir,
-  touchDialog, touchName, touchLoading, touchError, openTouch, confirmTouch,
-  doPaste,
-  renameDialog, renameName, renameLoading, renameError, openRename, confirmRename,
-  deleteDialog, deleteTargets, openDelete, confirmDelete,
-} = useWriteActions()
-
-const { openCompress, extractHere, extractToSubfolder } = useArchiveActions()
+const { doPaste } = useWriteActions()
 
 const { menuOpen, menuX, menuY, menuTarget, showMenu, onBgContextMenu } = useContextMenu()
 
@@ -142,47 +130,7 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
   />
 
   <!-- Single shared context menu -->
-  <ContextMenu
-    v-model="menuOpen"
-    :x="menuX" :y="menuY"
-    :file="menuTarget"
-    @rename="openRename(menuTarget)"
-    @delete="openDelete"
-    @mkdir="openMkdir"
-    @touch="openTouch"
-    @paste="doPaste"
-    @open-file="$emit('open-file', $event)"
-    @extract-here="extractHere"
-    @extract-to-subfolder="extractToSubfolder"
-    @compress="openCompress"
-  />
-
-  <DialogRename
-    v-model="renameDialog"
-    v-model:name="renameName"
-    :loading="renameLoading"
-    :error="renameError"
-    @confirm="confirmRename"
-  />
-  <DialogConfirmDelete v-model="deleteDialog" :targets="deleteTargets" @confirm="confirmDelete" />
-  <DialogNewItem
-    v-model="mkdirDialog"
-    :title="t('dialog.newFolder')"
-    :label="t('dialog.folderName')"
-    v-model:name="mkdirName"
-    :loading="mkdirLoading"
-    :error="mkdirError"
-    @confirm="confirmMkdir"
-  />
-  <DialogNewItem
-    v-model="touchDialog"
-    :title="t('dialog.newFile')"
-    :label="t('dialog.fileName')"
-    v-model:name="touchName"
-    :loading="touchLoading"
-    :error="touchError"
-    @confirm="confirmTouch"
-  />
+  <ContextMenu v-model="menuOpen" :x="menuX" :y="menuY" :file="menuTarget" />
 </template>
 
 <style scoped>

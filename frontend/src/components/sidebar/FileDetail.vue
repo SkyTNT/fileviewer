@@ -2,61 +2,31 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFileStore } from '../../stores/fileStore.js'
-import { imagesApi, filesApi, textApi } from '../../services/api.js'
-
-import { useCopyToClipboard } from '../../composables/useCopyToClipboard.js'
-import { useWriteActions } from '../../composables/useWriteActions.js'
-import { useArchiveActions } from '../../composables/useArchiveActions.js'
+import { imagesApi, textApi } from '../../services/api.js'
+import { useActionContext } from '../../composables/useActionContext.js'
+import { resolveDetailActions } from '../../actions/index.js'
 import { TYPE_ICON, TYPE_COLOR, formatBytes, formatDate } from '../../utils/fileTypes.js'
-import { downloadFiles } from '../../utils/download.js'
 import JsonNode from '../viewers/JsonNode.vue'
-import DialogRename from '../dialogs/DialogRename.vue'
-import DialogConfirmDelete from '../dialogs/DialogConfirmDelete.vue'
 
-const emit  = defineEmits(['open-file'])
 const store = useFileStore()
 const { t } = useI18n()
+const { singleCtx, multiCtx } = useActionContext()
 
-// Single-select (when exactly 1 item selected)
-const file     = computed(() => store.selectedEntry)
-const canWrite = computed(() => store.writeMode && store.currentPath !== '')
+const file    = computed(() => store.selectedEntry)
+const isMulti = computed(() => store.selectedEntries.length > 1)
 
-// ── Multi-select computed ────────────────────────────────────────────────────
-const isMulti     = computed(() => store.selectedEntries.length > 1)
-const multiFiles  = computed(() => store.selectedEntries.filter(e => !e.is_dir))
-const multiDirs   = computed(() => store.selectedEntries.filter(e =>  e.is_dir))
-const multiSize   = computed(() => multiFiles.value.reduce((s, e) => s + (e.size ?? 0), 0))
-const canCompare  = computed(() =>
-  store.selectedEntries.length === 2 &&
-  store.selectedEntries.every(e => e.type === 'image')
-)
+const typeIcon  = computed(() => TYPE_ICON[file.value?.type] || 'mdi-file-outline')
+const typeColor = computed(() => TYPE_COLOR[file.value?.type] || 'surface-variant')
+const formatSize = (bytes) => formatBytes(bytes, '—')
+const fmtDate    = (ts)    => formatDate(ts, '—')
 
-function downloadSelected() {
-  downloadFiles(multiFiles.value)
-}
-
-function openEntry() {
-  if (!file.value) return
-  if (file.value.is_dir) {
-    store.navigate(file.value.path)
-    store.selectEntry(null)
-  } else {
-    emit('open-file', file.value)
-  }
-}
-
-const isImage = computed(() => file.value?.type === 'image')
+const isImage  = computed(() => file.value?.type === 'image')
 const imgError = ref(false)
-
-const { copyLoading, copyToClipboard: _copyToClipboard } = useCopyToClipboard()
-const copyToClipboard = () => _copyToClipboard(file.value)
-
 watch(file, () => { imgError.value = false })
 
-// Same-name .json meta file
+// Same-name .json meta file (images only)
 const metaData    = ref(null)
 const metaLoading = ref(false)
-
 watch(file, async (f) => {
   metaData.value = null
   if (!f || f.type !== 'image' || !f.extension) return
@@ -72,19 +42,8 @@ watch(file, async (f) => {
   }
 }, { immediate: true })
 
-const typeIcon   = computed(() => TYPE_ICON[file.value?.type] || 'mdi-file-outline')
-const typeColor  = computed(() => TYPE_COLOR[file.value?.type] || 'surface-variant')
-const formatSize = (bytes) => formatBytes(bytes, '—')
-const fmtDate    = (ts) => formatDate(ts, '—')
-
-const {
-  renameDialog, renameName, renameLoading, renameError, openRename, confirmRename,
-  deleteDialog, deleteTargets, openDelete, confirmDelete,
-} = useWriteActions()
-
-const { openCompress, extractHere, extractToSubfolder } = useArchiveActions()
-
-const isArchive = computed(() => file.value?.type === 'archive')
+const singleActions = computed(() => resolveDetailActions(singleCtx.value, 'single'))
+const multiActions  = computed(() => resolveDetailActions(multiCtx.value,  'multi'))
 </script>
 
 <template>
@@ -100,101 +59,46 @@ const isArchive = computed(() => file.value?.type === 'archive')
 
     <v-divider />
 
-    <!-- Preview area -->
     <div class="preview-area pa-4 d-flex align-center justify-center">
       <v-icon color="primary" size="80">mdi-checkbox-multiple-marked-outline</v-icon>
     </div>
 
     <v-divider />
 
-    <!-- Actions -->
     <div class="px-3 pt-3 d-flex flex-column ga-2">
-      <v-btn
-        v-if="multiFiles.length"
-        color="secondary"
-        variant="tonal"
-        block
-        prepend-icon="mdi-download"
-        @click="downloadSelected"
-      >
-        {{ t('detail.downloadFiles', { n: multiFiles.length }) }}
-      </v-btn>
-
-      <v-btn
-        v-if="canCompare"
-        color="primary"
-        variant="tonal"
-        block
-        prepend-icon="mdi-image-multiple-outline"
-        @click="$emit('open-file', store.selectedEntries)"
-      >
-        {{ t('detail.compareImages') }}
-      </v-btn>
-
-      <template v-if="canWrite">
-        <div class="d-flex ga-2">
+      <template v-for="row in multiActions" :key="row.key">
+        <div v-if="row.type === 'pair'" class="d-flex ga-2">
           <v-btn
-            color="secondary"
-            variant="tonal"
-            style="flex:1"
-            prepend-icon="mdi-content-copy"
-            @click="store.setCopy(store.selectedEntries)"
-          >
-            {{ t('detail.copy') }}
-          </v-btn>
-          <v-btn
-            color="secondary"
-            variant="tonal"
-            style="flex:1"
-            prepend-icon="mdi-content-cut"
-            @click="store.setCut(store.selectedEntries)"
-          >
-            {{ t('detail.cut') }}
-          </v-btn>
+            v-for="btn in row.items" :key="btn.key"
+            :color="btn.color" variant="tonal" style="flex:1"
+            :prepend-icon="btn.icon" @click="btn.action()"
+          >{{ btn.label }}</v-btn>
         </div>
-        <v-btn
-          color="orange"
-          variant="tonal"
-          block
-          prepend-icon="mdi-archive-plus-outline"
-          @click="openCompress(store.selectedEntries)"
-        >
-          {{ t('detail.addToArchive') }}
-        </v-btn>
-        <v-btn
-          color="error"
-          variant="tonal"
-          block
-          prepend-icon="mdi-delete-outline"
-          @click="openDelete(store.selectedEntries)"
-        >
-          {{ t('detail.deleteItems', { n: store.selectedEntries.length }) }}
-        </v-btn>
+        <v-btn v-else :color="row.color" variant="tonal" block
+               :prepend-icon="row.icon" @click="row.action()">{{ row.label }}</v-btn>
       </template>
     </div>
 
     <!-- Summary -->
     <div class="info-list pa-3">
-      <div v-if="multiFiles.length" class="info-row">
+      <div v-if="store.selectedEntries.filter(e => !e.is_dir).length" class="info-row">
         <span class="info-label text-caption text-medium-emphasis">{{ t('detail.files') }}</span>
-        <span class="info-value text-body-2">{{ multiFiles.length }}</span>
+        <span class="info-value text-body-2">{{ store.selectedEntries.filter(e => !e.is_dir).length }}</span>
       </div>
-      <div v-if="multiDirs.length" class="info-row">
+      <div v-if="store.selectedEntries.filter(e => e.is_dir).length" class="info-row">
         <span class="info-label text-caption text-medium-emphasis">{{ t('detail.folders') }}</span>
-        <span class="info-value text-body-2">{{ multiDirs.length }}</span>
+        <span class="info-value text-body-2">{{ store.selectedEntries.filter(e => e.is_dir).length }}</span>
       </div>
-      <div v-if="multiFiles.length" class="info-row">
+      <div v-if="store.selectedEntries.filter(e => !e.is_dir).length" class="info-row">
         <span class="info-label text-caption text-medium-emphasis">{{ t('detail.totalSize') }}</span>
-        <span class="info-value text-body-2">{{ formatSize(multiSize) }}</span>
+        <span class="info-value text-body-2">{{ formatSize(store.selectedEntries.reduce((s, e) => s + (e.size ?? 0), 0)) }}</span>
       </div>
       <div class="info-row">
         <span class="info-label text-caption text-medium-emphasis">{{ t('detail.selected') }}</span>
         <div class="d-flex flex-column ga-1 mt-1">
           <span
-            v-for="entry in store.selectedEntries.slice(0, 10)"
-            :key="entry.path"
-            class="info-value text-body-2 text-truncate"
-            :title="entry.name"
+            v-for="entry in store.selectedEntries.slice(0, 10)" :key="entry.path"
+            class="info-value text-body-2 text-truncate" :title="entry.name"
           >
             <v-icon size="14" class="mr-1" :color="entry.is_dir ? 'primary' : undefined">
               {{ entry.is_dir ? 'mdi-folder' : 'mdi-file-outline' }}
@@ -210,7 +114,6 @@ const isArchive = computed(() => file.value?.type === 'archive')
 
   <!-- ── Single-select panel ──────────────────────────────────────────────── -->
   <div v-else-if="file" class="detail-panel">
-    <!-- Header -->
     <div class="d-flex align-center px-3 pt-3 pb-1">
       <span class="text-subtitle-2 font-weight-bold">{{ t('detail.details') }}</span>
       <v-spacer />
@@ -226,8 +129,7 @@ const isArchive = computed(() => file.value?.type === 'archive')
       <img
         v-if="isImage && !imgError"
         :src="imagesApi.thumbnailUrl(file.path, 400)"
-        class="preview-img"
-        :alt="file.name"
+        class="preview-img" :alt="file.name"
         @error="imgError = true"
       />
       <v-icon v-else :color="typeColor" size="80">{{ typeIcon }}</v-icon>
@@ -237,114 +139,24 @@ const isArchive = computed(() => file.value?.type === 'archive')
 
     <!-- Action buttons -->
     <div class="px-3 pt-3 d-flex flex-column ga-2">
-      <!-- Open -->
-      <v-btn
-        color="primary"
-        variant="tonal"
-        block
-        :prepend-icon="file.is_dir ? 'mdi-folder-open-outline' : 'mdi-open-in-app'"
-        @click="openEntry"
-      >
-        {{ t('detail.open') }}
-      </v-btn>
-
-      <!-- Download (files only) -->
-      <v-btn
-        v-if="!file.is_dir"
-        :href="filesApi.downloadUrl(file.path)"
-        :download="file.name"
-        color="secondary"
-        variant="tonal"
-        block
-        prepend-icon="mdi-download"
-      >
-        {{ t('detail.download') }}
-      </v-btn>
-
-      <!-- Extract (archive files only, write mode) -->
-      <template v-if="isArchive && canWrite">
-        <v-btn
-          color="orange"
-          variant="tonal"
-          block
-          prepend-icon="mdi-archive-arrow-down-outline"
-          @click="extractHere(file)"
-        >
-          {{ t('detail.extractHere') }}
-        </v-btn>
-        <v-btn
-          color="orange"
-          variant="tonal"
-          block
-          prepend-icon="mdi-folder-arrow-down-outline"
-          @click="extractToSubfolder(file)"
-        >
-          {{ t('detail.extractToSubfolder') }}
-        </v-btn>
-      </template>
-
-      <!-- Copy to clipboard -->
-      <v-btn
-        v-if="!file.is_dir"
-        :loading="copyLoading"
-        color="secondary"
-        variant="tonal"
-        block
-        prepend-icon="mdi-clipboard-outline"
-        @click="copyToClipboard"
-      >
-        {{ t('detail.copyToClipboard') }}
-      </v-btn>
-
-      <!-- Write mode actions -->
-      <template v-if="canWrite">
-        <div class="d-flex ga-2">
+      <template v-for="row in singleActions" :key="row.key">
+        <div v-if="row.type === 'pair'" class="d-flex ga-2">
           <v-btn
-            color="secondary"
-            variant="tonal"
-            style="flex:1"
-            prepend-icon="mdi-content-copy"
-            @click="store.setCopy([file])"
-          >
-            {{ t('detail.copy') }}
-          </v-btn>
-          <v-btn
-            color="secondary"
-            variant="tonal"
-            style="flex:1"
-            prepend-icon="mdi-content-cut"
-            @click="store.setCut([file])"
-          >
-            {{ t('detail.cut') }}
-          </v-btn>
+            v-for="btn in row.items" :key="btn.key"
+            :color="btn.color" variant="tonal" style="flex:1"
+            :prepend-icon="btn.icon" @click="btn.action()"
+          >{{ btn.label }}</v-btn>
         </div>
         <v-btn
-          color="orange"
-          variant="tonal"
-          block
-          prepend-icon="mdi-archive-plus-outline"
-          @click="openCompress([file])"
-        >
-          {{ t('detail.addToArchive') }}
-        </v-btn>
+          v-else-if="row.type === 'link'"
+          :href="row.href" :download="row.downloadAttr"
+          :color="row.color" variant="tonal" block :prepend-icon="row.icon"
+        >{{ row.label }}</v-btn>
         <v-btn
-          color="secondary"
-          variant="tonal"
-          block
-          prepend-icon="mdi-pencil-outline"
-          @click="openRename(file, () => store.selectEntry(null))"
-        >
-          {{ t('detail.rename') }}
-        </v-btn>
-        <v-btn
-          color="error"
-          variant="tonal"
-          block
-          prepend-icon="mdi-delete-outline"
-          @click="openDelete(file)"
-        >
-          {{ t('detail.delete') }}
-        </v-btn>
+          v-else
+          :loading="row.loading" :color="row.color" variant="tonal" block
+          :prepend-icon="row.icon" @click="row.action()"
+        >{{ row.label }}</v-btn>
       </template>
     </div>
 
@@ -354,29 +166,22 @@ const isArchive = computed(() => file.value?.type === 'archive')
         <span class="info-label text-caption text-medium-emphasis">{{ t('detail.name') }}</span>
         <span class="info-value text-body-2 text-wrap">{{ file.name }}</span>
       </div>
-
       <div class="info-row">
         <span class="info-label text-caption text-medium-emphasis">{{ t('detail.type') }}</span>
-        <v-chip size="x-small" :color="typeColor" variant="tonal" label>
-          {{ file.type }}
-        </v-chip>
+        <v-chip size="x-small" :color="typeColor" variant="tonal" label>{{ file.type }}</v-chip>
       </div>
-
       <div v-if="file.extension" class="info-row">
         <span class="info-label text-caption text-medium-emphasis">{{ t('detail.extension') }}</span>
         <span class="info-value text-body-2">{{ file.extension }}</span>
       </div>
-
       <div class="info-row">
         <span class="info-label text-caption text-medium-emphasis">{{ t('detail.size') }}</span>
         <span class="info-value text-body-2">{{ formatSize(file.size) }}</span>
       </div>
-
       <div class="info-row">
         <span class="info-label text-caption text-medium-emphasis">{{ t('detail.modified') }}</span>
         <span class="info-value text-body-2">{{ fmtDate(file.modified) }}</span>
       </div>
-
       <div class="info-row">
         <span class="info-label text-caption text-medium-emphasis">{{ t('detail.path') }}</span>
         <span class="info-value text-body-2 text-wrap path-text">{{ file.path || '/' }}</span>
@@ -396,54 +201,16 @@ const isArchive = computed(() => file.value?.type === 'archive')
       </div>
     </template>
   </div>
-
-  <DialogRename
-    v-model="renameDialog"
-    v-model:name="renameName"
-    :loading="renameLoading"
-    :error="renameError"
-    @confirm="confirmRename"
-  />
-  <DialogConfirmDelete v-model="deleteDialog" :targets="deleteTargets" @confirm="confirmDelete" />
 </template>
 
 <style scoped>
-.detail-panel {
-  height: 100%;
-  overflow-y: auto;
-}
-.preview-area {
-  min-height: 160px;
-}
-.preview-img {
-  width: 100%;
-  height: auto;
-  border-radius: 8px;
-  display: block;
-}
-.info-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.info-row {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.info-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.info-value {
-  word-break: break-all;
-}
-.path-text {
-  font-family: 'Roboto Mono', monospace;
-  font-size: 12px;
-}
-.meta-tree {
-  overflow-x: auto;
-}
+.detail-panel { height: 100%; overflow-y: auto; }
+.preview-area { min-height: 160px; }
+.preview-img  { width: 100%; height: auto; border-radius: 8px; display: block; }
+.info-list    { display: flex; flex-direction: column; gap: 12px; }
+.info-row     { display: flex; flex-direction: column; gap: 2px; }
+.info-label   { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+.info-value   { word-break: break-all; }
+.path-text    { font-family: 'Roboto Mono', monospace; font-size: 12px; }
+.meta-tree    { overflow-x: auto; }
 </style>

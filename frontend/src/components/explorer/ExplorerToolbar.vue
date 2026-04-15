@@ -6,7 +6,6 @@ import { useFileStore } from '../../stores/fileStore.js'
 import { useAuthStore } from '../../stores/authStore.js'
 import { useAppTheme, ACCENT_COLORS } from '../../composables/useAppTheme.js'
 import { useWriteActions } from '../../composables/useWriteActions.js'
-import DialogNewItem from '../dialogs/DialogNewItem.vue'
 
 const emit = defineEmits(['toggle-sidebar'])
 const store     = useFileStore()
@@ -493,22 +492,4 @@ const clipboardLabel = computed(() => {
     </v-card>
   </v-menu>
 
-  <DialogNewItem
-    v-model="touchDialog"
-    :title="t('dialog.newFile')"
-    :label="t('dialog.fileName')"
-    v-model:name="touchName"
-    :loading="touchLoading"
-    :error="touchError"
-    @confirm="confirmTouch"
-  />
-  <DialogNewItem
-    v-model="mkdirDialog"
-    :title="t('dialog.newFolder')"
-    :label="t('dialog.folderName')"
-    v-model:name="mkdirName"
-    :loading="mkdirLoading"
-    :error="mkdirError"
-    @confirm="confirmMkdir"
-  />
 </template>
