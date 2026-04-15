@@ -40,6 +40,14 @@ AUDIO_MIME_TYPES = {
     '.opus': 'audio/opus', '.wma': 'audio/x-ms-wma',
 }
 
+ARCHIVE_EXTENSIONS = {".zip", ".tar", ".tgz", ".tbz2", ".txz"}
+
+try:
+    import py7zr as _py7zr  # noqa: F401
+    ARCHIVE_EXTENSIONS.add(".7z")
+except ImportError:
+    pass
+
 _EXT_TO_TYPE: dict[str, str] = {
     ext: t
     for t, exts in [
@@ -51,6 +59,7 @@ _EXT_TO_TYPE: dict[str, str] = {
         ("text",    TEXT_EXTENSIONS),
         ("video",   VIDEO_MIME_TYPES),
         ("audio",   AUDIO_MIME_TYPES),
+        ("archive", ARCHIVE_EXTENSIONS),
     ]
     for ext in exts
 }
@@ -216,4 +225,9 @@ def schema_to_tree(schema) -> list[dict]:
 def get_file_type(path: Path) -> str:
     if path.is_dir():
         return "directory"
+    name_lower = path.name.lower()
+    # Check compound extensions (.tar.gz etc.) before falling back to suffix
+    for compound in (".tar.gz", ".tar.bz2", ".tar.xz"):
+        if name_lower.endswith(compound):
+            return "archive"
     return _EXT_TO_TYPE.get(path.suffix.lower(), "unknown")

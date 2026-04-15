@@ -3,6 +3,7 @@ import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFileStore } from '../../stores/fileStore.js'
 import { useWriteActions } from '../../composables/useWriteActions.js'
+import { useArchiveActions } from '../../composables/useArchiveActions.js'
 import { useRubberBand } from '../../composables/useRubberBand.js'
 import { useContextMenu } from '../../composables/useContextMenu.js'
 import { useExplorerKeyboard } from '../../composables/useExplorerKeyboard.js'
@@ -24,6 +25,8 @@ const {
   renameDialog, renameName, renameLoading, renameError, openRename, confirmRename,
   deleteDialog, deleteTargets, openDelete, confirmDelete,
 } = useWriteActions()
+
+const { compressDialog, compressSources, openCompress, extractHere, extractToSubfolder } = useArchiveActions()
 
 const { menuOpen, menuX, menuY, menuTarget, showMenu, onBgContextMenu } = useContextMenu()
 
@@ -317,6 +320,9 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
     @touch="openTouch"
     @paste="doPaste"
     @open-file="$emit('open-file', $event)"
+    @extract-here="extractHere"
+    @extract-to-subfolder="extractToSubfolder"
+    @compress="openCompress"
   />
 
   <DialogRename

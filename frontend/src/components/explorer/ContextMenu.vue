@@ -13,7 +13,7 @@ const props = defineProps({
   file: { type: Object, default: null },  // null = background (no file selected)
 })
 
-const emit  = defineEmits(['update:modelValue', 'rename', 'delete', 'mkdir', 'touch', 'paste', 'open-file'])
+const emit  = defineEmits(['update:modelValue', 'rename', 'delete', 'mkdir', 'touch', 'paste', 'open-file', 'extract-here', 'extract-to-subfolder', 'compress'])
 const store = useFileStore()
 const { showError, showSuccess } = useNotificationStore()
 const { t } = useI18n()
@@ -46,6 +46,14 @@ const canCompare = computed(() =>
   isMultiTarget.value &&
   store.selectedEntries.length === 2 &&
   store.selectedEntries.every(e => e.type === 'image')
+)
+
+// Archive actions
+const isArchive = computed(() =>
+  props.file != null && !isMultiTarget.value && props.file.type === 'archive'
+)
+const compressTargets = computed(() =>
+  isMultiTarget.value ? store.selectedEntries : (props.file ? [props.file] : [])
 )
 
 async function copyClipboard() {
@@ -96,6 +104,31 @@ async function copyClipboard() {
         :title="t('menu.copyToClipboard')"
         @click="copyClipboard"
       />
+
+      <!-- Archive: extract (single archive file) -->
+      <template v-if="isArchive">
+        <v-divider />
+        <v-list-item
+          prepend-icon="mdi-archive-arrow-down-outline"
+          :title="t('menu.extractHere')"
+          @click="$emit('extract-here', file)"
+        />
+        <v-list-item
+          prepend-icon="mdi-folder-arrow-down-outline"
+          :title="t('menu.extractToSubfolder')"
+          @click="$emit('extract-to-subfolder', file)"
+        />
+      </template>
+
+      <!-- Archive: compress (any file/dir selection) -->
+      <template v-if="compressTargets.length">
+        <v-divider />
+        <v-list-item
+          prepend-icon="mdi-archive-plus-outline"
+          :title="t('menu.addToArchive')"
+          @click="$emit('compress', compressTargets)"
+        />
+      </template>
 
       <template v-if="canWrite()">
 

@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fileviewer.routers import files, images, dataframe_reader, text_reader
-from fileviewer.routers import media, write_ops, hex_reader, auth
+from fileviewer.routers import media, write_ops, hex_reader, auth, archive
 from fileviewer import auth_state
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -45,6 +45,7 @@ app.include_router(text_reader.router,    prefix="/api/text",    tags=["text"])
 app.include_router(media.router,          prefix="/api/media",   tags=["media"])
 app.include_router(write_ops.router,      prefix="/api/write",   tags=["write"])
 app.include_router(hex_reader.router,     prefix="/api/hex",     tags=["hex"])
+app.include_router(archive.router,        prefix="/api/archive", tags=["archive"])
 
 
 @app.get("/api/config")

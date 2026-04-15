@@ -56,6 +56,52 @@ export const mediaApi = {
   streamUrl: (path) => `/api/media/stream?path=${encodeURIComponent(path)}`,
 }
 
+export const archiveApi = {
+  getInfo: (path, password = null) =>
+    http.get('/archive/info', { params: { path, ...(password ? { password } : {}) } }),
+
+  entryUrl: (path, entry, password = null) => {
+    let url = `/api/archive/entry?path=${encodeURIComponent(path)}&entry=${encodeURIComponent(entry)}`
+    if (password) url += `&password=${encodeURIComponent(password)}`
+    return url
+  },
+
+  getEntryText: async (path, entry, password = null) => {
+    const url = `/api/archive/entry?path=${encodeURIComponent(path)}&entry=${encodeURIComponent(entry)}${password ? `&password=${encodeURIComponent(password)}` : ''}`
+    const res = await fetch(url, { credentials: 'include' })
+    if (!res.ok) throw new Error(await res.text())
+    return res.text()
+  },
+
+  getCapabilities: () => http.get('/archive/capabilities'),
+
+  checkConflicts: (path, dest, password = null, entries = null) =>
+    http.post('/archive/conflicts', { path, dest, password, entries }),
+
+  extract: (path, dest, password = null, entries = null, conflictStrategy = 'overwrite') =>
+    fetch('/api/archive/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ path, dest, password, entries, conflict_strategy: conflictStrategy }),
+    }),
+
+  create: (sources, outputPath, format, level, password, excludes) =>
+    fetch('/api/archive/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        sources,
+        output_path: outputPath,
+        format,
+        level,
+        password: password || null,
+        excludes: excludes || [],
+      }),
+    }),
+}
+
 export const writeApi = {
   mkdir:  (parent, name)              => http.post('/write/mkdir',  { parent, name }),
   touch:  (parent, name)              => http.post('/write/touch',  { parent, name }),

@@ -6,6 +6,7 @@ import JsonViewer            from '../components/viewers/JsonViewer.vue'
 import TextViewer            from '../components/viewers/TextViewer.vue'
 import MediaPlayer           from '../components/viewers/MediaPlayer.vue'
 import HexViewer             from '../components/viewers/HexViewer.vue'
+import ArchiveViewer         from '../components/viewers/ArchiveViewer.vue'
 
 // ── Viewer descriptors ────────────────────────────────────────────────────────
 //
@@ -53,6 +54,12 @@ export const VIEWERS = [
     key: 'media',
     component: MediaPlayer,
     match: (target) => !Array.isArray(target) && ['video', 'audio'].includes(target?.type),
+    call: (ref, target) => ref.value?.open(target),
+  },
+  {
+    key: 'archive',
+    component: ArchiveViewer,
+    match: (target) => !Array.isArray(target) && target?.type === 'archive',
     call: (ref, target) => ref.value?.open(target),
   },
   {

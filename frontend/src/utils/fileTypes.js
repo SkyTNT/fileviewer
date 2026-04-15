@@ -8,6 +8,7 @@ export const TYPE_ICON = {
   text:      'mdi-file-document-outline',
   video:     'mdi-play-circle-outline',
   audio:     'mdi-music-note',
+  archive:   'mdi-archive-outline',
   unknown:   'mdi-file-outline',
 }
 
@@ -21,6 +22,7 @@ export const TYPE_COLOR = {
   text:      'info',
   video:     'deep-purple',
   audio:     'pink',
+  archive:   'orange',
 }
 
 export function formatBytes(bytes, fallback = '') {

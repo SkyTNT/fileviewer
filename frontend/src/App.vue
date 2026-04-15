@@ -15,10 +15,14 @@ import RootsView from './components/explorer/RootsView.vue'
 import LoginPage from './components/LoginPage.vue'
 import AppNotifications from './components/AppNotifications.vue'
 import UploadPanel from './components/UploadPanel.vue'
+import DialogCompress from './components/dialogs/DialogCompress.vue'
+import DialogExtractProgress from './components/dialogs/DialogExtractProgress.vue'
+import { useArchiveActions } from './composables/useArchiveActions.js'
 
 const store     = useFileStore()
 const authStore = useAuthStore()
 const { VIEWERS, refs, open } = useViewerRegistry()
+const { compressDialog, compressSources } = useArchiveActions()
 const appTheme = useAppTheme()
 const { mobile } = useDisplay()
 const { t } = useI18n()
@@ -206,6 +210,8 @@ watch(() => authStore.loggedIn, (v) => {
 
     <AppNotifications />
     <UploadPanel />
+    <DialogCompress v-model="compressDialog" :sources="compressSources" />
+    <DialogExtractProgress />
 
     <!-- Login overlay — shown when auth is required and not logged in -->
     <LoginPage v-if="!authStore.checking && authStore.authRequired && !authStore.loggedIn" />

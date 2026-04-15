@@ -6,6 +6,7 @@ import { imagesApi, filesApi, textApi } from '../../services/api.js'
 
 import { useCopyToClipboard } from '../../composables/useCopyToClipboard.js'
 import { useWriteActions } from '../../composables/useWriteActions.js'
+import { useArchiveActions } from '../../composables/useArchiveActions.js'
 import { TYPE_ICON, TYPE_COLOR, formatBytes, formatDate } from '../../utils/fileTypes.js'
 import { downloadFiles } from '../../utils/download.js'
 import JsonNode from '../viewers/JsonNode.vue'
@@ -80,6 +81,10 @@ const {
   renameDialog, renameName, renameLoading, renameError, openRename, confirmRename,
   deleteDialog, deleteTargets, openDelete, confirmDelete,
 } = useWriteActions()
+
+const { openCompress, extractHere, extractToSubfolder } = useArchiveActions()
+
+const isArchive = computed(() => file.value?.type === 'archive')
 </script>
 
 <template>
@@ -147,6 +152,15 @@ const {
             {{ t('detail.cut') }}
           </v-btn>
         </div>
+        <v-btn
+          color="orange"
+          variant="tonal"
+          block
+          prepend-icon="mdi-archive-plus-outline"
+          @click="openCompress(store.selectedEntries)"
+        >
+          {{ t('detail.addToArchive') }}
+        </v-btn>
         <v-btn
           color="error"
           variant="tonal"
@@ -247,6 +261,28 @@ const {
         {{ t('detail.download') }}
       </v-btn>
 
+      <!-- Extract (archive files only, write mode) -->
+      <template v-if="isArchive && canWrite">
+        <v-btn
+          color="orange"
+          variant="tonal"
+          block
+          prepend-icon="mdi-archive-arrow-down-outline"
+          @click="extractHere(file)"
+        >
+          {{ t('detail.extractHere') }}
+        </v-btn>
+        <v-btn
+          color="orange"
+          variant="tonal"
+          block
+          prepend-icon="mdi-folder-arrow-down-outline"
+          @click="extractToSubfolder(file)"
+        >
+          {{ t('detail.extractToSubfolder') }}
+        </v-btn>
+      </template>
+
       <!-- Copy to clipboard -->
       <v-btn
         v-if="!file.is_dir"
@@ -282,6 +318,15 @@ const {
             {{ t('detail.cut') }}
           </v-btn>
         </div>
+        <v-btn
+          color="orange"
+          variant="tonal"
+          block
+          prepend-icon="mdi-archive-plus-outline"
+          @click="openCompress([file])"
+        >
+          {{ t('detail.addToArchive') }}
+        </v-btn>
         <v-btn
           color="secondary"
           variant="tonal"
