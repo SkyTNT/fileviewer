@@ -2,13 +2,7 @@ import { useFileStore } from '@/plugins/file/store.js'
 import { useWriteStore } from '@/plugins/write/store.js'
 import { useKeyboard } from '@/plugins/keyboard/useKeyboard.js'
 
-/**
- * Registers Ctrl+A/C/X/V/F5 keyboard shortcuts for the file explorer.
- * @param {() => Array} getEntries - returns the currently visible entries (for Ctrl+A).
- *   Needed because WaterfallView maintains a local infinite-scroll buffer that
- *   differs from store.entries (which only holds the current page).
- */
-export function useExplorerKeyboard(getEntries) {
+export function useExplorerKeyboard() {
   const fileStore  = useFileStore()
   const writeStore = useWriteStore()
 
@@ -26,7 +20,7 @@ export function useExplorerKeyboard(getEntries) {
     'a': (e) => {
       if (!e.ctrlKey && !e.metaKey) return false
       e.preventDefault()
-      fileStore.setSelection([...getEntries()])
+      fileStore.setSelection([...fileStore.displayEntries])
     },
     'c': (e) => {
       if (!e.ctrlKey && !e.metaKey) return false

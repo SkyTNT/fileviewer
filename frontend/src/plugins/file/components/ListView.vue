@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFileStore } from '@/plugins/file/store.js'
 import { useViewerStore } from '@/plugins/viewer/store.js'
@@ -17,7 +17,9 @@ const { t } = useI18n()
 
 const { menuOpen, menuX, menuY, showMenu, onBgContextMenu } = useContextMenu()
 
-useExplorerKeyboard(() => store.entries)
+useExplorerKeyboard()
+
+watch(() => store.entries, (e) => { store.displayEntries = e }, { immediate: true })
 
 onMounted(()   => store.setRefreshHook(() => store.goToPage(store.page)))
 onUnmounted(() => store.setRefreshHook(null))

@@ -41,21 +41,22 @@ def build_tree(p: Path, remaining: int, slug: "str | None", root: Path, sort_by:
     if p.is_dir() and remaining > 0:
         children = []
         try:
-            def dir_key(x):
+            def dir_key(e):
                 if sort_by == "modified":
                     try:
-                        return x.stat().st_mtime or 0
+                        return e.stat().st_mtime or 0
                     except (PermissionError, OSError):
                         return 0
-                return x.name.lower()
+                return e.name.lower()
 
-            dirs = sorted(
-                (c for c in p.iterdir() if c.is_dir()),
-                key=dir_key,
-                reverse=(sort_order == "desc"),
-            )
-            for child in dirs:
-                children.append(build_tree(child, remaining - 1, slug, root, sort_by, sort_order))
+            with os.scandir(p) as it:
+                dirs = sorted(
+                    (e for e in it if e.is_dir()),
+                    key=dir_key,
+                    reverse=(sort_order == "desc"),
+                )
+            for entry in dirs:
+                children.append(build_tree(Path(entry.path), remaining - 1, slug, root, sort_by, sort_order))
         except PermissionError:
             pass
         node["children"] = children
@@ -110,6 +111,8 @@ def list_directory(
         return e.name.lower()  # name / size / type → fall back to name for dirs
 
     def file_key(e):
+        if sort_by == "name":
+            return e.name.lower()
         try:
             st = e.stat()
         except (PermissionError, OSError):

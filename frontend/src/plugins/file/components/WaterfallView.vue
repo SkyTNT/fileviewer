@@ -33,21 +33,20 @@ async function refreshAll() {
     const keep = new Set(all.map(e => e.path))
     for (const k of Object.keys(cardHeights))   if (!keep.has(k)) delete cardHeights[k]
     for (const k of Object.keys(cardPositions)) if (!keep.has(k)) delete cardPositions[k]
-    displayEntries.value = [...all]
+    store.displayEntries = [...all]
     if (rafId) { cancelAnimationFrame(rafId); rafId = null }
     runLayout()
   } catch { /* ignore */ }
   finally { store.loading = false }
 }
 
-useExplorerKeyboard(() => displayEntries.value)
+useExplorerKeyboard()
 
 function onCardContextMenu({ file, x, y }) {
   showMenu(x, y, file)
 }
 
-const displayEntries = ref([])
-const sentinelRef    = ref(null)
+const sentinelRef = ref(null)
 const containerRef   = ref(null)
 
 const GAP = 8
@@ -96,7 +95,7 @@ function runLayout() {
   const cw = colWidth.value
   if (cw === 0) return
   const heights = new Array(n).fill(0)
-  for (const file of displayEntries.value) {
+  for (const file of store.displayEntries) {
     const minIdx = heights.indexOf(Math.min(...heights))
     cardPositions[file.path] = { x: minIdx * (cw + GAP), y: heights[minIdx] }
     heights[minIdx] += (cardHeights[file.path] ?? estimatedHeight(file)) + GAP
@@ -120,8 +119,8 @@ function appendLayout(prevCount) {
     return
   }
   const heights = [...savedColHeights]
-  for (let i = prevCount; i < displayEntries.value.length; i++) {
-    const file = displayEntries.value[i]
+  for (let i = prevCount; i < store.displayEntries.length; i++) {
+    const file = store.displayEntries[i]
     const minIdx = heights.indexOf(Math.min(...heights))
     cardPositions[file.path] = { x: minIdx * (cw + GAP), y: heights[minIdx] }
     heights[minIdx] += (cardHeights[file.path] ?? estimatedHeight(file)) + GAP
@@ -148,18 +147,18 @@ watch(() => store.entries, (newEntries) => {
     const keep = new Set(newEntries.map(e => e.path))
     for (const p of Object.keys(cardHeights))   if (!keep.has(p)) delete cardHeights[p]
     for (const p of Object.keys(cardPositions)) if (!keep.has(p)) delete cardPositions[p]
-    displayEntries.value = [...newEntries]
+    store.displayEntries = [...newEntries]
     if (rafId) { cancelAnimationFrame(rafId); rafId = null }
     runLayout()
   } else {
-    const prevCount = displayEntries.value.length
+    const prevCount = store.displayEntries.length
     if (prevCount === 0) {
       // Mounted while store.page > 1 (e.g. switched from ListView on a non-first page).
       // displayEntries is empty so we can't append — reset to page 1 instead.
       store.loadDirectory(store.currentPath)
       return
     }
-    displayEntries.value = [...displayEntries.value, ...newEntries]
+    store.displayEntries = [...store.displayEntries, ...newEntries]
     if (rafId) { cancelAnimationFrame(rafId); rafId = null }
     appendLayout(prevCount)
   }
@@ -171,7 +170,7 @@ watch(colCount, () => {
 })
 
 function loadMore() {
-  if (store.loading || displayEntries.value.length >= store.total) return
+  if (store.loading || store.displayEntries.length >= store.total) return
   store.goToPage(store.page + 1)
 }
 
@@ -236,13 +235,13 @@ const scrollRef = ref(null)
 function onRubberSelect(paths, ctrlHeld) {
   if (!paths.length) { if (!ctrlHeld) store.clearSelection(); return }
   const pathSet = new Set(paths)
-  const items = displayEntries.value.filter(e => pathSet.has(e.path))
+  const items = store.displayEntries.filter(e => pathSet.has(e.path))
   if (ctrlHeld) store.addToSelection(items)
   else          store.setSelection(items)
 }
 
 function onCardSelect({ file, event }) {
-  if (event.shiftKey)                   store.shiftSelectTo(file, displayEntries.value)
+  if (event.shiftKey)                   store.shiftSelectTo(file, store.displayEntries)
   else if (event.ctrlKey || event.metaKey) store.toggleEntry(file)
   else                                  store.selectEntry(file)
 }
@@ -262,7 +261,7 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
     <template v-else>
       <div ref="containerRef" class="masonry" :style="{ height: containerHeight + 'px' }">
         <div
-          v-for="file in displayEntries"
+          v-for="file in store.displayEntries"
           :key="file.path"
           :ref="el => attachCardRef(el, file.path)"
           :style="cardStyle(file)"
@@ -278,7 +277,7 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
 
       <div ref="sentinelRef" style="height:1px" />
 
-      <div v-if="displayEntries.length >= store.total && store.total > 0"
+      <div v-if="store.displayEntries.length >= store.total && store.total > 0"
            class="text-center text-caption text-medium-emphasis pa-3">
         {{ t('explorer.totalItems', { n: store.total }) }}
       </div>

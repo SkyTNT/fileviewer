@@ -4,9 +4,10 @@ import { filesApi, configApi, writeApi } from '@/services/api.js'
 
 export const useFileStore = defineStore('file', () => {
   const rootName    = ref('Root')
-  const currentPath = ref('')
-  const entries     = ref([])
-  const loading     = ref(false)
+  const currentPath    = ref('')
+  const entries        = ref([])
+  const displayEntries = ref([])
+  const loading        = ref(false)
   const error       = ref(null)
   const viewMode    = ref('waterfall')
   const page        = ref(1)
@@ -233,8 +234,8 @@ export const useFileStore = defineStore('file', () => {
     try {
       const res         = await filesApi.listDirectory(path, p, pageSize.value, filterPattern.value || null, sortBy.value, sortOrder.value)
       currentPath.value = res.data.path
-      entries.value     = res.data.entries
-      total.value       = res.data.total
+      entries.value = res.data.entries
+      total.value   = res.data.total
       page.value        = p
       writeHash(res.data.path, push)
     } catch (e) {
@@ -246,8 +247,8 @@ export const useFileStore = defineStore('file', () => {
   }
 
   async function loadDirectory(path, push = false) {
-    entries.value         = []
-    total.value           = 0
+    entries.value = []
+    total.value   = 0
     page.value            = 1
     selectedEntries.value = []
     selectionAnchor.value = null
@@ -275,7 +276,7 @@ export const useFileStore = defineStore('file', () => {
   })
 
   return {
-    rootName, currentPath, entries, loading, error, viewMode, breadcrumbs,
+    rootName, currentPath, entries, displayEntries, loading, error, viewMode, breadcrumbs,
     page, pageSize, total, selectedEntry, selectedEntries, writeMode, roots,
     isAtHome, treeRevision, filterPattern, sortBy, sortOrder,
     clipboard, pasteProgress, deleteProgress, nameConflicts,
