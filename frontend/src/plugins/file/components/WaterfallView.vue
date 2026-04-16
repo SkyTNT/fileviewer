@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFileStore } from '@/plugins/file/store.js'
 import { useRubberBand } from '../useRubberBand.js'
@@ -57,6 +57,42 @@ function widthToColCount(w) {
 
 const colCount = ref(widthToColCount(window.innerWidth))
 const colWidth  = ref(0)
+
+// ── Zoom scaling (detail sidebar open) ──────────────────────────────────────
+// When the right detail panel opens and narrows the container, we scale the
+// already-computed layout down with CSS zoom instead of re-running runLayout,
+// so card positions stay stable.
+const containerActualWidth = ref(0)  // current measured container width
+const layoutComputedWidth  = ref(0)  // container width when layout last ran
+
+const zoomScale = computed(() => {
+  if (!layoutComputedWidth.value) return 1
+  const ratio = containerActualWidth.value / layoutComputedWidth.value
+  return Math.min(ratio, 1)  // never zoom in beyond 1 (wider → recompute instead)
+})
+
+// transform: scale is GPU-composited (no repaint per frame, unlike CSS zoom)
+const masonryStyle = computed(() => ({
+  width: layoutComputedWidth.value ? layoutComputedWidth.value + 'px' : undefined,
+  height: containerHeight.value + 'px',
+  transform: zoomScale.value !== 1 ? `scale(${zoomScale.value})` : undefined,
+}))
+
+// Outer wrapper carries the visual height so the scroll container is correct
+const masonryOuterStyle = computed(() => ({
+  height: containerHeight.value * zoomScale.value + 'px',
+}))
+
+// ── Scroll position preservation during zoom ─────────────────────────────────
+// When zoom changes, total scroll height changes proportionally. Without
+// correction, the viewport drifts away from the content the user was viewing.
+// Fix: capture scrollY before DOM update, restore proportionally after.
+watch(zoomScale, async (newZoom, oldZoom) => {
+  if (!oldZoom || newZoom === oldZoom) return
+  const prevY = window.scrollY
+  await nextTick()
+  window.scrollTo(0, Math.round(prevY * (newZoom / oldZoom)))
+})
 
 function estimatedHeight(file) {
   return file.type === 'image' ? 220 : 150
@@ -180,13 +216,17 @@ let containerRO = null
 
 function updateContainerMetrics(w) {
   if (w === 0) return
-  const n  = widthToColCount(window.innerWidth)
-  const cw = Math.floor((w - GAP * (n - 1)) / n)
-  const colCountChanged = n  !== colCount.value
-  const colWidthChanged = cw !== colWidth.value
-  colWidth.value = cw
-  if (colCountChanged)      colCount.value = n  // watch(colCount) 触发 runLayout
-  else if (colWidthChanged) runLayout()          // 列数不变但宽度变了（如侧边栏收起）
+  containerActualWidth.value = w
+  if (!layoutComputedWidth.value || w > layoutComputedWidth.value) {
+    // 首次布局 或 容器变宽（侧边栏关闭/窗口放大）→ 重新计算
+    // layoutComputedWidth 只在这里更新，runLayout 不碰它（防止 scheduleLayout 意外重置 zoom 基准）
+    layoutComputedWidth.value = w
+    const n = widthToColCount(w)
+    colWidth.value = Math.floor((w - GAP * (n - 1)) / n)
+    if (n !== colCount.value) colCount.value = n  // watch(colCount) → runLayout
+    else runLayout()
+  }
+  // else: 容器变窄（如右侧详情面板打开）→ CSS scale 处理，colCount/colWidth/positions 全部不动
 }
 
 watch(containerRef, (el, oldEl) => {
@@ -259,19 +299,21 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
     </div>
 
     <template v-else>
-      <div ref="containerRef" class="masonry" :style="{ height: containerHeight + 'px' }">
-        <div
-          v-for="file in store.displayEntries"
-          :key="file.path"
-          :ref="el => attachCardRef(el, file.path)"
-          :style="cardStyle(file)"
-          :data-path="file.path"
-        >
-          <FileCard
-            :file="file"
-            @context-menu="onCardContextMenu"
-            @select="onCardSelect"
-          />
+      <div ref="containerRef" class="masonry-outer" :style="masonryOuterStyle">
+        <div class="masonry" :style="masonryStyle">
+          <div
+            v-for="file in store.displayEntries"
+            :key="file.path"
+            :ref="el => attachCardRef(el, file.path)"
+            :style="cardStyle(file)"
+            :data-path="file.path"
+          >
+            <FileCard
+              :file="file"
+              @context-menu="onCardContextMenu"
+              @select="onCardSelect"
+            />
+          </div>
         </div>
       </div>
 
@@ -299,8 +341,14 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
 .waterfall-scroll {
   min-height: 100%;
 }
+.masonry-outer {
+  position: relative;
+  overflow: hidden;
+}
 .masonry {
   position: relative;
+  transform-origin: top left;
+  will-change: transform;
 }
 .rubberband-rect {
   position: fixed;
