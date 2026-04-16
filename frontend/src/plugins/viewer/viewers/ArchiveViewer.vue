@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { archiveApi, writeApi } from '@/services/api.js'
 import { formatBytes } from '@/utils/fileTypes.js'
@@ -13,10 +13,18 @@ const store = useFileStore()
 // ── dialog state ─────────────────────────────────────────────────────────────
 const dialog       = ref(false)
 const loading      = ref(false)
+const scanning     = ref(false)
 const error        = ref(null)
 const currentFile  = ref(null)
-const archiveInfo  = ref(null)
+const archiveInfo  = ref(null)   // { format, random_access, encrypted, entry_count }
 const treeItems    = ref([])
+
+// Non-reactive scan accumulators (updated during SSE stream)
+let _allEntriesAcc = []
+let _totalUncomp   = 0
+let _totalComp     = 0
+let _rebuildTimer  = null
+let _scanAbort     = null
 
 // ── password ─────────────────────────────────────────────────────────────────
 const passwordRequired = ref(false)
@@ -153,11 +161,6 @@ function buildTree(entries) {
 async function open(file) {
   currentFile.value      = file
   dialog.value           = true
-  archiveInfo.value      = null
-  treeItems.value        = []
-  error.value            = null
-  passwordRequired.value = false
-  passwordError.value    = false
   password.value         = ''
   selectedEntry.value    = null
   mobileShowViewer.value = false
@@ -167,24 +170,104 @@ async function open(file) {
   await loadArchive()
 }
 
+function _cancelScan() {
+  if (_scanAbort)    { _scanAbort.abort(); _scanAbort = null }
+  if (_rebuildTimer) { clearTimeout(_rebuildTimer); _rebuildTimer = null }
+}
+
+function _scheduleRebuild() {
+  if (_rebuildTimer) return
+  _rebuildTimer = setTimeout(() => {
+    _rebuildTimer = null
+    treeItems.value = buildTree(_allEntriesAcc)
+  }, 800)
+}
+
 async function loadArchive() {
+  _cancelScan()
+
+  archiveInfo.value      = null
+  treeItems.value        = []
+  error.value            = null
+  passwordRequired.value = false
+  passwordError.value    = false
+  scanning.value         = false
+  totalUncompressed.value = 0
+  totalCompressed.value   = 0
+  _allEntriesAcc = []
+  _totalUncomp   = 0
+  _totalComp     = 0
+
   loading.value = true
-  error.value   = null
-  passwordError.value = false
+  _scanAbort = new AbortController()
+
   try {
-    const res = await archiveApi.getInfo(currentFile.value.path, password.value || null)
-    archiveInfo.value      = res.data
-    treeItems.value        = buildTree(res.data.entries)
-    passwordRequired.value = false
-  } catch (e) {
-    if (e.response?.status === 401) {
-      passwordRequired.value = true
-      if (password.value) passwordError.value = true
-    } else {
-      error.value = e.response?.data?.detail || e.message
+    const res = await archiveApi.getInfo(currentFile.value.path, password.value || null, _scanAbort.signal)
+    loading.value = false
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        passwordRequired.value = true
+        if (password.value) passwordError.value = true
+      } else {
+        error.value = `HTTP ${res.status}`
+      }
+      return
     }
+
+    const reader  = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      const parts = buf.split('\n\n')
+      buf = parts.pop()
+
+      let hasNew = false
+      for (const part of parts) {
+        const line = part.trim()
+        if (!line.startsWith('data:')) continue
+        let data
+        try { data = JSON.parse(line.slice(5).trim()) } catch { continue }
+
+        if (data.type === 'meta') {
+          archiveInfo.value = { format: data.format, random_access: data.random_access, encrypted: data.encrypted, entry_count: 0 }
+          scanning.value = true
+        } else if (data.type === 'entry') {
+          _allEntriesAcc.push(data)
+          if (!data.is_dir) { _totalUncomp += data.size || 0; _totalComp += data.compressed_size || 0 }
+          if (archiveInfo.value) archiveInfo.value.entry_count++
+          hasNew = true
+        } else if (data.type === 'done') {
+          _cancelScan()
+          if (archiveInfo.value) archiveInfo.value.entry_count = data.entry_count
+          scanning.value = false
+          treeItems.value = buildTree(_allEntriesAcc)
+          totalUncompressed.value = _totalUncomp
+          totalCompressed.value   = _totalComp
+        } else if (data.type === 'error') {
+          _cancelScan()
+          if (data.status === 401) {
+            passwordRequired.value = true
+            if (password.value) passwordError.value = true
+          } else {
+            error.value = data.message
+          }
+          scanning.value = false
+          return
+        }
+      }
+
+      if (hasNew) _scheduleRebuild()
+    }
+  } catch (e) {
+    if (e.name !== 'AbortError') error.value = e.message
   } finally {
     loading.value = false
+    scanning.value = false
   }
 }
 
@@ -316,13 +399,12 @@ function closeExtract() {
   extractErrors.value   = []
 }
 
-// ── totals ────────────────────────────────────────────────────────────────────
-const totalUncompressed = computed(() =>
-  (archiveInfo.value?.entries ?? []).filter(e => !e.is_dir).reduce((s, e) => s + e.size, 0)
-)
-const totalCompressed = computed(() =>
-  (archiveInfo.value?.entries ?? []).filter(e => !e.is_dir).reduce((s, e) => s + e.compressed_size, 0)
-)
+// ── totals (set once on done event) ──────────────────────────────────────────
+const totalUncompressed = ref(0)
+const totalCompressed   = ref(0)
+
+// Cancel in-progress scan when dialog is closed
+watch(dialog, (v) => { if (!v) _cancelScan() })
 
 defineExpose({ open })
 </script>
@@ -400,7 +482,7 @@ defineExpose({ open })
       </div>
 
       <!-- ── loading / error ────────────────────────────────────────────────── -->
-      <v-progress-linear v-if="loading" indeterminate color="primary" height="2" />
+      <v-progress-linear v-if="loading || scanning" indeterminate color="primary" height="2" />
       <div v-if="error && !loading" class="pa-3">
         <v-alert type="error" density="compact" :text="error" />
       </div>
@@ -437,8 +519,9 @@ defineExpose({ open })
           :style="isMobile ? {} : { width: treeWidth + 'px' }"
         >
           <div class="archive-tree-header px-3 d-flex align-center">
-            <span class="text-caption text-medium-emphasis">
+            <span class="text-caption text-medium-emphasis d-flex align-center ga-1">
               {{ t('archive.viewer.entries', { n: archiveInfo.entry_count }) }}
+              <v-progress-circular v-if="scanning" size="10" width="1.5" indeterminate color="medium-emphasis" />
             </span>
             <v-spacer />
             <v-chip

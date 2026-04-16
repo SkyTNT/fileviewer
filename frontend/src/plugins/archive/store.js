@@ -20,11 +20,16 @@ export const useArchiveStore = defineStore('archive', () => {
     const fileStore   = useFileStore()
     const taskStore   = useTaskStore()
     const outputName  = outputPath.split('/').pop()
-    const data = reactive({ outputName, done: 0, total: 0, current: '' })
-    const task = taskStore.add({ component: CompressTaskItem, data })
+    const data = reactive({ outputName, done: 0, total: 0, current: '', bytes_done: 0, bytes_total: 0 })
+    const abort = new AbortController()
+    const task  = taskStore.add({
+      component: CompressTaskItem,
+      data,
+      cancel: () => abort.abort(),
+    })
 
     try {
-      const res     = await archiveApi.create(sources, outputPath, format, level, password, excludes)
+      const res     = await archiveApi.create(sources, outputPath, format, level, password, excludes, abort.signal)
       const reader  = res.body.getReader()
       const decoder = new TextDecoder()
       let buf = ''
@@ -40,9 +45,11 @@ export const useArchiveStore = defineStore('archive', () => {
           try {
             const ev = JSON.parse(line.slice(6))
             if (ev.type === 'progress') {
-              data.done    = ev.done
-              data.total   = ev.total
-              data.current = ev.name || ''
+              data.done        = ev.done
+              data.total       = ev.total
+              data.current     = ev.name || ''
+              data.bytes_done  = ev.bytes_done  ?? data.bytes_done
+              data.bytes_total = ev.bytes_total ?? data.bytes_total
             } else if (ev.type === 'error') {
               task.errors.push(ev.message || 'Error')
             } else if (ev.type === 'warning') {
@@ -57,8 +64,13 @@ export const useArchiveStore = defineStore('archive', () => {
         }
       }
     } catch (e) {
-      task.errors.push(e.message)
-      task.status = 'error'
+      if (e.name === 'AbortError') {
+        task.status = 'error'
+        task.errors.push('cancelled')
+      } else {
+        task.errors.push(e.message)
+        task.status = 'error'
+      }
     }
   }
 
@@ -106,11 +118,32 @@ export const useArchiveStore = defineStore('archive', () => {
 
     let needsPassword = false
     try {
-      const info = await archiveApi.getInfo(file.path, null)
-      if (info.data.encrypted) needsPassword = true
-    } catch (e) {
-      if (e.response?.status === 401) needsPassword = true
-    }
+      const res = await archiveApi.getInfo(file.path, null)
+      if (res.ok) {
+        // Read only the first SSE event (meta) then cancel
+        const reader  = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+        outer: while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          for (const part of buf.split('\n\n')) {
+            const line = part.trim()
+            if (!line.startsWith('data:')) continue
+            try {
+              const ev = JSON.parse(line.slice(5).trim())
+              if (ev.type === 'meta') { needsPassword = ev.encrypted; break outer }
+              if (ev.type === 'error' && ev.status === 401) { needsPassword = true; break outer }
+            } catch {}
+          }
+          buf = buf.slice(buf.lastIndexOf('\n\n') + 2)
+        }
+        reader.cancel()
+      } else if (res.status === 401) {
+        needsPassword = true
+      }
+    } catch { /* ignore */ }
 
     if (needsPassword) {
       _extractPending.value = { file, dest }

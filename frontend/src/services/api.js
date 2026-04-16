@@ -57,8 +57,11 @@ export const mediaApi = {
 }
 
 export const archiveApi = {
-  getInfo: (path, password = null) =>
-    http.get('/archive/info', { params: { path, ...(password ? { password } : {}) } }),
+  getInfo: (path, password = null, signal = undefined) => {
+    let url = `/api/archive/info?path=${encodeURIComponent(path)}`
+    if (password) url += `&password=${encodeURIComponent(password)}`
+    return fetch(url, { credentials: 'include', ...(signal && { signal }) })
+  },
 
   entryUrl: (path, entry, password = null) => {
     let url = `/api/archive/entry?path=${encodeURIComponent(path)}&entry=${encodeURIComponent(entry)}`
@@ -86,11 +89,12 @@ export const archiveApi = {
       body: JSON.stringify({ path, dest, password, entries, conflict_strategy: conflictStrategy }),
     }),
 
-  create: (sources, outputPath, format, level, password, excludes) =>
+  create: (sources, outputPath, format, level, password, excludes, signal = undefined) =>
     fetch('/api/archive/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
+      ...(signal && { signal }),
       body: JSON.stringify({
         sources,
         output_path: outputPath,

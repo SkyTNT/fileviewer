@@ -1,6 +1,8 @@
 import json
 import os
 import pathlib
+import threading
+import time
 import zipfile
 import tarfile
 from datetime import datetime
@@ -39,6 +41,13 @@ if HAS_7Z:
 _RANDOM_ACCESS = {'zip'}
 if HAS_7Z:
     _RANDOM_ACCESS.add('7z')
+
+
+def _file_size(p: pathlib.Path) -> int:
+    try:
+        return p.stat().st_size
+    except OSError:
+        return 0
 
 
 def _detect_fmt(path: pathlib.Path) -> str | None:
@@ -127,46 +136,89 @@ def get_info(path: str = Query(...), password: str | None = Query(None)):
     p = validate_path(path)
     if not p.exists():
         raise HTTPException(404, 'File not found')
-
     fmt = _detect_fmt(p)
     if not fmt:
         raise HTTPException(400, 'Unsupported archive format')
 
-    if fmt == 'zip':
-        entries = _list_zip(p, password)
-        random_access = True
-        encrypted = False
-        try:
-            with zipfile.ZipFile(p) as zf:
-                encrypted = any(bool(i.flag_bits & 0x1) for i in zf.infolist()[:5])
-        except Exception:
-            pass
-
-    elif fmt in ('tar', 'tar.gz', 'tar.bz2', 'tar.xz'):
-        entries = _list_tar(p)
-        random_access = False
+    def gen():
+        random_access = fmt in _RANDOM_ACCESS
         encrypted = False
 
-    elif fmt == '7z':
-        entries = _list_7z(p, password)
-        random_access = True
-        encrypted = False
-        try:
-            with py7zr.SevenZipFile(p, 'r') as z:
-                encrypted = z.needs_password()
-        except Exception:
-            pass
+        if fmt == 'zip':
+            try:
+                with zipfile.ZipFile(p) as zf:
+                    encrypted = any(bool(i.flag_bits & 0x1) for i in zf.infolist()[:5])
+            except Exception:
+                pass
+        elif fmt == '7z' and HAS_7Z:
+            try:
+                with py7zr.SevenZipFile(p, 'r') as z:
+                    encrypted = z.needs_password()
+            except Exception:
+                pass
 
-    else:
-        raise HTTPException(400, f'Unsupported format: {fmt}')
+        yield _sse({'type': 'meta', 'format': fmt, 'random_access': random_access, 'encrypted': encrypted})
 
-    return {
-        'format': fmt,
-        'random_access': random_access,
-        'encrypted': encrypted,
-        'entry_count': len(entries),
-        'entries': entries,
-    }
+        count = 0
+
+        if fmt == 'zip':
+            try:
+                with zipfile.ZipFile(p, 'r') as zf:
+                    for info in zf.infolist():
+                        try:
+                            dt = datetime(*info.date_time) if info.date_time else None
+                        except Exception:
+                            dt = None
+                        nm = pathlib.PurePosixPath(info.filename).name or info.filename.rstrip('/')
+                        yield _sse({'type': 'entry', **_entry(
+                            nm, info.filename, info.file_size,
+                            info.compress_size, info.filename.endswith('/'), dt)})
+                        count += 1
+            except RuntimeError as e:
+                if 'password' in str(e).lower():
+                    yield _sse({'type': 'error', 'status': 401, 'message': 'Password required or incorrect'})
+                    return
+                yield _sse({'type': 'error', 'message': str(e)})
+                return
+            except zipfile.BadZipFile as e:
+                yield _sse({'type': 'error', 'message': f'Invalid ZIP file: {e}'})
+                return
+
+        elif fmt in ('tar', 'tar.gz', 'tar.bz2', 'tar.xz'):
+            try:
+                with tarfile.open(p, 'r:*') as tf:
+                    for m in tf:  # iterates one header at a time — no need to load all members first
+                        nm = pathlib.PurePosixPath(m.name).name or m.name
+                        modified = datetime.fromtimestamp(m.mtime) if m.mtime else None
+                        yield _sse({'type': 'entry', **_entry(nm, m.name, m.size, m.size, m.isdir(), modified)})
+                        count += 1
+            except tarfile.TarError as e:
+                yield _sse({'type': 'error', 'message': f'Invalid TAR file: {e}'})
+                return
+
+        elif fmt == '7z' and HAS_7Z:
+            try:
+                with py7zr.SevenZipFile(p, 'r', password=password) as z:
+                    for info in z.list():
+                        nm = pathlib.PurePosixPath(info.filename).name or info.filename
+                        yield _sse({'type': 'entry', **_entry(
+                            nm, info.filename,
+                            getattr(info, 'uncompressed', 0) or 0,
+                            getattr(info, 'compressed', 0) or 0,
+                            getattr(info, 'is_directory', False),
+                            getattr(info, 'creationtime', None))})
+                        count += 1
+            except Exception as e:
+                msg = str(e).lower()
+                if 'password' in msg or 'encrypted' in msg:
+                    yield _sse({'type': 'error', 'status': 401, 'message': 'Password required or incorrect'})
+                    return
+                yield _sse({'type': 'error', 'message': f'Invalid 7Z file: {e}'})
+                return
+
+        yield _sse({'type': 'done', 'entry_count': count})
+
+    return _sse_resp(gen())
 
 
 class ConflictCheckRequest(BaseModel):
@@ -589,6 +641,7 @@ class CreateRequest(BaseModel):
 
 
 def _collect(sources: list[pathlib.Path], exclude_abs: set) -> list[tuple]:
+    """Return list of (path, arc_name) for all files/dirs to compress."""
     result = []
     for src in sources:
         if src in exclude_abs:
@@ -597,11 +650,21 @@ def _collect(sources: list[pathlib.Path], exclude_abs: set) -> list[tuple]:
             result.append((src, src.name))
         elif src.is_dir():
             base = src.parent
-            for f in sorted(src.rglob('*')):
-                if any(f == e or str(f).startswith(str(e) + os.sep) for e in exclude_abs):
-                    continue
-                rel = f.relative_to(base)
-                result.append((f, str(rel).replace(os.sep, '/')))
+            stack = [src]
+            while stack:
+                cur = stack.pop()
+                try:
+                    with os.scandir(cur) as it:
+                        for entry in sorted(it, key=lambda e: e.name):
+                            ep = pathlib.Path(entry.path)
+                            if any(ep == e or str(ep).startswith(str(e) + os.sep) for e in exclude_abs):
+                                continue
+                            rel = ep.relative_to(base)
+                            result.append((ep, str(rel).replace(os.sep, '/')))
+                            if entry.is_dir(follow_symlinks=False):
+                                stack.append(ep)
+                except OSError:
+                    pass
     return result
 
 
@@ -646,10 +709,70 @@ def create(req: CreateRequest):
     return _sse_resp(gen())
 
 
+_CHUNK = 1 << 20  # 1 MB chunks for progress tracking
+
+
+def _tar_file_with_progress(tf: tarfile.TarFile, f_path: pathlib.Path, arc_name: str,
+                             cancel_event: threading.Event):
+    """Add one file to a TarFile via addfile() in a worker thread.
+    Yields source-byte deltas every ~100 ms so the caller can emit SSE events.
+    Respects cancel_event: when set, the reader returns b'' to stop the thread early."""
+    info = tf.gettarinfo(str(f_path), arcname=arc_name)
+
+    read_bytes = [0]
+    exc        = [None]
+    finished   = threading.Event()
+
+    class _Reader:
+        def __init__(self, fp): self._fp = fp
+        def read(self, n=-1):
+            if cancel_event.is_set():
+                return b''
+            data = self._fp.read(n)
+            if data:
+                read_bytes[0] += len(data)
+            return data
+
+    def _worker():
+        try:
+            with open(f_path, 'rb') as fp:
+                tf.addfile(info, _Reader(fp))
+        except Exception as e:
+            exc[0] = e
+        finally:
+            finished.set()
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+    last = 0
+    try:
+        while not finished.wait(timeout=0.1):
+            if cancel_event.is_set():
+                finished.wait(timeout=5.0)
+                return
+            curr = read_bytes[0]
+            if curr > last:
+                yield curr - last
+                last = curr
+    except GeneratorExit:
+        cancel_event.set()
+        finished.wait(timeout=5.0)
+        raise
+
+    if exc[0] and not cancel_event.is_set():
+        raise exc[0]
+    curr = read_bytes[0]
+    if curr > last:
+        yield curr - last
+
+
 def _do_create_zip(sources, output, level, pwd, excludes):
-    files = _collect(sources, excludes)
-    total = sum(1 for f, _ in files if f.is_file())
-    done = 0
+    files       = [(f, n) for f, n in _collect(sources, excludes) if f.is_file()]
+    total       = len(files)
+    bytes_total = sum(_file_size(f) for f, _ in files)
+    done = bytes_done = 0
+    last_yield_time = 0.0
+    completed = False
 
     if pwd and HAS_PYZIPPER:
         import pyzipper as pz
@@ -669,43 +792,126 @@ def _do_create_zip(sources, output, level, pwd, excludes):
     try:
         with _open() as zf:
             for f, arc_name in files:
-                if f.is_file():
-                    zf.write(str(f), arc_name)
-                    done += 1
-                    yield _sse({'type': 'progress', 'done': done, 'total': total, 'name': arc_name})
+                # ZipFile.open('w') allows chunked writes — no thread needed
+                with zf.open(arc_name, 'w', force_zip64=True) as dest:
+                    with open(f, 'rb') as src:
+                        while True:
+                            chunk = src.read(_CHUNK)
+                            if not chunk:
+                                break
+                            dest.write(chunk)
+                            bytes_done += len(chunk)
+                            now = time.monotonic()
+                            if now - last_yield_time >= 0.2:
+                                last_yield_time = now
+                                yield _sse({'type': 'progress', 'done': done, 'total': total,
+                                            'name': arc_name, 'bytes_done': bytes_done,
+                                            'bytes_total': bytes_total})
+                done += 1
+                yield _sse({'type': 'progress', 'done': done, 'total': total, 'name': arc_name,
+                            'bytes_done': bytes_done, 'bytes_total': bytes_total})
+        completed = True
     except Exception as e:
         yield _sse({'type': 'error', 'message': str(e)})
+    finally:
+        if not completed:
+            try: output.unlink(missing_ok=True)
+            except OSError: pass
 
 
 def _do_create_tar(sources, output, fmt, level, excludes):
-    files = _collect(sources, excludes)
-    total = sum(1 for f, _ in files if f.is_file())
+    files       = [(f, n) for f, n in _collect(sources, excludes) if f.is_file()]
+    total       = len(files)
+    bytes_total = sum(_file_size(f) for f, _ in files)
     mode = {'tar': 'w', 'tar.gz': 'w:gz', 'tar.bz2': 'w:bz2', 'tar.xz': 'w:xz'}.get(fmt, 'w:gz')
-    done = 0
+    done = bytes_done = 0
+    last_yield_time = 0.0
+    completed = False
+    cancel_event = threading.Event()
     try:
         with tarfile.open(output, mode) as tf:
             for f, arc_name in files:
-                if f.is_file():
-                    tf.add(str(f), arcname=arc_name)
-                    done += 1
-                    yield _sse({'type': 'progress', 'done': done, 'total': total, 'name': arc_name})
+                for delta in _tar_file_with_progress(tf, f, arc_name, cancel_event):
+                    bytes_done += delta
+                    now = time.monotonic()
+                    if now - last_yield_time >= 0.2:
+                        last_yield_time = now
+                        yield _sse({'type': 'progress', 'done': done, 'total': total,
+                                    'name': arc_name, 'bytes_done': bytes_done,
+                                    'bytes_total': bytes_total})
+                if cancel_event.is_set():
+                    break
+                done += 1
+                yield _sse({'type': 'progress', 'done': done, 'total': total, 'name': arc_name,
+                            'bytes_done': bytes_done, 'bytes_total': bytes_total})
+        if not cancel_event.is_set():
+            completed = True
     except Exception as e:
         yield _sse({'type': 'error', 'message': str(e)})
+    finally:
+        cancel_event.set()
+        if not completed:
+            try: output.unlink(missing_ok=True)
+            except OSError: pass
 
 
 def _do_create_7z(sources, output, level, pwd, excludes):
-    files = _collect(sources, excludes)
-    total = sum(1 for f, _ in files if f.is_file())
-    done = 0
+    files       = [(f, n) for f, n in _collect(sources, excludes) if f.is_file()]
+    total       = len(files)
+    bytes_total = sum(_file_size(f) for f, _ in files)
+    done = bytes_done = 0
+    last_yield_time = 0.0
+    completed = False
+    cancelled = threading.Event()
     try:
         with py7zr.SevenZipFile(str(output), 'w', password=pwd or None) as z:
             for f, arc_name in files:
-                if f.is_file():
-                    z.write(str(f), arc_name)
-                    done += 1
-                    yield _sse({'type': 'progress', 'done': done, 'total': total, 'name': arc_name})
+                if cancelled.is_set():
+                    break
+                # py7zr has no chunked write API — run in thread, poll output file size
+                fsize = _file_size(f)
+                exc = [None]
+                finished = threading.Event()
+                bytes_before = bytes_done
+
+                def _worker(fp=f, an=arc_name):
+                    try:   z.write(str(fp), an)
+                    except Exception as e: exc[0] = e
+                    finally: finished.set()
+
+                threading.Thread(target=_worker, daemon=True).start()
+                prev_out = _file_size(output)
+                while not finished.wait(timeout=0.1):
+                    if cancelled.is_set():
+                        finished.wait(timeout=5.0)
+                        break
+                    cur_out = _file_size(output)
+                    if cur_out > prev_out:
+                        bytes_done = min(bytes_before + fsize, bytes_done + (cur_out - prev_out))
+                        prev_out = cur_out
+                    now = time.monotonic()
+                    if now - last_yield_time >= 0.2:
+                        last_yield_time = now
+                        yield _sse({'type': 'progress', 'done': done, 'total': total,
+                                    'name': arc_name, 'bytes_done': bytes_done,
+                                    'bytes_total': bytes_total})
+                if cancelled.is_set():
+                    break
+                if exc[0]:
+                    raise exc[0]
+                done       += 1
+                bytes_done  = bytes_before + fsize
+                yield _sse({'type': 'progress', 'done': done, 'total': total, 'name': arc_name,
+                            'bytes_done': bytes_done, 'bytes_total': bytes_total})
+        if not cancelled.is_set():
+            completed = True
     except Exception as e:
         yield _sse({'type': 'error', 'message': str(e)})
+    finally:
+        cancelled.set()
+        if not completed:
+            try: output.unlink(missing_ok=True)
+            except OSError: pass
 
 
 @router.get('/capabilities')
