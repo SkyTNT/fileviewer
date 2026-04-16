@@ -1,26 +1,73 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, reactive } from 'vue'
 import { archiveApi, writeApi } from '@/services/api.js'
 import { useFileStore } from '@/plugins/file/store.js'
+import { useTaskStore } from '@/plugins/task/store.js'
+import CompressTaskItem from './CompressTaskItem.vue'
+import ExtractTaskItem  from './ExtractTaskItem.vue'
 
 export const useArchiveStore = defineStore('archive', () => {
+  // ── Compress settings dialog ───────────────────────────────────────────────────
   const compressDialog  = ref(false)
   const compressSources = ref([])
 
-  const extractDialog   = ref(false)
-  const extractPassword = ref('')
-  const extractProgress = ref({
-    phase: 'running', file: null, dest: null,
-    done: 0, total: 0, errors: [], finished: false,
-  })
-
-  // ── Compress ──────────────────────────────────────────────────────────────────
   function openCompress(entries) {
     compressSources.value = Array.isArray(entries) ? [...entries] : [entries]
     compressDialog.value  = true
   }
 
+  async function startCompress(sources, outputPath, format, level, password, excludes) {
+    const fileStore   = useFileStore()
+    const taskStore   = useTaskStore()
+    const outputName  = outputPath.split('/').pop()
+    const data = reactive({ outputName, done: 0, total: 0, current: '' })
+    const task = taskStore.add({ component: CompressTaskItem, data })
+
+    try {
+      const res     = await archiveApi.create(sources, outputPath, format, level, password, excludes)
+      const reader  = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const parts = buf.split('\n\n')
+        buf = parts.pop()
+        for (const part of parts) {
+          const line = part.trim()
+          if (!line.startsWith('data: ')) continue
+          try {
+            const ev = JSON.parse(line.slice(6))
+            if (ev.type === 'progress') {
+              data.done    = ev.done
+              data.total   = ev.total
+              data.current = ev.name || ''
+            } else if (ev.type === 'error') {
+              task.errors.push(ev.message || 'Error')
+            } else if (ev.type === 'warning') {
+              task.errors.push('⚠ ' + ev.message)
+            } else if (ev.type === 'done') {
+              const hasRealErrors = task.errors.some(e => !e.startsWith('⚠'))
+              task.status = hasRealErrors ? 'error' : 'done'
+              fileStore.refresh()
+              fileStore.invalidateTree?.()
+            }
+          } catch { /* bad SSE */ }
+        }
+      }
+    } catch (e) {
+      task.errors.push(e.message)
+      task.status = 'error'
+    }
+  }
+
   // ── Extract ───────────────────────────────────────────────────────────────────
+  // extractDialog is now only for the password prompt phase
+  const extractDialog  = ref(false)
+  const extractPassword = ref('')
+  const _extractPending = ref(null)  // { file, dest } while waiting for password
+
   async function extractHere(file) {
     await _doExtract(file, useFileStore().currentPath)
   }
@@ -56,8 +103,6 @@ export const useArchiveStore = defineStore('archive', () => {
 
   async function _doExtract(file, dest) {
     extractPassword.value = ''
-    extractDialog.value   = true
-    extractProgress.value = { phase: 'running', file, dest, done: 0, total: 0, errors: [], finished: false }
 
     let needsPassword = false
     try {
@@ -68,33 +113,42 @@ export const useArchiveStore = defineStore('archive', () => {
     }
 
     if (needsPassword) {
-      extractProgress.value.phase = 'password'
+      _extractPending.value = { file, dest }
+      extractDialog.value   = true
       return
     }
 
     const strategy = await _checkConflicts(file, dest, null)
-    if (strategy === null) { extractDialog.value = false; return }
+    if (strategy === null) return
 
-    await _runExtract(file, dest, null, strategy)
+    _runExtract(file, dest, null, strategy)   // fire and forget
   }
 
   async function confirmExtract() {
-    const { file, dest } = extractProgress.value
-    const pwd = extractPassword.value || null
-    extractProgress.value.phase    = 'running'
-    extractProgress.value.done     = 0
-    extractProgress.value.total    = 0
-    extractProgress.value.errors   = []
-    extractProgress.value.finished = false
+    const pwd            = extractPassword.value || null
+    const { file, dest } = _extractPending.value
+    extractDialog.value   = false
+    extractPassword.value = ''
+    _extractPending.value = null
 
     const strategy = await _checkConflicts(file, dest, pwd)
-    if (strategy === null) { extractDialog.value = false; return }
+    if (strategy === null) return
 
-    await _runExtract(file, dest, pwd, strategy)
+    _runExtract(file, dest, pwd, strategy)    // fire and forget
+  }
+
+  function closeExtract() {
+    extractDialog.value   = false
+    extractPassword.value = ''
+    _extractPending.value = null
   }
 
   async function _runExtract(file, dest, password, strategy = 'overwrite') {
     const fileStore = useFileStore()
+    const taskStore = useTaskStore()
+    const data = reactive({ fileName: file.name, done: 0, total: 0 })
+    const task = taskStore.add({ component: ExtractTaskItem, data })
+
     try {
       const res     = await archiveApi.extract(file.path, dest, password, null, strategy)
       const reader  = res.body.getReader()
@@ -110,15 +164,14 @@ export const useArchiveStore = defineStore('archive', () => {
           const line = part.trim()
           if (!line.startsWith('data: ')) continue
           try {
-            const data = JSON.parse(line.slice(6))
-            if (data.type === 'progress') {
-              extractProgress.value.done  = data.done
-              extractProgress.value.total = data.total
-            } else if (data.type === 'error') {
-              extractProgress.value.errors.push(data.message || data.name || 'Error')
-            } else if (data.type === 'done') {
-              extractProgress.value.finished = true
-              extractProgress.value.phase    = 'done'
+            const ev = JSON.parse(line.slice(6))
+            if (ev.type === 'progress') {
+              data.done  = ev.done
+              data.total = ev.total
+            } else if (ev.type === 'error') {
+              task.errors.push(ev.message || ev.name || 'Error')
+            } else if (ev.type === 'done') {
+              task.status = task.errors.length ? 'error' : 'done'
               fileStore.refresh()
               fileStore.invalidateTree()
             }
@@ -126,21 +179,14 @@ export const useArchiveStore = defineStore('archive', () => {
         }
       }
     } catch (e) {
-      extractProgress.value.errors.push(e.message)
-      extractProgress.value.finished = true
-      extractProgress.value.phase    = 'done'
+      task.errors.push(e.message)
+      task.status = 'error'
     }
   }
 
-  function closeExtract() {
-    extractDialog.value   = false
-    extractPassword.value = ''
-    extractProgress.value = { phase: 'running', file: null, dest: null, done: 0, total: 0, errors: [], finished: false }
-  }
-
   return {
-    compressDialog, compressSources, openCompress,
-    extractDialog, extractPassword, extractProgress,
-    extractHere, extractToSubfolder, confirmExtract, closeExtract,
+    compressDialog, compressSources, openCompress, startCompress,
+    extractDialog, extractPassword, extractHere, extractToSubfolder,
+    confirmExtract, closeExtract,
   }
 })

@@ -1,7 +1,3 @@
-import UploadPanel from './UploadPanel.vue'
-
-export default {
-  install(app) {
-    app.component('UploadPanel', UploadPanel)
-  },
-}
+// UploadPanel has been replaced by TaskPanel (task plugin).
+// This file is kept as a placeholder.
+export default { install() {} }

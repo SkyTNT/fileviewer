@@ -7,12 +7,10 @@ import { useAuthStore } from '@/plugins/auth/store.js'
 import { useUploadStore } from '@/plugins/upload/store.js'
 import { useViewerStore } from '@/plugins/viewer/store.js'
 import { useAppTheme } from '@/plugins/theme/index.js'
-import DirectoryTree    from '@/plugins/file/components/DirectoryTree.vue'
-import FileDetail       from '@/plugins/file/components/FileDetail.vue'
-import ExplorerToolbar  from '@/plugins/file/components/ExplorerToolbar.vue'
-import WaterfallView    from '@/plugins/file/components/WaterfallView.vue'
-import ListView         from '@/plugins/file/components/ListView.vue'
-import RootsView        from '@/plugins/file/components/RootsView.vue'
+// DirectoryTree, FileDetail, ExplorerToolbar, WaterfallView, ListView, RootsView
+// are globally registered by FilePlugin.
+// AppNotifications, TaskPanel, AppWriteDialogs, AppArchiveDialogs, LoginPage
+// are globally registered by their respective plugins.
 
 const store       = useFileStore()
 const authStore   = useAuthStore()
@@ -198,7 +196,7 @@ watch(() => authStore.loggedIn, (v) => {
     />
 
     <AppNotifications />
-    <UploadPanel />
+    <TaskPanel />
     <AppWriteDialogs />
     <AppArchiveDialogs />
 

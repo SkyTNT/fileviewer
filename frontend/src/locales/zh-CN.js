@@ -164,6 +164,12 @@ export default {
   jsonNode: {
     items: '{n} 项',
   },
+  tasks: {
+    runningN: '正在执行 {n} 个任务',
+    allDone: '所有任务已完成',
+    doneWithErrors: '{n} 个错误',
+    clearDone: '清除已完成',
+  },
   upload: {
     uploadingN: '正在上传 {n} 个文件',
     allDone: '{n} 个文件上传完成',

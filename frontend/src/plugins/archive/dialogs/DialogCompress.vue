@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { archiveApi } from '@/services/api.js'
 import { useFileStore } from '@/plugins/file/store.js'
-import { useNotificationStore } from '@/plugins/notification/store.js'
+import { useArchiveStore } from '@/plugins/archive/store.js'
 import CompressTreeNode from './CompressTreeNode.vue'
 
 const props = defineProps({
@@ -12,9 +12,9 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:modelValue'])
 
-const { t } = useI18n()
-const store = useFileStore()
-const { showSuccess, showError } = useNotificationStore()
+const { t }        = useI18n()
+const store        = useFileStore()
+const archiveStore = useArchiveStore()
 
 // ── settings ──────────────────────────────────────────────────────────────────
 const outputName  = ref('')
@@ -115,78 +115,29 @@ function onToggle(item) {
   })
 }
 
-// ── progress ─────────────────────────────────────────────────────────────────
-const compressing = ref(false)
-const progress    = ref({ done: 0, total: 0, name: '', errors: [], finished: false })
-
-async function startCompress() {
+function startCompress() {
   const sources    = treeItems.value.filter(n => n.check !== 'unchecked').map(n => n.path)
   const excludes   = [...excludedPaths.value]
   const outputPath = store.currentPath + '/' + outputName.value
 
-  compressing.value = true
-  progress.value    = { done: 0, total: 0, name: '', errors: [], finished: false }
-
-  try {
-    const res = await archiveApi.create(
-      sources, outputPath, format.value, level.value,
-      supportsPassword.value ? password.value : null,
-      excludes,
-    )
-
-    const reader  = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buf = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buf += decoder.decode(value, { stream: true })
-      const parts = buf.split('\n\n')
-      buf = parts.pop()
-      for (const part of parts) {
-        const line = part.trim()
-        if (!line.startsWith('data: ')) continue
-        try {
-          const data = JSON.parse(line.slice(6))
-          if (data.type === 'progress') {
-            progress.value.done  = data.done
-            progress.value.total = data.total
-            progress.value.name  = data.name
-          } else if (data.type === 'error') {
-            progress.value.errors.push(data.message || data.name || 'Error')
-          } else if (data.type === 'warning') {
-            progress.value.errors.push('⚠ ' + data.message)
-          } else if (data.type === 'done') {
-            progress.value.finished = true
-            store.refresh()
-            store.invalidateTree?.()
-          }
-        } catch { /* bad SSE */ }
-      }
-    }
-  } catch (e) {
-    progress.value.errors.push(e.message)
-    progress.value.finished = true
-  }
+  // Fire and forget — progress shown in TaskPanel
+  archiveStore.startCompress(
+    sources, outputPath, format.value, level.value,
+    supportsPassword.value ? password.value : null,
+    excludes,
+  )
+  closeDialog()
 }
 
 function closeDialog() {
-  compressing.value = false
-  progress.value = { done: 0, total: 0, name: '', errors: [], finished: false }
   emit('update:modelValue', false)
 }
-
-const progressPercent = computed(() =>
-  progress.value.total > 0 ? Math.round((progress.value.done / progress.value.total) * 100) : 0
-)
 </script>
 
 <template>
   <v-dialog
     :model-value="modelValue"
     max-width="640"
-    persistent
     @update:model-value="v => { if (!v) closeDialog() }"
   >
     <v-card>
@@ -195,9 +146,7 @@ const progressPercent = computed(() =>
         {{ t('archive.compress.title') }}
       </v-card-title>
 
-      <!-- ── Settings form ─────────────────────────────────────────────── -->
-      <template v-if="!compressing">
-        <v-card-text class="pt-2">
+      <v-card-text class="pt-2">
           <!-- Output filename -->
           <v-text-field
             v-model="outputName"
@@ -274,53 +223,18 @@ const progressPercent = computed(() =>
           </div>
         </v-card-text>
 
-        <v-card-actions class="px-4 pb-4">
-          <v-spacer />
-          <v-btn variant="text" @click="closeDialog">{{ t('dialog.cancel') }}</v-btn>
-          <v-btn
-            color="primary"
-            variant="tonal"
-            :disabled="!outputName || treeItems.every(n => n.check === 'unchecked')"
-            @click="startCompress"
-          >
-            {{ t('archive.compress.compress') }}
-          </v-btn>
-        </v-card-actions>
-      </template>
-
-      <!-- ── Progress view ─────────────────────────────────────────────── -->
-      <template v-else>
-        <v-card-text>
-          <div class="d-flex align-center mb-3 ga-2">
-            <v-icon color="primary">mdi-archive-plus-outline</v-icon>
-            <span class="text-body-2 font-weight-medium">{{ outputName }}</span>
-          </div>
-          <v-progress-linear
-            :model-value="progressPercent"
-            :indeterminate="progress.total === 0 && !progress.finished"
-            color="primary"
-            height="8"
-            rounded
-            class="mb-2"
-          />
-          <div class="text-caption text-medium-emphasis mb-2">
-            {{ progress.done }} / {{ progress.total || '…' }}
-            <template v-if="progress.name">— {{ progress.name }}</template>
-          </div>
-          <div v-for="(err, i) in progress.errors.slice(0, 5)" :key="i"
-               class="text-caption"
-               :class="err.startsWith('⚠') ? 'text-warning' : 'text-error'"
-          >
-            {{ err }}
-          </div>
-        </v-card-text>
-        <v-card-actions class="px-4 pb-4" v-if="progress.finished">
-          <v-spacer />
-          <v-btn color="primary" variant="tonal" @click="closeDialog">
-            {{ t('archive.compress.done') }}
-          </v-btn>
-        </v-card-actions>
-      </template>
+      <v-card-actions class="px-4 pb-4">
+        <v-spacer />
+        <v-btn variant="text" @click="closeDialog">{{ t('dialog.cancel') }}</v-btn>
+        <v-btn
+          color="primary"
+          variant="tonal"
+          :disabled="!outputName || treeItems.every(n => n.check === 'unchecked')"
+          @click="startCompress"
+        >
+          {{ t('archive.compress.compress') }}
+        </v-btn>
+      </v-card-actions>
     </v-card>
   </v-dialog>
 </template>

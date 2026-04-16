@@ -3,7 +3,6 @@ import { ref } from 'vue'
 import { writeApi } from '@/services/api.js'
 import { getErrorMessage } from '@/utils/errors.js'
 import { useFileStore } from '@/plugins/file/store.js'
-import { useNotificationStore } from '@/plugins/notification/store.js'
 
 export const useWriteStore = defineStore('write', () => {
   // ── Dialog state ─────────────────────────────────────────────────────────────
@@ -42,14 +41,8 @@ export const useWriteStore = defineStore('write', () => {
   }
 
   async function confirmDelete() {
-    const fileStore = useFileStore()
-    const { showError } = useNotificationStore()
     del.value.dialog = false
-    try {
-      await fileStore.deleteEntries(del.value.targets)
-    } catch (e) {
-      showError(getErrorMessage(e))
-    }
+    useFileStore().deleteEntries(del.value.targets)
   }
 
   // ── New Folder ────────────────────────────────────────────────────────────────
@@ -98,14 +91,8 @@ export const useWriteStore = defineStore('write', () => {
   }
 
   // ── Paste ─────────────────────────────────────────────────────────────────────
-  async function doPaste() {
-    const fileStore = useFileStore()
-    const { showError } = useNotificationStore()
-    try {
-      await fileStore.paste()
-    } catch (e) {
-      showError(getErrorMessage(e))
-    }
+  function doPaste() {
+    useFileStore().paste()
   }
 
   return {

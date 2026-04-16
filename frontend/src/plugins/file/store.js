@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { filesApi, configApi, writeApi } from '@/services/api.js'
+import { useTaskStore } from '@/plugins/task/store.js'
+import PasteTaskItem  from '@/plugins/write/PasteTaskItem.vue'
+import DeleteTaskItem from '@/plugins/write/DeleteTaskItem.vue'
 
 export const useFileStore = defineStore('file', () => {
   const rootName    = ref('Root')
@@ -24,10 +27,8 @@ export const useFileStore = defineStore('file', () => {
   const filterPattern = ref('')
   const sortBy        = ref(localStorage.getItem('fv-sort-by')    || 'name')
   const sortOrder     = ref(localStorage.getItem('fv-sort-order') || 'asc')
-  const clipboard      = ref(null)  // { entries: [...], action: 'copy' | 'cut' }
-  const pasteProgress  = ref(null)  // { done, total, action } | null
-  const deleteProgress = ref(null)  // { done, total } | null
-  const nameConflicts  = ref(null)  // { conflicts: [{name}], resolve: fn } | null
+  const clipboard     = ref(null)  // { entries: [...], action: 'copy' | 'cut' }
+  const nameConflicts = ref(null)  // { conflicts: [{name}], resolve: fn } | null
   const contextMenuFile = ref(null) // file under the right-click cursor
   const isContextMenuTarget = computed(() =>
     contextMenuFile.value != null &&
@@ -104,49 +105,57 @@ export const useFileStore = defineStore('file', () => {
   }
 
   async function deleteEntries(entries) {
-    deleteProgress.value = { done: 0, total: entries.length }
-    const errors = []
+    const taskStore = useTaskStore()
+    const data = reactive({ done: 0, total: entries.length })
+    const task = taskStore.add({ component: DeleteTaskItem, data })
     try {
       const response = await writeApi.delete(entries.map(e => e.path))
       await _readSSE(response, (ev) => {
-        if (ev.type === 'progress' || ev.type === 'error')
-          deleteProgress.value = { done: ev.done, total: ev.total }
+        if (ev.type === 'progress' || ev.type === 'error') {
+          data.done  = ev.done
+          data.total = ev.total
+        }
         if (ev.type === 'error')
-          errors.push(ev.name ? `${ev.name}: ${ev.message}` : ev.message)
+          task.errors.push(ev.name ? `${ev.name}: ${ev.message}` : ev.message)
         if (ev.type === 'done') {
+          task.status = task.errors.length ? 'error' : 'done'
           clearSelection()
           invalidateTree()
           refresh()
         }
       })
-    } finally {
-      deleteProgress.value = null
+    } catch (e) {
+      task.errors.push(e.message)
+      task.status = 'error'
     }
-    if (errors.length)
-      throw new Error(errors.length === 1 ? errors[0] : `${errors.length} items failed:\n${errors.join('\n')}`)
   }
 
   async function _executePaste(entries, action, destDir, onConflict) {
-    pasteProgress.value = { done: 0, total: entries.length, action }
-    const errors = []
+    const taskStore = useTaskStore()
+    const data = reactive({ action, done: 0, total: entries.length, bytes_done: 0, bytes_total: 0 })
+    const task = taskStore.add({ component: PasteTaskItem, data })
     try {
       const response = await writeApi.paste(entries, action, destDir, onConflict)
       await _readSSE(response, (ev) => {
-        if (ev.type === 'progress' || ev.type === 'error')
-          pasteProgress.value = { done: ev.done, total: ev.total, action }
+        if (ev.type === 'progress' || ev.type === 'error') {
+          data.done        = ev.done
+          data.total       = ev.total
+          data.bytes_done  = ev.bytes_done  ?? data.bytes_done
+          data.bytes_total = ev.bytes_total ?? data.bytes_total
+        }
         if (ev.type === 'error')
-          errors.push(ev.name ? `${ev.name}: ${ev.message}` : ev.message)
+          task.errors.push(ev.name ? `${ev.name}: ${ev.message}` : ev.message)
         if (ev.type === 'done') {
+          task.status = task.errors.length ? 'error' : 'done'
           if (action === 'cut') clipboard.value = null
           invalidateTree()
           refresh()
         }
       })
-    } finally {
-      pasteProgress.value = null
+    } catch (e) {
+      task.errors.push(e.message)
+      task.status = 'error'
     }
-    if (errors.length)
-      throw new Error(errors.length === 1 ? errors[0] : `${errors.length} items failed:\n${errors.join('\n')}`)
   }
 
   async function paste() {
@@ -279,7 +288,7 @@ export const useFileStore = defineStore('file', () => {
     rootName, currentPath, entries, displayEntries, loading, error, viewMode, breadcrumbs,
     page, pageSize, total, selectedEntry, selectedEntries, writeMode, roots,
     isAtHome, treeRevision, filterPattern, sortBy, sortOrder,
-    clipboard, pasteProgress, deleteProgress, nameConflicts,
+    clipboard, nameConflicts,
     contextMenuFile, isContextMenuTarget, setContextMenuFile,
     init, loadDirectory, goToPage, navigate,
     selectEntry, toggleEntry, shiftSelectTo, addToSelection, clearSelection, setSelection,

@@ -164,6 +164,12 @@ export default {
   jsonNode: {
     items: '{n} items',
   },
+  tasks: {
+    runningN: '{n} task running | {n} tasks running',
+    allDone: 'All tasks done',
+    doneWithErrors: '{n} error | {n} errors',
+    clearDone: 'Clear done',
+  },
   upload: {
     uploadingN: 'Uploading {n} file | Uploading {n} files',
     allDone: '{n} upload complete | {n} uploads complete',

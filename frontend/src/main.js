@@ -8,7 +8,7 @@ import NotificationPlugin from './plugins/notification/index.js'
 import AuthPlugin from './plugins/auth/index.js'
 import ThemePlugin from './plugins/theme/index.js'
 import FilePlugin from './plugins/file/index.js'
-import UploadPlugin from './plugins/upload/index.js'
+import TaskPlugin from './plugins/task/index.js'
 import WritePlugin from './plugins/write/index.js'
 import ArchivePlugin from './plugins/archive/index.js'
 import ViewerPlugin from './plugins/viewer/index.js'
@@ -23,7 +23,7 @@ app.use(NotificationPlugin)
 app.use(AuthPlugin)
 app.use(ThemePlugin)
 app.use(FilePlugin)
-app.use(UploadPlugin)
+app.use(TaskPlugin)
 app.use(WritePlugin)
 app.use(ArchivePlugin)
 app.use(ViewerPlugin)

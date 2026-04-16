@@ -1,59 +1,90 @@
 import { defineStore } from 'pinia'
-import { ref, reactive } from 'vue'
+import { reactive } from 'vue'
 import { writeApi } from '@/services/api.js'
 import { useFileStore } from '@/plugins/file/store.js'
+import { useTaskStore } from '@/plugins/task/store.js'
+import UploadTaskItem from './UploadTaskItem.vue'
 
 export const useUploadStore = defineStore('upload', () => {
-  const uploadTasks        = ref([])
-  const _uploadFiles       = new Map()
-  const _uploadControllers = new Map()
-  let _uploadNextId = 1
-  let _uploadRafId  = null
+  const _controllers = new Map()   // fileEntryId → AbortController
+  let _nextFileId = 1
+  let _rafId      = null
 
-  async function _uploadFile(task) {
-    const fileStore  = useFileStore()
-    const file       = _uploadFiles.get(task.id)
+  async function _uploadFile(batchTask, fileEntry) {
     const controller = new AbortController()
-    _uploadControllers.set(task.id, controller)
+    _controllers.set(fileEntry.id, controller)
     try {
-      await writeApi.upload(task.parent, file, task.onConflict, {
+      await writeApi.upload(fileEntry.parent, fileEntry.file, fileEntry.onConflict, {
         signal: controller.signal,
         onUploadProgress: (e) => {
-          if (e.total) task.progress = Math.round(e.loaded / e.total * 100)
+          if (e.total) fileEntry.progress = Math.round(e.loaded / e.total * 100)
         },
       })
-      task.progress = 100
-      task.status   = 'done'
+      fileEntry.progress = 100
+      fileEntry.status   = 'done'
     } catch (err) {
       if (err.code === 'ERR_CANCELED') {
-        uploadTasks.value = uploadTasks.value.filter(t => t.id !== task.id)
-        return
+        // Remove canceled file from the batch list
+        batchTask.data.files = batchTask.data.files.filter(f => f.id !== fileEntry.id)
+      } else {
+        fileEntry.status = 'error'
+        fileEntry.error  = err.response?.data?.detail || err.message || 'Upload failed'
       }
-      task.status = 'error'
-      task.error  = err.response?.data?.detail || err.message || 'Upload failed'
     } finally {
-      _uploadFiles.delete(task.id)
-      _uploadControllers.delete(task.id)
+      _controllers.delete(fileEntry.id)
     }
-    if (task.status === 'done') _scheduleRefresh()
+
+    if (fileEntry.status === 'done') _scheduleRefresh()
+
+    // Mark batch done when all files settled
+    const allSettled = batchTask.data.files.every(f => f.status !== 'uploading')
+    if (allSettled) {
+      const hasErrors = batchTask.data.files.some(f => f.status === 'error')
+      batchTask.status = hasErrors ? 'error' : 'done'
+    }
   }
 
   function _scheduleRefresh() {
-    if (_uploadRafId) return
-    _uploadRafId = requestAnimationFrame(() => {
-      _uploadRafId = null
+    if (_rafId) return
+    _rafId = requestAnimationFrame(() => {
+      _rafId = null
       useFileStore().refresh()
     })
   }
 
   function _startUploads(parent, files, onConflict) {
-    files.forEach((file) => {
-      const id   = _uploadNextId++
-      const task = reactive({ id, name: file.name, parent, onConflict, progress: 0, status: 'uploading', error: null })
-      _uploadFiles.set(id, file)
-      uploadTasks.value.push(task)
-      _uploadFile(task)
-    })
+    const taskStore  = useTaskStore()
+    const fileEntries = files.map(file => reactive({
+      id: _nextFileId++,
+      name: file.name,
+      file,
+      parent,
+      onConflict,
+      progress: 0,
+      status: 'uploading',
+      error: null,
+    }))
+
+    const batchData = reactive({ files: fileEntries })
+    const batchTask = taskStore.add({ component: UploadTaskItem, data: batchData })
+
+    // Attach remove helper after batchTask is created so the closure captures it
+    batchData.removeFile = (fileId) => {
+      const entry = batchData.files.find(f => f.id === fileId)
+      if (entry?.status === 'uploading') {
+        _controllers.get(fileId)?.abort()
+        // Cancellation is handled in the catch block of _uploadFile
+      } else {
+        batchData.files = batchData.files.filter(f => f.id !== fileId)
+        const allSettled = batchData.files.every(f => f.status !== 'uploading')
+        if (allSettled || batchData.files.length === 0) {
+          const hasErrors = batchData.files.some(f => f.status === 'error')
+          batchTask.status = hasErrors ? 'error' : 'done'
+        }
+      }
+    }
+
+    fileEntries.forEach(entry => _uploadFile(batchTask, entry))
   }
 
   async function addUploads(parent, files) {
@@ -79,27 +110,8 @@ export const useUploadStore = defineStore('upload', () => {
     } catch {
       // If conflict check fails, proceed with default overwrite
     }
-
     _startUploads(parent, files, 'overwrite')
   }
 
-  function clearUploadsDone() {
-    uploadTasks.value = uploadTasks.value.filter(t => t.status === 'uploading')
-  }
-
-  function clearAllUploads() {
-    uploadTasks.value = []
-  }
-
-  function removeUploadTask(id) {
-    const controller = _uploadControllers.get(id)
-    if (controller) { controller.abort(); return }
-    uploadTasks.value = uploadTasks.value.filter(t => t.id !== id)
-    _uploadFiles.delete(id)
-  }
-
-  return {
-    uploadTasks,
-    addUploads, clearUploadsDone, clearAllUploads, removeUploadTask,
-  }
+  return { addUploads }
 })
