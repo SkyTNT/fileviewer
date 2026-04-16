@@ -132,10 +132,11 @@ export const useFileStore = defineStore('file', () => {
 
   async function _executePaste(entries, action, destDir, onConflict) {
     const taskStore = useTaskStore()
-    const data = reactive({ action, done: 0, total: entries.length, bytes_done: 0, bytes_total: 0 })
+    const apiAction = action === 'cut' ? 'move' : 'copy'
+    const data = reactive({ action: apiAction, done: 0, total: entries.length, bytes_done: 0, bytes_total: 0 })
     const task = taskStore.add({ component: PasteTaskItem, data })
     try {
-      const response = await writeApi.paste(entries, action, destDir, onConflict)
+      const response = await writeApi.paste(entries, apiAction, destDir, onConflict)
       await _readSSE(response, (ev) => {
         if (ev.type === 'progress' || ev.type === 'error') {
           data.done        = ev.done
