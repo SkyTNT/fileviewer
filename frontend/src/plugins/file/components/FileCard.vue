@@ -77,8 +77,9 @@ function onContextMenu(e) {
     <v-divider />
 
     <v-card-text class="py-2 px-3">
-      <div class="text-body-2 font-weight-medium text-truncate" :title="file.name">
-        {{ file.name }}
+      <div class="d-flex align-center" style="min-width:0">
+        <span class="text-body-2 font-weight-medium text-truncate" :title="file.name">{{ file.name }}</span>
+        <v-icon v-if="file.is_symlink" size="13" color="medium-emphasis" class="ml-1 flex-shrink-0">mdi-link-variant</v-icon>
       </div>
       <div v-if="file.size != null" class="text-caption text-medium-emphasis">
         {{ formatSize(file.size) }}

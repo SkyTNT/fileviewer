@@ -13,6 +13,7 @@ router = APIRouter()
 
 def entry_info(p: Path, slug: "str | None", root: Path) -> dict:
     path_str = build_entry_path(p, slug, root)
+    is_symlink = p.is_symlink()
     try:
         stat = p.stat()
         return {
@@ -22,6 +23,7 @@ def entry_info(p: Path, slug: "str | None", root: Path) -> dict:
             "size": stat.st_size if p.is_file() else None,
             "modified": stat.st_mtime,
             "is_dir": p.is_dir(),
+            "is_symlink": is_symlink,
             "extension": p.suffix.lower() if p.is_file() else None,
         }
     except (PermissionError, OSError):
@@ -32,6 +34,7 @@ def entry_info(p: Path, slug: "str | None", root: Path) -> dict:
             "size": None,
             "modified": None,
             "is_dir": False,
+            "is_symlink": is_symlink,
             "extension": p.suffix.lower(),
         }
 

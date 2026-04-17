@@ -98,8 +98,9 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
           </v-avatar>
         </template>
 
-        <v-list-item-title class="text-body-2 font-weight-medium">
-          {{ file.name }}
+        <v-list-item-title class="text-body-2 font-weight-medium d-flex align-center" style="min-width:0">
+          <span class="text-truncate">{{ file.name }}</span>
+          <v-icon v-if="file.is_symlink" size="13" color="medium-emphasis" class="ml-1 flex-shrink-0">mdi-link-variant</v-icon>
         </v-list-item-title>
         <v-list-item-subtitle class="text-caption">
           {{ formatDate(file.modified) }}

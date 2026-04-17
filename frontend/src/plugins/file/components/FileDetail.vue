@@ -166,7 +166,12 @@ watch(file, async (f) => {
       </div>
       <div class="info-row">
         <span class="info-label text-caption text-medium-emphasis">{{ t('detail.type') }}</span>
-        <v-chip size="x-small" :color="typeColor" variant="tonal" label>{{ file.type }}</v-chip>
+        <div class="d-flex align-center ga-1">
+          <v-chip size="x-small" :color="typeColor" variant="tonal" label>{{ file.type }}</v-chip>
+          <v-chip v-if="file.is_symlink" size="x-small" color="medium-emphasis" variant="tonal" label>
+            <v-icon start size="11">mdi-link-variant</v-icon>symlink
+          </v-chip>
+        </div>
       </div>
       <div v-if="file.extension" class="info-row">
         <span class="info-label text-caption text-medium-emphasis">{{ t('detail.extension') }}</span>
