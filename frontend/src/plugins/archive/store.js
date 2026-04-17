@@ -172,11 +172,12 @@ export const useArchiveStore = defineStore('archive', () => {
   async function _runExtract(file, dest, password, strategy = 'overwrite') {
     const fileStore = useFileStore()
     const taskStore = useTaskStore()
-    const data = reactive({ fileName: file.name, done: 0, total: 0, current: '' })
-    const task = taskStore.add({ component: ExtractTaskItem, data })
+    const data  = reactive({ fileName: file.name, done: 0, total: 0, current: '' })
+    const abort = new AbortController()
+    const task  = taskStore.add({ component: ExtractTaskItem, data, cancel: () => abort.abort() })
 
     try {
-      const res = await archiveApi.extract(file.path, dest, password, null, strategy)
+      const res = await archiveApi.extract(file.path, dest, password, null, strategy, abort.signal)
       await readSSE(res, (ev) => {
         if (ev.type === 'progress') {
           data.done    = ev.done
@@ -195,7 +196,11 @@ export const useArchiveStore = defineStore('archive', () => {
         task.status = 'error'
       }
     } catch (e) {
-      task.errors.push(e.message)
+      if (e.name === 'AbortError') {
+        task.errors.push('cancelled')
+      } else {
+        task.errors.push(e.message)
+      }
       task.status = 'error'
     }
   }

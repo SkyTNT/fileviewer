@@ -94,8 +94,8 @@ export const archiveApi = {
   checkConflicts: (path, dest, password = null, entries = null) =>
     http.post('/archive/conflicts', { path, dest, password, entries }),
 
-  extract: (path, dest, password = null, entries = null, conflictStrategy = 'overwrite') =>
-    httpStream.post('/archive/extract', { path, dest, password, entries, conflict_strategy: conflictStrategy }),
+  extract: (path, dest, password = null, entries = null, conflictStrategy = 'overwrite', signal = undefined) =>
+    httpStream.post('/archive/extract', { path, dest, password, entries, conflict_strategy: conflictStrategy }, signal ? { signal } : {}),
 
   create: (sources, outputPath, format, level, password, excludes, signal = undefined) =>
     httpStream.post('/archive/create', {
@@ -122,17 +122,17 @@ export const writeApi = {
   },
   checkConflicts: (entries) =>
     http.post('/write/check-conflicts', { entries }),
-  paste: (entries, action, destParent, onConflict) =>
+  paste: (entries, action, destParent, onConflict, signal = undefined) =>
     httpStream.post('/write/paste', {
       entries: entries.map(e => ({ src: e.path, dest_parent: destParent })),
       action,
       on_conflict: onConflict,
-    }),
-  symlink: (entries, destParent, onConflict) =>
+    }, signal ? { signal } : {}),
+  symlink: (entries, destParent, onConflict, signal = undefined) =>
     httpStream.post('/write/symlink', {
       entries: entries.map(e => ({ src: e.path, dest_parent: destParent })),
       on_conflict: onConflict,
-    }),
+    }, signal ? { signal } : {}),
   delete: (paths) =>
     httpStream.post('/write/delete', { paths }),
 }

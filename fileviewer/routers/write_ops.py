@@ -410,7 +410,8 @@ async def upload(
             elif on_conflict == 'coexist':
                 dest = dir_path / _coexist_name(dir_path, filename)
             # 'overwrite' falls through
-        content = await f.read()
-        dest.write_bytes(content)
+        with open(dest, 'wb') as out:
+            while chunk := await f.read(1 << 20):
+                out.write(chunk)
         saved.append(dest.name)
     return {"ok": True, "saved": saved}

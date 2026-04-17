@@ -120,10 +120,11 @@ async function deleteEntries(entries) {
   async function _executePaste(entries, action, destDir, onConflict) {
     const taskStore = useTaskStore()
     const apiAction = action === 'cut' ? 'move' : 'copy'
-    const data = reactive({ action: apiAction, done: 0, total: entries.length, current: '', bytes_done: 0, bytes_total: 0 })
-    const task = taskStore.add({ component: PasteTaskItem, data })
+    const data  = reactive({ action: apiAction, done: 0, total: entries.length, current: '', bytes_done: 0, bytes_total: 0 })
+    const abort = new AbortController()
+    const task  = taskStore.add({ component: PasteTaskItem, data, cancel: () => abort.abort() })
     try {
-      const response = await writeApi.paste(entries, apiAction, destDir, onConflict)
+      const response = await writeApi.paste(entries, apiAction, destDir, onConflict, abort.signal)
       await readSSE(response, (ev) => {
         if (ev.type === 'progress' || ev.type === 'error') {
           data.done        = ev.done
@@ -146,7 +147,11 @@ async function deleteEntries(entries) {
         task.status = 'error'
       }
     } catch (e) {
-      task.errors.push(e.message)
+      if (e.name === 'AbortError') {
+        task.errors.push('cancelled')
+      } else {
+        task.errors.push(e.message)
+      }
       task.status = 'error'
     }
   }
@@ -169,10 +174,11 @@ async function deleteEntries(entries) {
 
   async function _executeLink(entries, destDir, onConflict) {
     const taskStore = useTaskStore()
-    const data = reactive({ action: 'link', done: 0, total: entries.length, current: '', bytes_done: 0, bytes_total: 0 })
-    const task = taskStore.add({ component: PasteTaskItem, data })
+    const data  = reactive({ action: 'link', done: 0, total: entries.length, current: '', bytes_done: 0, bytes_total: 0 })
+    const abort = new AbortController()
+    const task  = taskStore.add({ component: PasteTaskItem, data, cancel: () => abort.abort() })
     try {
-      const response = await writeApi.symlink(entries, destDir, onConflict)
+      const response = await writeApi.symlink(entries, destDir, onConflict, abort.signal)
       await readSSE(response, (ev) => {
         if (ev.type === 'progress' || ev.type === 'error') {
           data.done    = ev.done
@@ -192,7 +198,11 @@ async function deleteEntries(entries) {
         task.status = 'error'
       }
     } catch (e) {
-      task.errors.push(e.message)
+      if (e.name === 'AbortError') {
+        task.errors.push('cancelled')
+      } else {
+        task.errors.push(e.message)
+      }
       task.status = 'error'
     }
   }

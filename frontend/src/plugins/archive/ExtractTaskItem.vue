@@ -24,7 +24,11 @@ const color = computed(() => {
         {{ d.fileName }}
       </span>
       <span class="text-caption text-medium-emphasis">{{ d.done }} / {{ d.total || '…' }}</span>
-      <v-btn v-if="task.status !== 'running'" icon size="x-small" variant="text"
+      <v-btn v-if="task.status === 'running' && task.cancel" icon size="x-small" variant="text"
+             title="Cancel" @click="task.cancel()">
+        <v-icon size="13">mdi-stop</v-icon>
+      </v-btn>
+      <v-btn v-else-if="task.status !== 'running'" icon size="x-small" variant="text"
              @click="taskStore.remove(task.id)">
         <v-icon size="13">mdi-close</v-icon>
       </v-btn>
