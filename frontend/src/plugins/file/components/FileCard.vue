@@ -93,10 +93,10 @@ function onContextMenu(e) {
   break-inside: avoid;
   margin-bottom: 8px;
   cursor: pointer;
-  transition: outline 0.1s;
+  transition: box-shadow 0.1s;
 }
 .file-card--selected {
-  outline: 2px solid rgb(var(--v-theme-primary));
+  box-shadow: 0 0 0 2px rgb(var(--v-theme-primary)) !important;
 }
 .thumb-img {
   width: 100%;

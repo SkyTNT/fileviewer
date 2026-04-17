@@ -343,7 +343,7 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
 }
 .masonry-outer {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 .masonry {
   position: relative;
