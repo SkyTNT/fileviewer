@@ -341,7 +341,7 @@ def delete_entries(req: BatchDeleteRequest):
                 yield _sse({'type': 'error', 'done': i + 1, 'total': total, 'name': name, 'message': 'Cannot delete a root directory'})
                 continue
             try:
-                if not target.exists():
+                if not target.exists() and not target.is_symlink():
                     raise FileNotFoundError(f"{name}: not found")
                 shutil.rmtree(target) if target.is_dir() else target.unlink()
                 yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': name})

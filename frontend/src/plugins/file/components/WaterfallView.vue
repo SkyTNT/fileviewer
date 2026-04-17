@@ -25,7 +25,7 @@ async function refreshAll() {
     const all = []
     let newTotal = store.total
     for (let p = 1; p <= pages; p++) {
-      const res = await filesApi.listDirectory(path, p, size, filter)
+      const res = await filesApi.listDirectory(path, p, size, filter, store.sortBy, store.sortOrder)
       all.push(...res.data.entries)
       newTotal = res.data.total
     }
