@@ -95,16 +95,12 @@ export const useWriteStore = defineStore('write', () => {
     useFileStore().paste()
   }
 
-  function doPasteLink() {
-    useFileStore().pasteAsLink()
-  }
-
   return {
     rename, del, mkdir, touch,
     openRename, confirmRename,
     openDelete, confirmDelete,
     openMkdir, confirmMkdir,
     openTouch, confirmTouch,
-    doPaste, doPasteLink,
+    doPaste,
   }
 })

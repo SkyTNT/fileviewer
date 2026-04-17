@@ -29,6 +29,13 @@ export function useExplorerKeyboard() {
         fileStore.setCopy(fileStore.selectedEntries)
       }
     },
+    'C': (e) => {
+      if (!e.ctrlKey && !e.metaKey || !e.shiftKey) return false
+      if (fileStore.writeMode && fileStore.selectedEntries.length) {
+        e.preventDefault()
+        fileStore.setCopyLink(fileStore.selectedEntries)
+      }
+    },
     'x': (e) => {
       if (!e.ctrlKey && !e.metaKey) return false
       if (fileStore.writeMode && fileStore.selectedEntries.length) {

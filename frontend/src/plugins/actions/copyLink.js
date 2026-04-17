@@ -4,24 +4,23 @@ import { t, file, selection, isTarget, canWrite } from './ctx.js'
 const targets = () => { const f = file(); return (isTarget() || !f) ? selection() : [f] }
 
 export default {
-  key: 'cut',
+  key: 'copy-link',
 
   menu: {
-    icon: 'mdi-content-cut',
+    icon: 'mdi-link-variant',
     label: () => isTarget()
-      ? t('menu.cutItems', { n: selection().length })
-      : t('menu.cut'),
+      ? t('menu.copyLinkItems', { n: selection().length })
+      : t('menu.copyLink'),
     show: () => canWrite() && !!file(),
   },
 
   detail: {
-    icon: 'mdi-content-cut',
-    label: () => t('detail.cut'),
+    icon: 'mdi-link-variant',
+    label: () => t('detail.copyLink'),
     color: 'secondary',
     showSingle: () => canWrite(),
     showMulti: () => canWrite(),
-    group: 'copy-cut',
   },
 
-  action: () => useFileStore().setCut(targets()),
+  action: () => useFileStore().setCopyLink(targets()),
 }

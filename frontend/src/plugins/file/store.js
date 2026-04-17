@@ -84,6 +84,9 @@ export const useFileStore = defineStore('file', () => {
   function setCut(entries) {
     clipboard.value = { entries: Array.isArray(entries) ? entries : [entries], action: 'cut' }
   }
+  function setCopyLink(entries) {
+    clipboard.value = { entries: Array.isArray(entries) ? entries : [entries], action: 'link' }
+  }
   function clearClipboard() { clipboard.value = null }
 
 async function deleteEntries(entries) {
@@ -166,9 +169,11 @@ async function deleteEntries(entries) {
         nameConflicts.value = { conflicts: res.data.conflicts, resolve }
       })
       if (!strategy) return
+      if (action === 'link') { await _executeLink(entries, destDir, strategy); return }
       await _executePaste(entries, action, destDir, strategy)
       return
     }
+    if (action === 'link') { await _executeLink(entries, destDir, 'skip'); return }
     await _executePaste(entries, action, destDir, 'skip')
   }
 
@@ -342,7 +347,7 @@ async function deleteEntries(entries) {
     init, loadDirectory, goToPage, navigate,
     selectEntry, toggleEntry, shiftSelectTo, addToSelection, clearSelection, setSelection,
     invalidateTree, setFilter, setSort,
-    setCopy, setCut, clearClipboard, paste, pasteAsLink, resolveNameConflicts, cancelNameConflicts, deleteEntries,
+    setCopy, setCut, setCopyLink, clearClipboard, paste, resolveNameConflicts, cancelNameConflicts, deleteEntries,
     setRefreshHook, refresh,
   }
 })

@@ -269,13 +269,13 @@ const clipboardLabel = computed(() => {
     <template v-if="store.writeMode && store.clipboard && !store.isAtHome">
       <v-chip
         size="x-small"
-        :color="store.clipboard.action === 'cut' ? 'warning' : 'info'"
+        :color="store.clipboard.action === 'cut' ? 'warning' : store.clipboard.action === 'link' ? 'success' : 'info'"
         variant="tonal"
         class="mr-1"
         closable
         @click:close="store.clearClipboard"
       >
-        <v-icon start size="14">{{ store.clipboard.action === 'cut' ? 'mdi-content-cut' : 'mdi-content-copy' }}</v-icon>
+        <v-icon start size="14">{{ store.clipboard.action === 'cut' ? 'mdi-content-cut' : store.clipboard.action === 'link' ? 'mdi-link-variant' : 'mdi-content-copy' }}</v-icon>
         {{ clipboardLabel }}
       </v-chip>
       <v-btn icon size="small" class="mr-2" color="primary" @click="writeStore.doPaste">
@@ -461,7 +461,7 @@ const clipboardLabel = computed(() => {
         />
         <template v-if="store.clipboard && !store.isAtHome">
           <v-list-item
-            :prepend-icon="store.clipboard.action === 'cut' ? 'mdi-content-cut' : 'mdi-content-copy'"
+            :prepend-icon="store.clipboard.action === 'cut' ? 'mdi-content-cut' : store.clipboard.action === 'link' ? 'mdi-link-variant' : 'mdi-content-copy'"
             :title="t('toolbar.pasteName', { name: clipboardLabel })"
             density="compact"
             rounded="lg"

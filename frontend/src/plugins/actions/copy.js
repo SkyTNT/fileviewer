@@ -1,7 +1,7 @@
 import { useFileStore } from '@/plugins/file/store.js'
 import { t, file, selection, isTarget, canWrite } from './ctx.js'
 
-const targets = () => isTarget() ? selection() : [file()]
+const targets = () => { const f = file(); return (isTarget() || !f) ? selection() : [f] }
 
 export default {
   key: 'copy',
