@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, reactive } from 'vue'
 import { archiveApi, writeApi } from '@/services/api.js'
+import { readSSE } from '@/utils/sse.js'
 import { useFileStore } from '@/plugins/file/store.js'
 import { useTaskStore } from '@/plugins/task/store.js'
 import CompressTaskItem from './CompressTaskItem.vue'
@@ -29,39 +30,28 @@ export const useArchiveStore = defineStore('archive', () => {
     })
 
     try {
-      const res     = await archiveApi.create(sources, outputPath, format, level, password, excludes, abort.signal)
-      const reader  = res.body.getReader()
-      const decoder = new TextDecoder()
-      let buf = ''
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buf += decoder.decode(value, { stream: true })
-        const parts = buf.split('\n\n')
-        buf = parts.pop()
-        for (const part of parts) {
-          const line = part.trim()
-          if (!line.startsWith('data: ')) continue
-          try {
-            const ev = JSON.parse(line.slice(6))
-            if (ev.type === 'progress') {
-              data.done        = ev.done
-              data.total       = ev.total
-              data.current     = ev.name || ''
-              data.bytes_done  = ev.bytes_done  ?? data.bytes_done
-              data.bytes_total = ev.bytes_total ?? data.bytes_total
-            } else if (ev.type === 'error') {
-              task.errors.push(ev.message || 'Error')
-            } else if (ev.type === 'warning') {
-              task.errors.push('⚠ ' + ev.message)
-            } else if (ev.type === 'done') {
-              const hasRealErrors = task.errors.some(e => !e.startsWith('⚠'))
-              task.status = hasRealErrors ? 'error' : 'done'
-              fileStore.refresh()
-              fileStore.invalidateTree?.()
-            }
-          } catch { /* bad SSE */ }
+      const res = await archiveApi.create(sources, outputPath, format, level, password, excludes, abort.signal)
+      await readSSE(res, (ev) => {
+        if (ev.type === 'progress') {
+          data.done        = ev.done
+          data.total       = ev.total
+          data.current     = ev.name || ''
+          data.bytes_done  = ev.bytes_done  ?? data.bytes_done
+          data.bytes_total = ev.bytes_total ?? data.bytes_total
+        } else if (ev.type === 'error') {
+          task.errors.push(ev.message || 'Error')
+        } else if (ev.type === 'warning') {
+          task.errors.push('⚠ ' + ev.message)
+        } else if (ev.type === 'done') {
+          const hasRealErrors = task.errors.some(e => !e.startsWith('⚠'))
+          task.status = hasRealErrors ? 'error' : 'done'
+          fileStore.refresh()
+          fileStore.invalidateTree?.()
         }
+      })
+      if (task.status === 'running') {
+        task.errors.push('Unexpected end of stream')
+        task.status = 'error'
       }
     } catch (e) {
       if (e.name === 'AbortError') {
@@ -183,33 +173,22 @@ export const useArchiveStore = defineStore('archive', () => {
     const task = taskStore.add({ component: ExtractTaskItem, data })
 
     try {
-      const res     = await archiveApi.extract(file.path, dest, password, null, strategy)
-      const reader  = res.body.getReader()
-      const decoder = new TextDecoder()
-      let buf = ''
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buf += decoder.decode(value, { stream: true })
-        const parts = buf.split('\n\n')
-        buf = parts.pop()
-        for (const part of parts) {
-          const line = part.trim()
-          if (!line.startsWith('data: ')) continue
-          try {
-            const ev = JSON.parse(line.slice(6))
-            if (ev.type === 'progress') {
-              data.done  = ev.done
-              data.total = ev.total
-            } else if (ev.type === 'error') {
-              task.errors.push(ev.message || ev.name || 'Error')
-            } else if (ev.type === 'done') {
-              task.status = task.errors.length ? 'error' : 'done'
-              fileStore.refresh()
-              fileStore.invalidateTree()
-            }
-          } catch { /* bad SSE */ }
+      const res = await archiveApi.extract(file.path, dest, password, null, strategy)
+      await readSSE(res, (ev) => {
+        if (ev.type === 'progress') {
+          data.done  = ev.done
+          data.total = ev.total
+        } else if (ev.type === 'error') {
+          task.errors.push(ev.message || ev.name || 'Error')
+        } else if (ev.type === 'done') {
+          task.status = task.errors.length ? 'error' : 'done'
+          fileStore.refresh()
+          fileStore.invalidateTree()
         }
+      })
+      if (task.status === 'running') {
+        task.errors.push('Unexpected end of stream')
+        task.status = 'error'
       }
     } catch (e) {
       task.errors.push(e.message)

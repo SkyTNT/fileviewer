@@ -12,6 +12,20 @@ http.interceptors.response.use(
   }
 )
 
+// For SSE streaming endpoints — axios buffers the body so fetch is required.
+const httpStream = {
+  get:  (path, options = {}) =>
+    fetch(`/api${path}`, { credentials: 'include', ...options }),
+  post: (path, body = {}, options = {}) =>
+    fetch(`/api${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(body),
+      ...options,
+    }),
+}
+
 export const authApi = {
   status:  ()                   => http.get('/auth/status'),
   login:   (username, password) => http.post('/auth/login', { username, password }),
@@ -58,9 +72,9 @@ export const mediaApi = {
 
 export const archiveApi = {
   getInfo: (path, password = null, signal = undefined) => {
-    let url = `/api/archive/info?path=${encodeURIComponent(path)}`
+    let url = `/archive/info?path=${encodeURIComponent(path)}`
     if (password) url += `&password=${encodeURIComponent(password)}`
-    return fetch(url, { credentials: 'include', ...(signal && { signal }) })
+    return httpStream.get(url, signal ? { signal } : {})
   },
 
   entryUrl: (path, entry, password = null) => {
@@ -69,12 +83,11 @@ export const archiveApi = {
     return url
   },
 
-  getEntryText: async (path, entry, password = null) => {
-    const url = `/api/archive/entry?path=${encodeURIComponent(path)}&entry=${encodeURIComponent(entry)}${password ? `&password=${encodeURIComponent(password)}` : ''}`
-    const res = await fetch(url, { credentials: 'include' })
-    if (!res.ok) throw new Error(await res.text())
-    return res.text()
-  },
+  getEntryText: (path, entry, password = null) =>
+    http.get('/archive/entry', {
+      params: { path, entry, ...(password && { password }) },
+      responseType: 'text',
+    }).then(r => r.data),
 
   getCapabilities: () => http.get('/archive/capabilities'),
 
@@ -82,28 +95,17 @@ export const archiveApi = {
     http.post('/archive/conflicts', { path, dest, password, entries }),
 
   extract: (path, dest, password = null, entries = null, conflictStrategy = 'overwrite') =>
-    fetch('/api/archive/extract', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ path, dest, password, entries, conflict_strategy: conflictStrategy }),
-    }),
+    httpStream.post('/archive/extract', { path, dest, password, entries, conflict_strategy: conflictStrategy }),
 
   create: (sources, outputPath, format, level, password, excludes, signal = undefined) =>
-    fetch('/api/archive/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      ...(signal && { signal }),
-      body: JSON.stringify({
-        sources,
-        output_path: outputPath,
-        format,
-        level,
-        password: password || null,
-        excludes: excludes || [],
-      }),
-    }),
+    httpStream.post('/archive/create', {
+      sources,
+      output_path: outputPath,
+      format,
+      level,
+      password: password || null,
+      excludes: excludes || [],
+    }, signal ? { signal } : {}),
 }
 
 export const writeApi = {
@@ -121,31 +123,16 @@ export const writeApi = {
   checkConflicts: (entries) =>
     http.post('/write/check-conflicts', { entries }),
   paste: (entries, action, destParent, onConflict) =>
-    fetch('/api/write/paste', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        entries: entries.map(e => ({ src: e.path, dest_parent: destParent })),
-        action,
-        on_conflict: onConflict,
-      }),
+    httpStream.post('/write/paste', {
+      entries: entries.map(e => ({ src: e.path, dest_parent: destParent })),
+      action,
+      on_conflict: onConflict,
     }),
   symlink: (entries, destParent, onConflict) =>
-    fetch('/api/write/symlink', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        entries: entries.map(e => ({ src: e.path, dest_parent: destParent })),
-        on_conflict: onConflict,
-      }),
+    httpStream.post('/write/symlink', {
+      entries: entries.map(e => ({ src: e.path, dest_parent: destParent })),
+      on_conflict: onConflict,
     }),
   delete: (paths) =>
-    fetch('/api/write/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ paths }),
-    }),
+    httpStream.post('/write/delete', { paths }),
 }

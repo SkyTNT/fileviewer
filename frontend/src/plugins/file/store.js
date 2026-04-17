@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
 import { filesApi, configApi, writeApi } from '@/services/api.js'
 import { useTaskStore } from '@/plugins/task/store.js'
+import { readSSE } from '@/utils/sse.js'
 import PasteTaskItem  from '@/plugins/write/PasteTaskItem.vue'
 import DeleteTaskItem from '@/plugins/write/DeleteTaskItem.vue'
 
@@ -85,32 +86,13 @@ export const useFileStore = defineStore('file', () => {
   }
   function clearClipboard() { clipboard.value = null }
 
-  async function _readSSE(response, onEvent) {
-    if (!response.ok) throw new Error(`Request failed: ${response.status}`)
-    const reader  = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const parts = buffer.split('\n\n')
-      buffer = parts.pop()
-      for (const part of parts) {
-        const line = part.trim()
-        if (!line.startsWith('data:')) continue
-        try { onEvent(JSON.parse(line.slice(5).trim())) } catch {}
-      }
-    }
-  }
-
-  async function deleteEntries(entries) {
+async function deleteEntries(entries) {
     const taskStore = useTaskStore()
     const data = reactive({ done: 0, total: entries.length })
     const task = taskStore.add({ component: DeleteTaskItem, data })
     try {
       const response = await writeApi.delete(entries.map(e => e.path))
-      await _readSSE(response, (ev) => {
+      await readSSE(response, (ev) => {
         if (ev.type === 'progress' || ev.type === 'error') {
           data.done  = ev.done
           data.total = ev.total
@@ -124,6 +106,10 @@ export const useFileStore = defineStore('file', () => {
           refresh()
         }
       })
+      if (task.status === 'running') {
+        task.errors.push('Unexpected end of stream')
+        task.status = 'error'
+      }
     } catch (e) {
       task.errors.push(e.message)
       task.status = 'error'
@@ -137,7 +123,7 @@ export const useFileStore = defineStore('file', () => {
     const task = taskStore.add({ component: PasteTaskItem, data })
     try {
       const response = await writeApi.paste(entries, apiAction, destDir, onConflict)
-      await _readSSE(response, (ev) => {
+      await readSSE(response, (ev) => {
         if (ev.type === 'progress' || ev.type === 'error') {
           data.done        = ev.done
           data.total       = ev.total
@@ -153,6 +139,10 @@ export const useFileStore = defineStore('file', () => {
           refresh()
         }
       })
+      if (task.status === 'running') {
+        task.errors.push('Unexpected end of stream')
+        task.status = 'error'
+      }
     } catch (e) {
       task.errors.push(e.message)
       task.status = 'error'
@@ -181,7 +171,7 @@ export const useFileStore = defineStore('file', () => {
     const task = taskStore.add({ component: PasteTaskItem, data })
     try {
       const response = await writeApi.symlink(entries, destDir, onConflict)
-      await _readSSE(response, (ev) => {
+      await readSSE(response, (ev) => {
         if (ev.type === 'progress' || ev.type === 'error') {
           data.done  = ev.done
           data.total = ev.total
@@ -194,6 +184,10 @@ export const useFileStore = defineStore('file', () => {
           refresh()
         }
       })
+      if (task.status === 'running') {
+        task.errors.push('Unexpected end of stream')
+        task.status = 'error'
+      }
     } catch (e) {
       task.errors.push(e.message)
       task.status = 'error'
