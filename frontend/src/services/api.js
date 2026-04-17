@@ -131,6 +131,16 @@ export const writeApi = {
         on_conflict: onConflict,
       }),
     }),
+  symlink: (entries, destParent, onConflict) =>
+    fetch('/api/write/symlink', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        entries: entries.map(e => ({ src: e.path, dest_parent: destParent })),
+        on_conflict: onConflict,
+      }),
+    }),
   delete: (paths) =>
     fetch('/api/write/delete', {
       method: 'POST',

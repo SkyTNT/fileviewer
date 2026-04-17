@@ -329,6 +329,42 @@ def paste(req: BatchPasteRequest):
     return _sse_response(generate())
 
 
+class BatchSymlinkRequest(BaseModel):
+    entries: list[BatchEntry]
+    on_conflict: str      # 'overwrite' | 'skip' | 'coexist'
+
+
+@router.post("/symlink")
+def create_symlinks(req: BatchSymlinkRequest):
+
+    def generate():
+        total = len(req.entries)
+        for i, entry in enumerate(req.entries):
+            src      = validate_path(entry.src)
+            name     = src.name
+            dest_dir = validate_path(entry.dest_parent)
+            dest     = dest_dir / name
+            try:
+                if dest.exists() or dest.is_symlink():
+                    if req.on_conflict == "skip":
+                        yield _sse({'type': 'progress', 'done': i + 1, 'total': total,
+                                    'name': name, 'skipped': True})
+                        continue
+                    elif req.on_conflict == "overwrite":
+                        shutil.rmtree(dest) if (dest.is_dir() and not dest.is_symlink()) else dest.unlink()
+                    elif req.on_conflict == "coexist":
+                        name = _coexist_name(dest_dir, name)
+                        dest = dest_dir / name
+                os.symlink(src, dest)
+                yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': name})
+            except Exception as e:
+                yield _sse({'type': 'error', 'done': i + 1, 'total': total,
+                            'name': name, 'message': str(e)})
+        yield _sse({'type': 'done'})
+
+    return _sse_response(generate())
+
+
 @router.post("/delete")
 def delete_entries(req: BatchDeleteRequest):
 

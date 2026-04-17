@@ -175,6 +175,47 @@ export const useFileStore = defineStore('file', () => {
     await _executePaste(entries, action, destDir, 'skip')
   }
 
+  async function _executeLink(entries, destDir, onConflict) {
+    const taskStore = useTaskStore()
+    const data = reactive({ action: 'link', done: 0, total: entries.length, bytes_done: 0, bytes_total: 0 })
+    const task = taskStore.add({ component: PasteTaskItem, data })
+    try {
+      const response = await writeApi.symlink(entries, destDir, onConflict)
+      await _readSSE(response, (ev) => {
+        if (ev.type === 'progress' || ev.type === 'error') {
+          data.done  = ev.done
+          data.total = ev.total
+        }
+        if (ev.type === 'error')
+          task.errors.push(ev.name ? `${ev.name}: ${ev.message}` : ev.message)
+        if (ev.type === 'done') {
+          task.status = task.errors.length ? 'error' : 'done'
+          invalidateTree()
+          refresh()
+        }
+      })
+    } catch (e) {
+      task.errors.push(e.message)
+      task.status = 'error'
+    }
+  }
+
+  async function pasteAsLink() {
+    if (!clipboard.value) return
+    const { entries } = clipboard.value
+    const destDir = currentPath.value
+    const res = await writeApi.checkConflicts(entries.map(e => ({ name: e.name, dest_parent: destDir })))
+    if (res.data.conflicts.length > 0) {
+      const strategy = await new Promise((resolve) => {
+        nameConflicts.value = { conflicts: res.data.conflicts, resolve }
+      })
+      if (!strategy) return
+      await _executeLink(entries, destDir, strategy)
+      return
+    }
+    await _executeLink(entries, destDir, 'skip')
+  }
+
   function resolveNameConflicts(strategy) {
     nameConflicts.value?.resolve(strategy)
     nameConflicts.value = null
@@ -294,7 +335,7 @@ export const useFileStore = defineStore('file', () => {
     init, loadDirectory, goToPage, navigate,
     selectEntry, toggleEntry, shiftSelectTo, addToSelection, clearSelection, setSelection,
     invalidateTree, setFilter, setSort,
-    setCopy, setCut, clearClipboard, paste, resolveNameConflicts, cancelNameConflicts, deleteEntries,
+    setCopy, setCut, clearClipboard, paste, pasteAsLink, resolveNameConflicts, cancelNameConflicts, deleteEntries,
     setRefreshHook, refresh,
   }
 })

@@ -23,10 +23,10 @@ const color = computed(() => {
   <div class="px-3 py-2">
     <div class="d-flex align-center ga-1 mb-1">
       <v-icon size="15" :color="color">
-        {{ d.action === 'move' ? 'mdi-content-cut' : 'mdi-content-copy' }}
+        {{ d.action === 'move' ? 'mdi-content-cut' : d.action === 'link' ? 'mdi-link-variant' : 'mdi-content-copy' }}
       </v-icon>
       <span class="text-body-2 font-weight-medium" style="flex: 1">
-        {{ d.action === 'move' ? t('notify.movingFiles') : t('notify.copyingFiles') }}
+        {{ d.action === 'move' ? t('notify.movingFiles') : d.action === 'link' ? t('notify.creatingLinks') : t('notify.copyingFiles') }}
       </span>
       <span class="text-caption text-medium-emphasis">{{ d.done }} / {{ d.total }}</span>
       <v-btn v-if="task.status !== 'running'" icon size="x-small" variant="text"

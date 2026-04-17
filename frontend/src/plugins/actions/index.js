@@ -12,6 +12,7 @@ import deleteAction   from './delete.js'
 import mkdir          from './mkdir.js'
 import touch          from './touch.js'
 import paste          from './paste.js'
+import pasteLink      from './pasteLink.js'
 
 // ── Action registry ────────────────────────────────────────────────────────────
 //
@@ -45,6 +46,7 @@ export const ACTIONS = [
   mkdir,
   touch,
   paste,
+  pasteLink,
 ]
 
 // ── ContextMenu items ──────────────────────────────────────────────────────────
