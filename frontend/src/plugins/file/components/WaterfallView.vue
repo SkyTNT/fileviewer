@@ -78,10 +78,14 @@ const masonryOuterStyle = computed(() => ({
 }))
 
 // Scroll position drifts when total height changes due to zoom; correct it.
+// Setting `zoomingTim` indicates that zooming is in progress, which is used to prevent `onScrollOrResize` later.
+let zoomingTim = null
 watch(zoomScale, async (newZoom, oldZoom) => {
   if (!oldZoom || newZoom === oldZoom) return
+  if (zoomingTim)
+    clearTimeout(zoomingTim)
+  zoomingTim = setTimeout(() => zoomingTim = null, 100)
   const prevY = window.scrollY
-  await nextTick()
   window.scrollTo(0, Math.round(prevY * (newZoom / oldZoom)))
 })
 
@@ -105,13 +109,15 @@ const layoutVersion = ref(0)
 const containerHeight = ref(0)
 let savedColHeights = []
 
-function runLayout() {
+function runLayout(startIndex = 0) {
   const n  = colCount.value
   const cw = colWidth.value
   if (cw === 0) return
-  const heights = new Array(n).fill(0)
+  const canAppend = startIndex > 0 && savedColHeights.length === n
+
+  const heights = canAppend? [...savedColHeights] : new Array(n).fill(0)
   const entries = displayEntries.value
-  for (let i = 0; i < entries.length; i++) {
+  for (let i = canAppend ? startIndex : 0; i < entries.length; i++) {
     const file = entries[i]
     let minIdx = 0
     for (let j = 1; j < n; j++) if (heights[j] < heights[minIdx]) minIdx = j
@@ -120,27 +126,6 @@ function runLayout() {
   }
   savedColHeights       = heights
   containerHeight.value = heights.length ? Math.max(...heights) : 0
-  layoutVersion.value++
-}
-
-function appendLayout(prevCount) {
-  const n  = colCount.value
-  const cw = colWidth.value
-  if (cw === 0 || prevCount === 0 || savedColHeights.length !== n) {
-    runLayout()
-    return
-  }
-  const heights = [...savedColHeights]
-  const entries = displayEntries.value
-  for (let i = prevCount; i < entries.length; i++) {
-    const file = entries[i]
-    let minIdx = 0
-    for (let j = 1; j < n; j++) if (heights[j] < heights[minIdx]) minIdx = j
-    cardPositions[file.path] = { x: minIdx * (cw + GAP), y: heights[minIdx] }
-    heights[minIdx] += cardHeight(file) + GAP
-  }
-  savedColHeights       = heights
-  containerHeight.value = Math.max(...heights)
   layoutVersion.value++
 }
 
@@ -190,7 +175,7 @@ const visibleEntries = computed(() => {
 
 let scrollRaf = null
 function onScrollOrResize() {
-  if (scrollRaf) return
+  if (scrollRaf || zoomingTim) return
   scrollRaf = requestAnimationFrame(() => { scrollRaf = null; updateViewport() })
 }
 
@@ -204,13 +189,9 @@ watch(() => store.entries, (newEntries) => {
   } else {
     const prevCount = displayEntries.value.length
     displayEntries.value = [...displayEntries.value, ...newEntries]
-    appendLayout(prevCount)
+    runLayout(prevCount)
   }
 }, { immediate: true })
-
-watch(colCount, () => {
-  runLayout()
-})
 
 watch([containerHeight, layoutVersion], () => updateViewport())
 
@@ -230,8 +211,7 @@ function updateContainerMetrics(w) {
   layoutComputedWidth.value = w
   const n = widthToColCount(w)
   colWidth.value = Math.floor((w - GAP * (n - 1)) / n)
-  if (n !== colCount.value) colCount.value = n  // watch(colCount) → runLayout
-  else runLayout()
+  colCount.value = n
 }
 
 watch(containerRef, (el, oldEl) => {
@@ -259,7 +239,6 @@ onMounted(() => {
 
   containerRO = new ResizeObserver(([entry]) => {
     updateContainerMetrics(entry.contentRect.width)
-    updateViewport()
   })
   if (containerRef.value) {
     updateContainerMetrics(containerRef.value.clientWidth)
