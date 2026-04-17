@@ -104,7 +104,6 @@ const cardPositions = {}
 const layoutVersion = ref(0)
 const containerHeight = ref(0)
 let savedColHeights = []
-let rafId = null
 
 function runLayout() {
   const n  = colCount.value
@@ -201,18 +200,15 @@ watch(() => store.entries, (newEntries) => {
     const keep = new Set(newEntries.map(e => e.path))
     for (const p of Object.keys(cardPositions)) if (!keep.has(p)) delete cardPositions[p]
     displayEntries.value = [...newEntries]
-    if (rafId) { cancelAnimationFrame(rafId); rafId = null }
     runLayout()
   } else {
     const prevCount = displayEntries.value.length
     displayEntries.value = [...displayEntries.value, ...newEntries]
-    if (rafId) { cancelAnimationFrame(rafId); rafId = null }
     appendLayout(prevCount)
   }
 }, { immediate: true })
 
 watch(colCount, () => {
-  if (rafId) { cancelAnimationFrame(rafId); rafId = null }
   runLayout()
 })
 
@@ -290,7 +286,6 @@ onDeactivated(() => {
 
 onUnmounted(() => {
   store.setRefreshHook(null)
-  if (rafId) cancelAnimationFrame(rafId)
   if (scrollRaf) cancelAnimationFrame(scrollRaf)
   scrollObs?.disconnect()
   containerRO?.disconnect()
