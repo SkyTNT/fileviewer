@@ -175,6 +175,7 @@ const visibleEntries = computed(() => {
 
 let scrollRaf = null
 function onScrollOrResize() {
+  savedScrollY = window.scrollY
   if (scrollRaf || zoomingTim) return
   scrollRaf = requestAnimationFrame(() => { scrollRaf = null; updateViewport() })
 }
@@ -257,7 +258,6 @@ onActivated(() => {
 })
 
 onDeactivated(() => {
-  savedScrollY = window.scrollY
   store.setRefreshHook(null)
   window.removeEventListener('scroll', onScrollOrResize, { capture: true })
   window.removeEventListener('resize', onScrollOrResize)
