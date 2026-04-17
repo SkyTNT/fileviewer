@@ -170,7 +170,10 @@ export default {
   imageViewer: {
     resetView: '重設檢視',
     close: '關閉',
+    dragMode: '切換到拖曳模式',
+    panMode: '切換到平移模式',
     zoomHint: '滾輪縮放 · 拖曳平移 · 雙擊重設',
+    dragHint: '拖曳圖片到其他視窗 · 滾輪縮放',
   },
   imageComparison: {
     hint: '拖曳滑桿比較 · 滾輪縮放 · 拖曳平移 · 雙擊重設',

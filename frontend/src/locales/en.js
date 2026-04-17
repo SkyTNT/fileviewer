@@ -139,7 +139,10 @@ export default {
   imageViewer: {
     resetView: 'Reset view',
     close: 'Close',
+    dragMode: 'Switch to drag mode',
+    panMode: 'Switch to pan mode',
     zoomHint: 'Scroll to zoom · Drag to pan · Double-click to reset',
+    dragHint: 'Drag image to another window · Scroll to zoom',
   },
   imageComparison: {
     hint: 'Drag slider to compare · Scroll to zoom · Drag to pan · Double-click to reset',

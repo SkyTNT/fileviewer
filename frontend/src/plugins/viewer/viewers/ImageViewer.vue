@@ -13,6 +13,7 @@ const imgUrl      = ref('')
 const fileName    = ref('')
 const currentFile = ref(null)
 const imgLoaded   = ref(false)
+const dragMode    = ref(false)
 
 const transform = reactive({ scale: 1, x: 0, y: 0 })
 const dragging  = ref(false)
@@ -24,6 +25,7 @@ function open(file) {
   imgUrl.value      = imagesApi.fullUrl(file.path)
   fileName.value    = file.name
   imgLoaded.value   = false
+  dragMode.value    = false
   fitScale = 1
   transform.scale = 1; transform.x = 0; transform.y = 0
   dialog.value = true
@@ -91,7 +93,7 @@ function onWheel(e) {
 }
 
 function onMouseDown(e) {
-  if (e.button !== 0) return
+  if (dragMode.value || e.button !== 0) return
   dragging.value = true
   dragStart.x = e.clientX - transform.x
   dragStart.y = e.clientY - transform.y
@@ -105,7 +107,7 @@ function onMouseMove(e) {
 
 function onMouseUp() { dragging.value = false }
 
-function onDblClick() { reset() }
+function onDblClick() { if (!dragMode.value) reset() }
 
 defineExpose({ open })
 </script>
@@ -124,11 +126,11 @@ defineExpose({ open })
       <img
         :src="imgUrl"
         :alt="fileName"
-        draggable="false"
+        :draggable="dragMode"
         @load="onImgLoad"
         :style="{
           transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
-          cursor: dragging ? 'grabbing' : 'grab',
+          cursor: dragMode ? 'grab' : (dragging ? 'grabbing' : 'grab'),
           userSelect: 'none',
           maxWidth: 'none',
           transformOrigin: 'center center',
@@ -161,6 +163,17 @@ defineExpose({ open })
         <span v-if="currentIndex >= 0" class="text-caption text-medium-emphasis mr-4">
           {{ currentIndex + 1 }} / {{ imageEntries.length }}
         </span>
+        <v-btn
+          v-if="imgLoaded"
+          icon size="small"
+          :variant="dragMode ? 'flat' : 'tonal'"
+          :color="dragMode ? 'primary' : undefined"
+          class="mr-1"
+          @click.stop="dragMode = !dragMode"
+          :title="dragMode ? t('imageViewer.panMode') : t('imageViewer.dragMode')"
+        >
+          <v-icon>{{ dragMode ? 'mdi-cursor-move' : 'mdi-drag' }}</v-icon>
+        </v-btn>
         <v-btn icon size="small" variant="tonal" @click="reset" :title="t('imageViewer.resetView')">
           <v-icon>mdi-fit-to-screen</v-icon>
         </v-btn>
@@ -170,7 +183,7 @@ defineExpose({ open })
       </div>
 
       <div class="zoom-hint text-caption text-grey">
-        {{ t('imageViewer.zoomHint') }}
+        {{ dragMode ? t('imageViewer.dragHint') : t('imageViewer.zoomHint') }}
       </div>
     </div>
   </v-dialog>

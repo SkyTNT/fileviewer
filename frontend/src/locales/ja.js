@@ -170,7 +170,10 @@ export default {
   imageViewer: {
     resetView: 'ビューをリセット',
     close: '閉じる',
+    dragMode: 'ドラッグモードに切替',
+    panMode: '移動モードに切替',
     zoomHint: 'スクロールでズーム · ドラッグで移動 · ダブルクリックでリセット',
+    dragHint: '画像を別ウィンドウにドラッグ · スクロールでズーム',
   },
   imageComparison: {
     hint: 'スライダーをドラッグして比較 · スクロールでズーム · ドラッグで移動 · ダブルクリックでリセット',
