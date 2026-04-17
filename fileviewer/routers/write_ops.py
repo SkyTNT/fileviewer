@@ -4,7 +4,7 @@ import shutil
 import threading
 import time
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from fileviewer.config import validate_path, get_roots
@@ -389,29 +389,65 @@ def delete_entries(req: BatchDeleteRequest):
     return _sse_response(generate())
 
 
-@router.post("/upload")
-async def upload(
-    parent: str = Form(...),
-    files: list[UploadFile] = File(...),
-    on_conflict: str = Form(default='overwrite'),
+@router.get("/upload-status")
+def upload_status(
+    parent:   str = Query(...),
+    filename: str = Query(...),
 ):
-    dir_path = validate_path(parent)
-    if not dir_path.is_dir():
-        raise HTTPException(status_code=400, detail="Not a directory")
-    saved = []
-    for f in files:
-        filename = Path(f.filename).name  # strip any directory components
-        if not filename:
-            raise HTTPException(status_code=400, detail="Invalid filename")
-        dest = dir_path / filename
-        if dest.exists():
-            if on_conflict == 'skip':
-                continue
-            elif on_conflict == 'coexist':
-                dest = dir_path / _coexist_name(dir_path, filename)
-            # 'overwrite' falls through
-        with open(dest, 'wb') as out:
-            while chunk := await f.read(1 << 20):
+    dest_dir  = validate_path(parent)
+    safe_name = Path(filename).name
+    part_path = dest_dir / (safe_name + '.fvpart')
+    return {'offset': part_path.stat().st_size if part_path.exists() else 0}
+
+
+@router.post("/upload-stream")
+async def upload_stream(
+    request:     Request,
+    parent:      str = Query(...),
+    filename:    str = Query(...),
+    offset:      int = Query(0),
+    total:       int = Query(...),
+    on_conflict: str = Query(default='overwrite'),
+):
+    dest_dir  = validate_path(parent)
+    if not dest_dir.is_dir():
+        raise HTTPException(status_code=400, detail="Destination is not a directory")
+    safe_name = Path(filename).name
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    part_path = dest_dir / (safe_name + '.fvpart')
+    dest_path = dest_dir / safe_name
+
+    current = part_path.stat().st_size if part_path.exists() else 0
+    if offset > 0 and offset != current:
+        raise HTTPException(status_code=409, detail=f"Offset mismatch: expected {current}, got {offset}")
+
+    try:
+        mode = 'ab' if offset > 0 else 'wb'
+        with open(part_path, mode) as out:
+            async for chunk in request.stream():
                 out.write(chunk)
-        saved.append(dest.name)
-    return {"ok": True, "saved": saved}
+    except Exception:
+        # Client disconnected — .fvpart keeps whatever arrived
+        return {'ok': True, 'done': False, 'offset': part_path.stat().st_size if part_path.exists() else 0}
+
+    received = part_path.stat().st_size if part_path.exists() else 0
+    if received < total:
+        return {'ok': True, 'done': False, 'offset': received}
+
+    # Upload complete — apply conflict strategy then rename to final name
+    if dest_path.exists():
+        if on_conflict == 'skip':
+            part_path.unlink(missing_ok=True)
+            return {'ok': True, 'done': True, 'saved': None}
+        elif on_conflict == 'coexist':
+            dest_path = dest_dir / _coexist_name(dest_dir, safe_name)
+        elif on_conflict == 'overwrite':
+            try:
+                dest_path.unlink()
+            except OSError:
+                pass
+
+    part_path.rename(dest_path)
+    return {'ok': True, 'done': True, 'saved': dest_path.name}

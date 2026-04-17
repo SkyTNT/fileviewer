@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, reactive } from 'vue'
+import { ref, reactive, markRaw } from 'vue'
 
 let _nextId = 1
 
@@ -13,7 +13,7 @@ export const useTaskStore = defineStore('task', () => {
       status: 'running',   // 'running' | 'done' | 'error'
       errors: [],
       cancel,
-      component,
+      component: markRaw(component),
       data: reactive(data),
     })
     tasks.value.push(task)

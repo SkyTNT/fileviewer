@@ -55,7 +55,7 @@ function fileColor(f) {
           {{ file.name }}
         </span>
         <span v-if="file.status === 'uploading'" class="text-caption text-medium-emphasis">
-          {{ file.progress }}%
+          <span v-if="file.resumeOffset" style="opacity: .6">↑</span>{{ file.progress }}%
         </span>
         <v-btn icon size="x-small" variant="text" @click="task.data.removeFile(file.id)">
           <v-icon size="11">mdi-close</v-icon>

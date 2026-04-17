@@ -113,12 +113,38 @@ export const writeApi = {
   touch:  (parent, name)              => http.post('/write/touch',  { parent, name }),
   rename: (path, new_name)            => http.post('/write/rename', { path, new_name }),
   save:   (path, content)             => http.post('/write/save',   { path, content }),
-  upload: (parent, file, onConflict = 'overwrite', options = {}) => {
-    const fd = new FormData()
-    fd.append('parent', parent)
-    fd.append('files', file)
-    fd.append('on_conflict', onConflict)
-    return http.post('/write/upload', fd, options)
+  uploadStatus: (parent, filename) =>
+    http.get('/write/upload-status', { params: { parent, filename } }),
+
+  uploadStream: (parent, file, offset, onConflict, signal, onProgress) => {
+    const params = new URLSearchParams({
+      parent,
+      filename:    file.name,
+      offset:      String(offset),
+      total:       String(file.size),
+      on_conflict: onConflict,
+    })
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `/api/write/upload-stream?${params}`)
+      xhr.withCredentials = true
+      xhr.setRequestHeader('Content-Type', 'application/octet-stream')
+
+      if (onProgress) {
+        xhr.upload.onprogress = e => onProgress(offset + e.loaded, file.size)
+      }
+      signal?.addEventListener('abort', () => xhr.abort())
+
+      xhr.onload = () => resolve({
+        ok:   xhr.status >= 200 && xhr.status < 300,
+        status: xhr.status,
+        json: () => { try { return Promise.resolve(JSON.parse(xhr.responseText)) } catch { return Promise.resolve({}) } },
+      })
+      xhr.onerror = () => reject(new Error('Network error'))
+      xhr.onabort = () => reject(new DOMException('Aborted', 'AbortError'))
+
+      xhr.send(file.slice(offset))
+    })
   },
   checkConflicts: (entries) =>
     http.post('/write/check-conflicts', { entries }),

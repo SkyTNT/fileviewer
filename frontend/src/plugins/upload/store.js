@@ -14,21 +14,40 @@ export const useUploadStore = defineStore('upload', () => {
     const controller = new AbortController()
     _controllers.set(fileEntry.id, controller)
     try {
-      await writeApi.upload(fileEntry.parent, fileEntry.file, fileEntry.onConflict, {
-        signal: controller.signal,
-        onUploadProgress: (e) => {
-          if (e.total) fileEntry.progress = Math.round(e.loaded / e.total * 100)
-        },
-      })
+      // Check for a partial upload to resume
+      let offset = 0
+      try {
+        const res = await writeApi.uploadStatus(fileEntry.parent, fileEntry.file.name)
+        const reported = res.data.offset ?? 0
+        if (reported > 0 && reported < fileEntry.file.size) {
+          offset              = reported
+          fileEntry.resumeOffset = offset
+          fileEntry.progress  = Math.round(offset / fileEntry.file.size * 100)
+        }
+      } catch { /* no partial — start fresh */ }
+
+      const res = await writeApi.uploadStream(
+        fileEntry.parent,
+        fileEntry.file,
+        offset,
+        fileEntry.onConflict,
+        controller.signal,
+        (sent, total) => { fileEntry.progress = Math.round(sent / total * 100) },
+      )
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.detail || `HTTP ${res.status}`)
+      }
+
       fileEntry.progress = 100
       fileEntry.status   = 'done'
     } catch (err) {
-      if (err.code === 'ERR_CANCELED') {
-        // Remove canceled file from the batch list
+      if (err.name === 'AbortError') {
         batchTask.data.files = batchTask.data.files.filter(f => f.id !== fileEntry.id)
       } else {
         fileEntry.status = 'error'
-        fileEntry.error  = err.response?.data?.detail || err.message || 'Upload failed'
+        fileEntry.error  = err.message || 'Upload failed'
       }
     } finally {
       _controllers.delete(fileEntry.id)
@@ -36,50 +55,43 @@ export const useUploadStore = defineStore('upload', () => {
 
     if (fileEntry.status === 'done') _scheduleRefresh()
 
-    // Mark batch done when all files settled
     const allSettled = batchTask.data.files.every(f => f.status !== 'uploading')
     if (allSettled) {
-      const hasErrors = batchTask.data.files.some(f => f.status === 'error')
-      batchTask.status = hasErrors ? 'error' : 'done'
+      batchTask.status = batchTask.data.files.some(f => f.status === 'error') ? 'error' : 'done'
     }
   }
 
   function _scheduleRefresh() {
     if (_rafId) return
-    _rafId = requestAnimationFrame(() => {
-      _rafId = null
-      useFileStore().refresh()
-    })
+    _rafId = requestAnimationFrame(() => { _rafId = null; useFileStore().refresh() })
   }
 
   function _startUploads(parent, files, onConflict) {
-    const taskStore  = useTaskStore()
+    const taskStore   = useTaskStore()
     const fileEntries = files.map(file => reactive({
-      id: _nextFileId++,
-      name: file.name,
+      id:           _nextFileId++,
+      name:         file.name,
       file,
       parent,
       onConflict,
-      progress: 0,
-      status: 'uploading',
-      error: null,
+      progress:     0,
+      resumeOffset: 0,
+      status:       'uploading',
+      error:        null,
     }))
 
     const batchData = reactive({ files: fileEntries })
     const batchTask = taskStore.add({ component: UploadTaskItem, data: batchData })
 
-    // Attach remove helper after batchTask is created so the closure captures it
     batchData.removeFile = (fileId) => {
       const entry = batchData.files.find(f => f.id === fileId)
       if (entry?.status === 'uploading') {
         _controllers.get(fileId)?.abort()
-        // Cancellation is handled in the catch block of _uploadFile
       } else {
         batchData.files = batchData.files.filter(f => f.id !== fileId)
         const allSettled = batchData.files.every(f => f.status !== 'uploading')
-        if (allSettled || batchData.files.length === 0) {
-          const hasErrors = batchData.files.some(f => f.status === 'error')
-          batchTask.status = hasErrors ? 'error' : 'done'
+        if (allSettled || !batchData.files.length) {
+          batchTask.status = batchData.files.some(f => f.status === 'error') ? 'error' : 'done'
         }
       }
     }
@@ -92,9 +104,8 @@ export const useUploadStore = defineStore('upload', () => {
     try {
       const res  = await writeApi.checkConflicts(files.map(f => ({ name: f.name, dest_parent: parent })))
       const data = res.data
-
       if (data.conflicts?.length > 0) {
-        const strategy = await new Promise((resolve) => {
+        const strategy = await new Promise(resolve => {
           fileStore.nameConflicts = { conflicts: data.conflicts, resolve }
         })
         if (!strategy) return
@@ -107,9 +118,7 @@ export const useUploadStore = defineStore('upload', () => {
         }
         return
       }
-    } catch {
-      // If conflict check fails, proceed with default overwrite
-    }
+    } catch { /* conflict check failed — proceed with overwrite */ }
     _startUploads(parent, files, 'overwrite')
   }
 

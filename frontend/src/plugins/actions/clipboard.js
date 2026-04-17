@@ -6,7 +6,7 @@ import { useNotificationStore } from '@/plugins/notification/store.js'
 const TEXT_SIZE_LIMIT  = 5  * 1024 * 1024  // 5 MB
 const IMAGE_SIZE_LIMIT = 20 * 1024 * 1024  // 20 MB
 
-export async function copyFileToClipboard(file) {
+async function copyFileToClipboard(file) {
   const size = file.size ?? 0
   if (file.type === 'image') {
     if (size > IMAGE_SIZE_LIMIT) throw new Error('Image too large (max 20 MB)')
