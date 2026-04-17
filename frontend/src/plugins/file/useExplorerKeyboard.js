@@ -2,7 +2,7 @@ import { useFileStore } from '@/plugins/file/store.js'
 import { useWriteStore } from '@/plugins/write/store.js'
 import { useKeyboard } from '@/plugins/keyboard/useKeyboard.js'
 
-export function useExplorerKeyboard() {
+export function useExplorerKeyboard(allEntries = null) {
   const fileStore  = useFileStore()
   const writeStore = useWriteStore()
 
@@ -20,7 +20,8 @@ export function useExplorerKeyboard() {
     'a': (e) => {
       if (!e.ctrlKey && !e.metaKey) return false
       e.preventDefault()
-      fileStore.setSelection([...fileStore.displayEntries])
+      const list = allEntries ? (typeof allEntries === 'function' ? allEntries() : allEntries.value) : fileStore.entries
+      fileStore.setSelection([...list])
     },
     'c': (e) => {
       if (!e.ctrlKey && !e.metaKey) return false

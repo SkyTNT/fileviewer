@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFileStore } from '@/plugins/file/store.js'
 import { useRubberBand } from '../useRubberBand.js'
@@ -11,6 +11,8 @@ import ContextMenu from './ContextMenu.vue'
 
 const store = useFileStore()
 const { t } = useI18n()
+
+const displayEntries = ref([])
 
 const { menuOpen, menuX, menuY, showMenu, onBgContextMenu } = useContextMenu()
 
@@ -31,13 +33,13 @@ async function refreshAll() {
     store.total = newTotal
     const keep = new Set(all.map(e => e.path))
     for (const k of Object.keys(cardPositions)) if (!keep.has(k)) delete cardPositions[k]
-    store.displayEntries = [...all]
+    displayEntries.value = [...all]
     runLayout()
   } catch { /* ignore */ }
   finally { store.loading = false }
 }
 
-useExplorerKeyboard()
+useExplorerKeyboard(displayEntries)
 
 function onCardContextMenu({ file, x, y }) {
   showMenu(x, y, file)
@@ -109,7 +111,7 @@ function runLayout() {
   const cw = colWidth.value
   if (cw === 0) return
   const heights = new Array(n).fill(0)
-  const entries = store.displayEntries
+  const entries = displayEntries.value
   for (let i = 0; i < entries.length; i++) {
     const file = entries[i]
     let minIdx = 0
@@ -130,7 +132,7 @@ function appendLayout(prevCount) {
     return
   }
   const heights = [...savedColHeights]
-  const entries = store.displayEntries
+  const entries = displayEntries.value
   for (let i = prevCount; i < entries.length; i++) {
     const file = entries[i]
     let minIdx = 0
@@ -175,7 +177,7 @@ const visibleEntries = computed(() => {
   const top    = viewportTop.value    - BUFFER_PX
   const bottom = viewportBottom.value + BUFFER_PX
   const out = []
-  const entries = store.displayEntries
+  const entries = displayEntries.value
   for (let i = 0; i < entries.length; i++) {
     const file = entries[i]
     const pos  = cardPositions[file.path]
@@ -194,25 +196,16 @@ function onScrollOrResize() {
 }
 
 // ── Entries ──────────────────────────────────────────────────────────────────
-// Flag: false until onMounted fires. The immediate watch fires before onMounted,
-// so we can detect "initial mount" vs "normal pagination append".
-let mounted = false
-
 watch(() => store.entries, (newEntries) => {
   if (store.page === 1) {
     const keep = new Set(newEntries.map(e => e.path))
     for (const p of Object.keys(cardPositions)) if (!keep.has(p)) delete cardPositions[p]
-    store.displayEntries = [...newEntries]
+    displayEntries.value = [...newEntries]
     if (rafId) { cancelAnimationFrame(rafId); rafId = null }
     runLayout()
-  } else if (!mounted) {
-    // Mounting with page > 1 means another view (e.g. ListView) has replaced
-    // displayEntries with only the current page. Reset to page 1 so the
-    // waterfall rebuilds cleanly from the start.
-    store.loadDirectory(store.currentPath)
   } else {
-    const prevCount = store.displayEntries.length
-    store.displayEntries = [...store.displayEntries, ...newEntries]
+    const prevCount = displayEntries.value.length
+    displayEntries.value = [...displayEntries.value, ...newEntries]
     if (rafId) { cancelAnimationFrame(rafId); rafId = null }
     appendLayout(prevCount)
   }
@@ -226,7 +219,7 @@ watch(colCount, () => {
 watch([containerHeight, layoutVersion], () => updateViewport())
 
 function loadMore() {
-  if (store.loading || store.displayEntries.length >= store.total) return
+  if (store.loading || displayEntries.value.length >= store.total) return
   store.goToPage(store.page + 1)
 }
 
@@ -259,10 +252,9 @@ watch(sentinelRef, (el, oldEl) => {
   if (el)    scrollObs?.observe(el)
 })
 
-onMounted(() => {
-  mounted = true
-  store.setRefreshHook(refreshAll)
+let savedScrollY = 0
 
+onMounted(() => {
   scrollObs = new IntersectionObserver(
     (entries) => { if (entries[0].isIntersecting) loadMore() },
     { rootMargin: '400px' }
@@ -277,10 +269,23 @@ onMounted(() => {
     updateContainerMetrics(containerRef.value.clientWidth)
     containerRO.observe(containerRef.value)
   }
+})
 
+onActivated(() => {
+  store.setRefreshHook(refreshAll)
   window.addEventListener('scroll', onScrollOrResize, { passive: true, capture: true })
   window.addEventListener('resize', onScrollOrResize, { passive: true })
-  updateViewport()
+  nextTick(() => {
+    window.scrollTo(0, savedScrollY)
+    updateViewport()
+  })
+})
+
+onDeactivated(() => {
+  savedScrollY = window.scrollY
+  store.setRefreshHook(null)
+  window.removeEventListener('scroll', onScrollOrResize, { capture: true })
+  window.removeEventListener('resize', onScrollOrResize)
 })
 
 onUnmounted(() => {
@@ -299,13 +304,13 @@ const scrollRef = ref(null)
 function onRubberSelect(paths, ctrlHeld) {
   if (!paths.length) { if (!ctrlHeld) store.clearSelection(); return }
   const pathSet = new Set(paths)
-  const items = store.displayEntries.filter(e => pathSet.has(e.path))
+  const items = displayEntries.value.filter(e => pathSet.has(e.path))
   if (ctrlHeld) store.addToSelection(items)
   else          store.setSelection(items)
 }
 
 function onCardSelect({ file, event }) {
-  if (event.shiftKey)                      store.shiftSelectTo(file, store.displayEntries)
+  if (event.shiftKey)                      store.shiftSelectTo(file, displayEntries.value)
   else if (event.ctrlKey || event.metaKey) store.toggleEntry(file)
   else                                     store.selectEntry(file)
 }
@@ -317,7 +322,7 @@ function rubberHitTest(sr) {
   const scale = zoomScale.value || 1
   const cw    = colWidth.value * scale
   const out   = []
-  const entries = store.displayEntries
+  const entries = displayEntries.value
   for (let i = 0; i < entries.length; i++) {
     const file = entries[i]
     const pos  = cardPositions[file.path]
@@ -364,7 +369,7 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
 
       <div ref="sentinelRef" style="height:1px" />
 
-      <div v-if="store.displayEntries.length >= store.total && store.total > 0"
+      <div v-if="displayEntries.length >= store.total && store.total > 0"
            class="text-center text-caption text-medium-emphasis pa-3">
         {{ t('explorer.totalItems', { n: store.total }) }}
       </div>

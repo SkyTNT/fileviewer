@@ -10,7 +10,7 @@ export const useFileStore = defineStore('file', () => {
   const rootName    = ref('Root')
   const currentPath    = ref('')
   const entries        = ref([])
-  const displayEntries = ref([])
+
   const loading        = ref(false)
   const error       = ref(null)
   const viewMode    = ref('waterfall')
@@ -339,7 +339,7 @@ async function deleteEntries(entries) {
   })
 
   return {
-    rootName, currentPath, entries, displayEntries, loading, error, viewMode, breadcrumbs,
+    rootName, currentPath, entries, loading, error, viewMode, breadcrumbs,
     page, pageSize, total, selectedEntry, selectedEntries, writeMode, roots,
     isAtHome, treeRevision, filterPattern, sortBy, sortOrder,
     clipboard, nameConflicts,

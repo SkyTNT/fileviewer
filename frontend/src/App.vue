@@ -158,8 +158,10 @@ watch(() => authStore.loggedIn, (v) => {
         @drop.prevent="onDrop"
       >
         <RootsView v-if="store.isAtHome" />
-        <WaterfallView v-else-if="store.viewMode === 'waterfall'" />
-        <ListView v-else />
+        <keep-alive v-else>
+          <WaterfallView v-if="store.viewMode === 'waterfall'" />
+          <ListView v-else />
+        </keep-alive>
 
         <Transition name="drop-fade">
           <div v-if="isDragging" class="drop-overlay" :class="{ 'drop-overlay--allowed': canWriteHere }">

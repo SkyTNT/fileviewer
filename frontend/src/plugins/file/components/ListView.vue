@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onActivated, onDeactivated } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFileStore } from '@/plugins/file/store.js'
 import { useViewerStore } from '@/plugins/viewer/store.js'
@@ -17,12 +17,10 @@ const { t } = useI18n()
 
 const { menuOpen, menuX, menuY, showMenu, onBgContextMenu } = useContextMenu()
 
-useExplorerKeyboard()
+useExplorerKeyboard(store.entries)
 
-watch(() => store.entries, (e) => { store.displayEntries = e }, { immediate: true })
-
-onMounted(()   => store.setRefreshHook(() => store.goToPage(store.page)))
-onUnmounted(() => store.setRefreshHook(null))
+onActivated(()   => store.setRefreshHook(() => store.goToPage(store.page)))
+onDeactivated(() => store.setRefreshHook(null))
 
 const totalPages = computed(() => Math.ceil(store.total / store.pageSize))
 
