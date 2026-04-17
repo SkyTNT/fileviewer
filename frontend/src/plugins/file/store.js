@@ -88,14 +88,15 @@ export const useFileStore = defineStore('file', () => {
 
 async function deleteEntries(entries) {
     const taskStore = useTaskStore()
-    const data = reactive({ done: 0, total: entries.length })
+    const data = reactive({ done: 0, total: entries.length, current: '' })
     const task = taskStore.add({ component: DeleteTaskItem, data })
     try {
       const response = await writeApi.delete(entries.map(e => e.path))
       await readSSE(response, (ev) => {
         if (ev.type === 'progress' || ev.type === 'error') {
-          data.done  = ev.done
-          data.total = ev.total
+          data.done    = ev.done
+          data.total   = ev.total
+          data.current = ev.name || ''
         }
         if (ev.type === 'error')
           task.errors.push(ev.name ? `${ev.name}: ${ev.message}` : ev.message)
@@ -119,7 +120,7 @@ async function deleteEntries(entries) {
   async function _executePaste(entries, action, destDir, onConflict) {
     const taskStore = useTaskStore()
     const apiAction = action === 'cut' ? 'move' : 'copy'
-    const data = reactive({ action: apiAction, done: 0, total: entries.length, bytes_done: 0, bytes_total: 0 })
+    const data = reactive({ action: apiAction, done: 0, total: entries.length, current: '', bytes_done: 0, bytes_total: 0 })
     const task = taskStore.add({ component: PasteTaskItem, data })
     try {
       const response = await writeApi.paste(entries, apiAction, destDir, onConflict)
@@ -127,6 +128,7 @@ async function deleteEntries(entries) {
         if (ev.type === 'progress' || ev.type === 'error') {
           data.done        = ev.done
           data.total       = ev.total
+          data.current     = ev.name || ''
           data.bytes_done  = ev.bytes_done  ?? data.bytes_done
           data.bytes_total = ev.bytes_total ?? data.bytes_total
         }
@@ -167,14 +169,15 @@ async function deleteEntries(entries) {
 
   async function _executeLink(entries, destDir, onConflict) {
     const taskStore = useTaskStore()
-    const data = reactive({ action: 'link', done: 0, total: entries.length, bytes_done: 0, bytes_total: 0 })
+    const data = reactive({ action: 'link', done: 0, total: entries.length, current: '', bytes_done: 0, bytes_total: 0 })
     const task = taskStore.add({ component: PasteTaskItem, data })
     try {
       const response = await writeApi.symlink(entries, destDir, onConflict)
       await readSSE(response, (ev) => {
         if (ev.type === 'progress' || ev.type === 'error') {
-          data.done  = ev.done
-          data.total = ev.total
+          data.done    = ev.done
+          data.total   = ev.total
+          data.current = ev.name || ''
         }
         if (ev.type === 'error')
           task.errors.push(ev.name ? `${ev.name}: ${ev.message}` : ev.message)

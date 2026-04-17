@@ -21,7 +21,7 @@ export const useArchiveStore = defineStore('archive', () => {
     const fileStore   = useFileStore()
     const taskStore   = useTaskStore()
     const outputName  = outputPath.split('/').pop()
-    const data = reactive({ outputName, done: 0, total: 0, current: '', bytes_done: 0, bytes_total: 0 })
+    const data = reactive({ outputName, phase: 'scanning', scan_count: 0, done: 0, total: 0, current: '', bytes_done: 0, bytes_total: 0 })
     const abort = new AbortController()
     const task  = taskStore.add({
       component: CompressTaskItem,
@@ -32,7 +32,10 @@ export const useArchiveStore = defineStore('archive', () => {
     try {
       const res = await archiveApi.create(sources, outputPath, format, level, password, excludes, abort.signal)
       await readSSE(res, (ev) => {
-        if (ev.type === 'progress') {
+        if (ev.type === 'scanning') {
+          data.scan_count = ev.count
+        } else if (ev.type === 'progress') {
+          data.phase       = 'compressing'
           data.done        = ev.done
           data.total       = ev.total
           data.current     = ev.name || ''
@@ -169,15 +172,16 @@ export const useArchiveStore = defineStore('archive', () => {
   async function _runExtract(file, dest, password, strategy = 'overwrite') {
     const fileStore = useFileStore()
     const taskStore = useTaskStore()
-    const data = reactive({ fileName: file.name, done: 0, total: 0 })
+    const data = reactive({ fileName: file.name, done: 0, total: 0, current: '' })
     const task = taskStore.add({ component: ExtractTaskItem, data })
 
     try {
       const res = await archiveApi.extract(file.path, dest, password, null, strategy)
       await readSSE(res, (ev) => {
         if (ev.type === 'progress') {
-          data.done  = ev.done
-          data.total = ev.total
+          data.done    = ev.done
+          data.total   = ev.total
+          data.current = ev.name || ''
         } else if (ev.type === 'error') {
           task.errors.push(ev.message || ev.name || 'Error')
         } else if (ev.type === 'done') {

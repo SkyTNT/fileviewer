@@ -136,6 +136,8 @@ export default {
     movingFiles: 'ファイルを移動中',
     copyingFiles: 'ファイルをコピー中',
     creatingLinks: 'リンクを作成中',
+    scanning: 'スキャン中…',
+    scanCount: '{n} 件のファイルを検出',
     conflict: '名前の競合',
     alreadyExist: '移動先に {n} 件のファイルが既に存在します：',
     whatToDo: '処理を選択してください：',

@@ -105,6 +105,8 @@ export default {
     movingFiles: '正在移动文件',
     copyingFiles: '正在复制文件',
     creatingLinks: '正在创建链接',
+    scanning: '扫描中…',
+    scanCount: '已找到 {n} 个文件',
     conflict: '命名冲突',
     alreadyExist: '目标位置已存在 {n} 个同名文件：',
     whatToDo: '请选择处理方式：',

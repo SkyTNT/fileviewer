@@ -1,12 +1,15 @@
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/plugins/task/store.js'
 import { formatBytes } from '@/utils/format.js'
 
 const props     = defineProps({ task: Object })
+const { t }     = useI18n()
 const taskStore = useTaskStore()
 
-const d = computed(() => props.task.data)
+const d       = computed(() => props.task.data)
+const scanning = computed(() => d.value.phase === 'scanning' && props.task.status === 'running')
 
 const percent = computed(() => {
   if (d.value.bytes_total) return Math.round(d.value.bytes_done / d.value.bytes_total * 100)
@@ -27,7 +30,9 @@ const color = computed(() => {
       <span class="text-body-2 text-truncate" style="flex: 1; min-width: 0" :title="d.outputName">
         {{ d.outputName }}
       </span>
-      <span class="text-caption text-medium-emphasis">{{ d.done }} / {{ d.total || '…' }}</span>
+      <span class="text-caption text-medium-emphasis">
+        {{ scanning ? t('notify.scanning') : `${d.done} / ${d.total || '…'}` }}
+      </span>
       <v-btn v-if="task.status === 'running' && task.cancel" icon size="x-small" variant="text"
              :title="'Cancel'" @click="task.cancel()">
         <v-icon size="13">mdi-stop</v-icon>
@@ -40,13 +45,16 @@ const color = computed(() => {
 
     <v-progress-linear
       :model-value="percent"
-      :indeterminate="!d.bytes_total && !d.total && task.status === 'running'"
+      :indeterminate="scanning || (!d.bytes_total && !d.total && task.status === 'running')"
       :color="color"
       height="4" rounded class="mb-1"
     />
 
     <div class="d-flex justify-space-between text-caption text-medium-emphasis">
-      <span class="text-truncate" style="min-width: 0" :title="d.current">{{ d.current }}</span>
+      <span class="text-truncate" style="min-width: 0">
+        <template v-if="scanning">{{ t('notify.scanCount', { n: d.scan_count }) }}</template>
+        <template v-else-if="d.current" :title="d.current">{{ d.current }}</template>
+      </span>
       <span v-if="d.bytes_total" class="flex-shrink-0 ml-2">
         {{ formatBytes(d.bytes_done) }} / {{ formatBytes(d.bytes_total) }}
       </span>

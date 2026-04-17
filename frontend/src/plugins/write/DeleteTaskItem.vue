@@ -29,7 +29,11 @@ const color = computed(() => {
       </v-btn>
     </div>
 
-    <v-progress-linear :model-value="percent" :color="color" height="4" rounded />
+    <v-progress-linear :model-value="percent" :color="color" height="4" rounded class="mb-1" />
+
+    <div v-if="d.current" class="text-caption text-medium-emphasis text-truncate" :title="d.current">
+      {{ d.current }}
+    </div>
 
     <div v-for="(err, i) in task.errors.slice(0, 3)" :key="i" class="text-caption text-error mt-1">
       {{ err }}

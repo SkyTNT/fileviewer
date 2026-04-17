@@ -136,6 +136,8 @@ export default {
     movingFiles: '正在移動檔案',
     copyingFiles: '正在複製檔案',
     creatingLinks: '正在建立連結',
+    scanning: '掃描中…',
+    scanCount: '已找到 {n} 個檔案',
     conflict: '名稱衝突',
     alreadyExist: '目的地已存在 {n} 個同名檔案：',
     whatToDo: '請選擇處理方式：',

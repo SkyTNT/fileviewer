@@ -105,6 +105,8 @@ export default {
     movingFiles: 'Moving files',
     copyingFiles: 'Copying files',
     creatingLinks: 'Creating links',
+    scanning: 'Scanning…',
+    scanCount: 'Found {n} files',
     conflict: 'Name conflict',
     alreadyExist: '{n} item(s) already exist in the destination:',
     whatToDo: 'What would you like to do?',

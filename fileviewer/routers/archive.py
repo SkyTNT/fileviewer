@@ -640,14 +640,13 @@ class CreateRequest(BaseModel):
     excludes: list[str] = []
 
 
-def _collect(sources: list[pathlib.Path], exclude_abs: set) -> list[tuple]:
-    """Return list of (path, arc_name) for all files/dirs to compress."""
-    result = []
+def _collect_gen(sources: list[pathlib.Path], exclude_abs: set):
+    """Yield (path, arc_name) for every *file* under sources, respecting excludes."""
     for src in sources:
         if src in exclude_abs:
             continue
         if src.is_file():
-            result.append((src, src.name))
+            yield (src, src.name)
         elif src.is_dir():
             base = src.parent
             stack = [src]
@@ -659,13 +658,30 @@ def _collect(sources: list[pathlib.Path], exclude_abs: set) -> list[tuple]:
                             ep = pathlib.Path(entry.path)
                             if any(ep == e or str(ep).startswith(str(e) + os.sep) for e in exclude_abs):
                                 continue
-                            rel = ep.relative_to(base)
-                            result.append((ep, str(rel).replace(os.sep, '/')))
                             if entry.is_dir(follow_symlinks=False):
                                 stack.append(ep)
+                            else:
+                                rel = ep.relative_to(base)
+                                yield (ep, str(rel).replace(os.sep, '/'))
                 except OSError:
                     pass
-    return result
+
+
+def _collect_scan(sources, exclude_abs):
+    """Generator: yields SSE scanning events while collecting files.
+    Returns (files, bytes_total) via generator return value (yield from captures it)."""
+    files = []
+    bytes_total = 0
+    last_t = 0.0
+    for f, arc_name in _collect_gen(sources, exclude_abs):
+        files.append((f, arc_name))
+        bytes_total += _file_size(f)
+        now = time.monotonic()
+        if now - last_t >= 0.2:
+            last_t = now
+            yield _sse({'type': 'scanning', 'count': len(files)})
+    yield _sse({'type': 'scanning', 'count': len(files)})
+    return files, bytes_total
 
 
 @router.post('/create')
@@ -767,9 +783,8 @@ def _tar_file_with_progress(tf: tarfile.TarFile, f_path: pathlib.Path, arc_name:
 
 
 def _do_create_zip(sources, output, level, pwd, excludes):
-    files       = [(f, n) for f, n in _collect(sources, excludes) if f.is_file()]
-    total       = len(files)
-    bytes_total = sum(_file_size(f) for f, _ in files)
+    files, bytes_total = yield from _collect_scan(sources, excludes)
+    total = len(files)
     done = bytes_done = 0
     last_yield_time = 0.0
     completed = False
@@ -820,9 +835,8 @@ def _do_create_zip(sources, output, level, pwd, excludes):
 
 
 def _do_create_tar(sources, output, fmt, level, excludes):
-    files       = [(f, n) for f, n in _collect(sources, excludes) if f.is_file()]
-    total       = len(files)
-    bytes_total = sum(_file_size(f) for f, _ in files)
+    files, bytes_total = yield from _collect_scan(sources, excludes)
+    total = len(files)
     mode = {'tar': 'w', 'tar.gz': 'w:gz', 'tar.bz2': 'w:bz2', 'tar.xz': 'w:xz'}.get(fmt, 'w:gz')
     done = bytes_done = 0
     last_yield_time = 0.0
@@ -856,9 +870,8 @@ def _do_create_tar(sources, output, fmt, level, excludes):
 
 
 def _do_create_7z(sources, output, level, pwd, excludes):
-    files       = [(f, n) for f, n in _collect(sources, excludes) if f.is_file()]
-    total       = len(files)
-    bytes_total = sum(_file_size(f) for f, _ in files)
+    files, bytes_total = yield from _collect_scan(sources, excludes)
+    total = len(files)
     done = bytes_done = 0
     last_yield_time = 0.0
     completed = False

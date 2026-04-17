@@ -42,8 +42,11 @@ const color = computed(() => {
       height="4" rounded class="mb-1"
     />
 
-    <div v-if="d.bytes_total" class="text-caption text-medium-emphasis text-right">
-      {{ formatBytes(d.bytes_done) }} / {{ formatBytes(d.bytes_total) }}
+    <div class="d-flex justify-space-between text-caption text-medium-emphasis">
+      <span v-if="d.current" class="text-truncate" style="min-width: 0" :title="d.current">{{ d.current }}</span>
+      <span v-if="d.bytes_total" class="flex-shrink-0 ml-2">
+        {{ formatBytes(d.bytes_done) }} / {{ formatBytes(d.bytes_total) }}
+      </span>
     </div>
 
     <div v-for="(err, i) in task.errors.slice(0, 3)" :key="i" class="text-caption text-error mt-1">

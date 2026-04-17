@@ -23,6 +23,7 @@ const color = computed(() => {
       <span class="text-body-2 text-truncate" style="flex: 1; min-width: 0" :title="d.fileName">
         {{ d.fileName }}
       </span>
+      <span class="text-caption text-medium-emphasis">{{ d.done }} / {{ d.total || '…' }}</span>
       <v-btn v-if="task.status !== 'running'" icon size="x-small" variant="text"
              @click="taskStore.remove(task.id)">
         <v-icon size="13">mdi-close</v-icon>
@@ -36,8 +37,8 @@ const color = computed(() => {
       height="4" rounded class="mb-1"
     />
 
-    <div class="text-caption text-medium-emphasis">
-      {{ d.done }} / {{ d.total || '…' }}
+    <div v-if="d.current" class="text-caption text-medium-emphasis text-truncate" :title="d.current">
+      {{ d.current }}
     </div>
 
     <div v-for="(err, i) in task.errors.slice(0, 3)" :key="i" class="text-caption text-error mt-1">
