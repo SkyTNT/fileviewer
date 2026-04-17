@@ -136,7 +136,6 @@ defineExpose({ open })
     <div
       ref="bgEl"
       class="viewer-bg"
-      :style="{ visibility: imgsReady ? 'visible' : 'hidden' }"
       @wheel.prevent="onWheel"
       @mousedown="onMouseDown"
       @mousemove="onMouseMove"
@@ -152,7 +151,7 @@ defineExpose({ open })
           draggable="false"
           @load="onRightImgLoad"
           class="viewer-img"
-          :style="rightImgStyle"
+          :style="{ ...rightImgStyle, visibility: imgsReady ? 'visible' : 'hidden' }"
         />
       </div>
 
@@ -164,7 +163,7 @@ defineExpose({ open })
           draggable="false"
           @load="onLeftImgLoad"
           class="viewer-img"
-          :style="leftImgStyle"
+          :style="{ ...leftImgStyle, visibility: imgsReady ? 'visible' : 'hidden' }"
         />
       </div>
 
