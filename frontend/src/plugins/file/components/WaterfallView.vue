@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFileStore } from '@/plugins/file/store.js'
 import { useRubberBand } from '../useRubberBand.js'
@@ -99,29 +99,28 @@ function estimatedHeight(file) {
 }
 
 // ── Height tracking ──────────────────────────────────────────────────────────
+// Single shared ResizeObserver across all cards; unobserve when a card leaves
+// the DOM (virtualization makes this a frequent operation).
 const cardHeights = {}
-const cardROs     = {}
+const cardEls     = {}
+let sharedRO = null
 
 function attachCardRef(el, path) {
   if (el) {
-    if (!cardROs[path]) {
-      const ro = new ResizeObserver(() => {
-        const h = el.offsetHeight
-        if (cardHeights[path] !== h) { cardHeights[path] = h; scheduleLayout() }
-      })
-      ro.observe(el)
-      cardROs[path] = ro
-    }
+    cardEls[path] = el
+    sharedRO?.observe(el)
   } else {
-    cardROs[path]?.disconnect()
-    delete cardROs[path]
+    const old = cardEls[path]
+    if (old) { sharedRO?.unobserve(old); delete cardEls[path] }
   }
 }
 
 // ── Absolute position layout ─────────────────────────────────────────────────
-// All cards live in one flat v-for. Column reassignment only changes CSS
-// transform — no component destroy/create cycle ever happens.
-const cardPositions   = reactive({})  // path → { x, y }，Vue 按 key 单独追踪
+// cardPositions is a plain object (not reactive) to avoid per-key reactive
+// overhead at 10k+ items. Reactivity is funneled through layoutVersion — any
+// template/computed that reads it will re-run when layout changes.
+const cardPositions = {}        // path → { x, y }
+const layoutVersion = ref(0)
 const containerHeight = ref(0)
 let savedColHeights   = []
 let rafId = null
@@ -131,13 +130,17 @@ function runLayout() {
   const cw = colWidth.value
   if (cw === 0) return
   const heights = new Array(n).fill(0)
-  for (const file of store.displayEntries) {
-    const minIdx = heights.indexOf(Math.min(...heights))
+  const entries = store.displayEntries
+  for (let i = 0; i < entries.length; i++) {
+    const file = entries[i]
+    let minIdx = 0
+    for (let j = 1; j < n; j++) if (heights[j] < heights[minIdx]) minIdx = j
     cardPositions[file.path] = { x: minIdx * (cw + GAP), y: heights[minIdx] }
     heights[minIdx] += (cardHeights[file.path] ?? estimatedHeight(file)) + GAP
   }
   savedColHeights       = heights
   containerHeight.value = heights.length ? Math.max(...heights) : 0
+  layoutVersion.value++
 }
 
 // RAF debounce：同一帧内的多次高度变化只触发一次 runLayout。
@@ -155,17 +158,21 @@ function appendLayout(prevCount) {
     return
   }
   const heights = [...savedColHeights]
-  for (let i = prevCount; i < store.displayEntries.length; i++) {
-    const file = store.displayEntries[i]
-    const minIdx = heights.indexOf(Math.min(...heights))
+  const entries = store.displayEntries
+  for (let i = prevCount; i < entries.length; i++) {
+    const file = entries[i]
+    let minIdx = 0
+    for (let j = 1; j < n; j++) if (heights[j] < heights[minIdx]) minIdx = j
     cardPositions[file.path] = { x: minIdx * (cw + GAP), y: heights[minIdx] }
     heights[minIdx] += (cardHeights[file.path] ?? estimatedHeight(file)) + GAP
   }
   savedColHeights       = heights
   containerHeight.value = Math.max(...heights)
+  layoutVersion.value++
 }
 
 function cardStyle(file) {
+  layoutVersion.value  // subscribe
   const pos = cardPositions[file.path]
   if (!pos) return { position: 'absolute', visibility: 'hidden' }
   return {
@@ -175,6 +182,50 @@ function cardStyle(file) {
     width: colWidth.value + 'px',
     transform: `translate(${pos.x}px, ${pos.y}px)`,
   }
+}
+
+// ── Viewport culling (virtualization) ────────────────────────────────────────
+// Only render cards whose (y, y+h) intersects the viewport ± BUFFER_PX. This
+// lets 10k+ items stay in store.displayEntries while keeping DOM card count to
+// a few dozen (= visible area / card height).
+const viewportTop    = ref(0)
+const viewportBottom = ref(typeof window !== 'undefined' ? window.innerHeight : 0)
+const BUFFER_PX = 800
+
+function updateViewport() {
+  const el = containerRef.value
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  const scale = zoomScale.value || 1
+  // Convert from viewport (client) coords to container-local unscaled coords.
+  viewportTop.value    = (-rect.top) / scale
+  viewportBottom.value = (window.innerHeight - rect.top) / scale
+}
+
+const visibleEntries = computed(() => {
+  layoutVersion.value  // subscribe
+  const top    = viewportTop.value    - BUFFER_PX
+  const bottom = viewportBottom.value + BUFFER_PX
+  const out = []
+  const entries = store.displayEntries
+  for (let i = 0; i < entries.length; i++) {
+    const file = entries[i]
+    const pos  = cardPositions[file.path]
+    if (!pos) continue
+    const h = cardHeights[file.path] ?? estimatedHeight(file)
+    if (pos.y + h < top || pos.y > bottom) continue
+    out.push(file)
+  }
+  return out
+})
+
+let scrollRaf = null
+function onScrollOrResize() {
+  if (scrollRaf) return
+  scrollRaf = requestAnimationFrame(() => {
+    scrollRaf = null
+    updateViewport()
+  })
 }
 
 // ── Entries ──────────────────────────────────────────────────────────────────
@@ -204,6 +255,9 @@ watch(colCount, () => {
   if (rafId) { cancelAnimationFrame(rafId); rafId = null }
   runLayout()
 })
+
+// Layout changes can shift containerRef in the viewport; keep cull window fresh.
+watch([containerHeight, layoutVersion], () => updateViewport())
 
 function loadMore() {
   if (store.loading || store.displayEntries.length >= store.total) return
@@ -254,19 +308,46 @@ onMounted(() => {
 
   containerRO = new ResizeObserver(([entry]) => {
     updateContainerMetrics(entry.contentRect.width)
+    updateViewport()
   })
   if (containerRef.value) {
     updateContainerMetrics(containerRef.value.clientWidth)
     containerRO.observe(containerRef.value)
   }
+
+  // Shared ResizeObserver for all rendered cards — replaces 1 RO per card.
+  sharedRO = new ResizeObserver(entries => {
+    let changed = false
+    for (const entry of entries) {
+      const el = entry.target
+      const path = el.dataset.path
+      if (!path) continue
+      const h = el.offsetHeight
+      if (h && cardHeights[path] !== h) {
+        cardHeights[path] = h
+        changed = true
+      }
+    }
+    if (changed) scheduleLayout()
+  })
+  // Cards mounted before sharedRO was created (template runs before onMounted).
+  for (const el of Object.values(cardEls)) sharedRO.observe(el)
+
+  // Capture-phase listener catches scroll on any ancestor (window, v-main, …).
+  window.addEventListener('scroll', onScrollOrResize, { passive: true, capture: true })
+  window.addEventListener('resize', onScrollOrResize, { passive: true })
+  updateViewport()
 })
 
 onUnmounted(() => {
   store.setRefreshHook(null)
   if (rafId) cancelAnimationFrame(rafId)
+  if (scrollRaf) cancelAnimationFrame(scrollRaf)
   scrollObs?.disconnect()
   containerRO?.disconnect()
-  for (const ro of Object.values(cardROs)) ro.disconnect()
+  sharedRO?.disconnect()
+  window.removeEventListener('scroll', onScrollOrResize, { capture: true })
+  window.removeEventListener('resize', onScrollOrResize)
 })
 
 // ── Rubber-band selection ─────────────────────────────────────────────────────
@@ -286,8 +367,34 @@ function onCardSelect({ file, event }) {
   else                                  store.selectEntry(file)
 }
 
+// Virtualization-aware hit-test: DOM only holds visible cards, so a
+// rubber-band using querySelectorAll would miss off-screen items. Here we
+// intersect the drag rect against every entry's stored position instead.
+function rubberHitTest(sr) {
+  const cont = containerRef.value
+  if (!cont) return []
+  const rect = cont.getBoundingClientRect()
+  const scale = zoomScale.value || 1
+  const cw = colWidth.value * scale
+  const out = []
+  const entries = store.displayEntries
+  for (let i = 0; i < entries.length; i++) {
+    const file = entries[i]
+    const pos  = cardPositions[file.path]
+    if (!pos) continue
+    const h = (cardHeights[file.path] ?? estimatedHeight(file)) * scale
+    const left   = rect.left + pos.x * scale
+    const top    = rect.top  + pos.y * scale
+    if (left + cw >= sr.left && left <= sr.right &&
+        top  + h  >= sr.top  && top  <= sr.bottom) {
+      out.push(file.path)
+    }
+  }
+  return out
+}
+
 const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
-  useRubberBand(scrollRef, onRubberSelect)
+  useRubberBand(scrollRef, onRubberSelect, rubberHitTest)
 </script>
 
 <template>
@@ -302,7 +409,7 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
       <div ref="containerRef" class="masonry-outer" :style="masonryOuterStyle">
         <div class="masonry" :style="masonryStyle">
           <div
-            v-for="file in store.displayEntries"
+            v-for="file in visibleEntries"
             :key="file.path"
             :ref="el => attachCardRef(el, file.path)"
             :style="cardStyle(file)"

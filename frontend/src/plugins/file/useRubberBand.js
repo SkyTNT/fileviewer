@@ -1,6 +1,10 @@
 import { ref, reactive, readonly } from 'vue'
 
-export function useRubberBand(containerRef, onSelect) {
+// `hitTestFn(selRect)` — optional override. Required when the container uses
+// virtualization, because the DOM doesn't hold off-screen items; the default
+// querySelectorAll path would miss them. The override receives the same
+// {left,right,top,bottom} client-coord rect the default uses.
+export function useRubberBand(containerRef, onSelect, hitTestFn = null) {
   const isDragging = ref(false)
   const selRect    = reactive({ left: 0, top: 0, width: 0, height: 0 })
 
@@ -14,14 +18,15 @@ export function useRubberBand(containerRef, onSelect) {
   }
 
   function hitTest() {
-    const el = containerRef.value
-    if (!el) return []
     const sr = {
       left:   selRect.left,
       right:  selRect.left + selRect.width,
       top:    selRect.top,
       bottom: selRect.top + selRect.height,
     }
+    if (hitTestFn) return hitTestFn(sr)
+    const el = containerRef.value
+    if (!el) return []
     const paths = []
     el.querySelectorAll('[data-path]').forEach(item => {
       const r = item.getBoundingClientRect()
