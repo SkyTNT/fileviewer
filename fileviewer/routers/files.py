@@ -1,12 +1,24 @@
 import os
 import re
 import concurrent.futures
+from functools import lru_cache
 from pathlib import Path
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import FileResponse
 from fileviewer.config import parse_path, build_entry_path, get_file_type, get_roots
 
 _FILTER_MAX_LEN = 200
+
+
+@lru_cache(maxsize=4096)
+def _image_dims(path: str, mtime: float) -> "tuple[int, int] | None":
+    """Return (width, height) by reading only the image header (fast, no full decode)."""
+    try:
+        from PIL import Image
+        with Image.open(path) as img:
+            return img.size  # (width, height) — PIL reads header only for most formats
+    except Exception:
+        return None
 
 router = APIRouter()
 
@@ -16,16 +28,22 @@ def entry_info(p: Path, slug: "str | None", root: Path) -> dict:
     is_symlink = p.is_symlink()
     try:
         stat = p.stat()
-        return {
+        ftype = get_file_type(p)
+        info = {
             "name": p.name,
             "path": path_str,
-            "type": get_file_type(p),
+            "type": ftype,
             "size": stat.st_size if p.is_file() else None,
             "modified": stat.st_mtime,
             "is_dir": p.is_dir(),
             "is_symlink": is_symlink,
             "extension": p.suffix.lower() if p.is_file() else None,
         }
+        if ftype == "image" and p.is_file():
+            dims = _image_dims(str(p), stat.st_mtime)
+            if dims:
+                info["img_w"], info["img_h"] = dims
+        return info
     except (PermissionError, OSError):
         return {
             "name": p.name,

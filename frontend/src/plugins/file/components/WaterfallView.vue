@@ -12,7 +12,6 @@ import ContextMenu from './ContextMenu.vue'
 const store = useFileStore()
 const { t } = useI18n()
 
-
 const { menuOpen, menuX, menuY, showMenu, onBgContextMenu } = useContextMenu()
 
 async function refreshAll() {
@@ -31,10 +30,8 @@ async function refreshAll() {
     }
     store.total = newTotal
     const keep = new Set(all.map(e => e.path))
-    for (const k of Object.keys(cardHeights))   if (!keep.has(k)) delete cardHeights[k]
     for (const k of Object.keys(cardPositions)) if (!keep.has(k)) delete cardPositions[k]
     store.displayEntries = [...all]
-    if (rafId) { cancelAnimationFrame(rafId); rafId = null }
     runLayout()
   } catch { /* ignore */ }
   finally { store.loading = false }
@@ -46,8 +43,8 @@ function onCardContextMenu({ file, x, y }) {
   showMenu(x, y, file)
 }
 
-const sentinelRef = ref(null)
-const containerRef   = ref(null)
+const sentinelRef  = ref(null)
+const containerRef = ref(null)
 
 const GAP = 8
 
@@ -58,35 +55,27 @@ function widthToColCount(w) {
 const colCount = ref(widthToColCount(window.innerWidth))
 const colWidth  = ref(0)
 
-// ── Zoom scaling (detail sidebar open) ──────────────────────────────────────
-// When the right detail panel opens and narrows the container, we scale the
-// already-computed layout down with CSS zoom instead of re-running runLayout,
-// so card positions stay stable.
-const containerActualWidth = ref(0)  // current measured container width
-const layoutComputedWidth  = ref(0)  // container width when layout last ran
+// ── Zoom scaling ─────────────────────────────────────────────────────────────
+// Layout is computed once at initial container width and never re-run on resize.
+// All subsequent width changes (sidebar, window) are handled by CSS scale alone.
+const containerActualWidth = ref(0)
+const layoutComputedWidth  = ref(0)
 
-const zoomScale = computed(() => {
-  if (!layoutComputedWidth.value) return 1
-  const ratio = containerActualWidth.value / layoutComputedWidth.value
-  return Math.min(ratio, 1)  // never zoom in beyond 1 (wider → recompute instead)
-})
+const zoomScale = computed(() =>
+  layoutComputedWidth.value ? containerActualWidth.value / layoutComputedWidth.value : 1
+)
 
-// transform: scale is GPU-composited (no repaint per frame, unlike CSS zoom)
 const masonryStyle = computed(() => ({
   width: layoutComputedWidth.value ? layoutComputedWidth.value + 'px' : undefined,
   height: containerHeight.value + 'px',
   transform: zoomScale.value !== 1 ? `scale(${zoomScale.value})` : undefined,
 }))
 
-// Outer wrapper carries the visual height so the scroll container is correct
 const masonryOuterStyle = computed(() => ({
   height: containerHeight.value * zoomScale.value + 'px',
 }))
 
-// ── Scroll position preservation during zoom ─────────────────────────────────
-// When zoom changes, total scroll height changes proportionally. Without
-// correction, the viewport drifts away from the content the user was viewing.
-// Fix: capture scrollY before DOM update, restore proportionally after.
+// Scroll position drifts when total height changes due to zoom; correct it.
 watch(zoomScale, async (newZoom, oldZoom) => {
   if (!oldZoom || newZoom === oldZoom) return
   const prevY = window.scrollY
@@ -94,35 +83,25 @@ watch(zoomScale, async (newZoom, oldZoom) => {
   window.scrollTo(0, Math.round(prevY * (newZoom / oldZoom)))
 })
 
-function estimatedHeight(file) {
-  return file.type === 'image' ? 220 : 150
-}
+// ── Static height calculation ────────────────────────────────────────────────
+// Heights are fully determined by backend-supplied img_w/img_h + fixed CSS.
+// No ResizeObserver needed — layout never changes after initial computation.
+const CARD_TEXT_HEIGHT = 56   // v-card-text py-2(8+8) + body-2 line + caption line
+const CARD_ICON_HEIGHT = 111  // .icon-area CSS(110) + v-divider(1)
+const CARD_FALLBACK_HEIGHT = CARD_ICON_HEIGHT + CARD_TEXT_HEIGHT  // 167
 
-// ── Height tracking ──────────────────────────────────────────────────────────
-// Single shared ResizeObserver across all cards; unobserve when a card leaves
-// the DOM (virtualization makes this a frequent operation).
-const cardHeights = {}
-const cardEls     = {}
-let sharedRO = null
-
-function attachCardRef(el, path) {
-  if (el) {
-    cardEls[path] = el
-    sharedRO?.observe(el)
-  } else {
-    const old = cardEls[path]
-    if (old) { sharedRO?.unobserve(old); delete cardEls[path] }
+function cardHeight(file) {
+  if (file.img_w && file.img_h && colWidth.value) {
+    return Math.round(colWidth.value * file.img_h / file.img_w) + CARD_TEXT_HEIGHT
   }
+  return CARD_FALLBACK_HEIGHT
 }
 
 // ── Absolute position layout ─────────────────────────────────────────────────
-// cardPositions is a plain object (not reactive) to avoid per-key reactive
-// overhead at 10k+ items. Reactivity is funneled through layoutVersion — any
-// template/computed that reads it will re-run when layout changes.
-const cardPositions = {}        // path → { x, y }
+const cardPositions = {}
 const layoutVersion = ref(0)
 const containerHeight = ref(0)
-let savedColHeights   = []
+let savedColHeights = []
 let rafId = null
 
 function runLayout() {
@@ -136,20 +115,13 @@ function runLayout() {
     let minIdx = 0
     for (let j = 1; j < n; j++) if (heights[j] < heights[minIdx]) minIdx = j
     cardPositions[file.path] = { x: minIdx * (cw + GAP), y: heights[minIdx] }
-    heights[minIdx] += (cardHeights[file.path] ?? estimatedHeight(file)) + GAP
+    heights[minIdx] += cardHeight(file) + GAP
   }
   savedColHeights       = heights
   containerHeight.value = heights.length ? Math.max(...heights) : 0
   layoutVersion.value++
 }
 
-// RAF debounce：同一帧内的多次高度变化只触发一次 runLayout。
-function scheduleLayout() {
-  if (rafId) cancelAnimationFrame(rafId)
-  rafId = requestAnimationFrame(() => { rafId = null; runLayout() })
-}
-
-// 翻页追加：只计算新条目的位置，已有卡片的 transform 完全不动。
 function appendLayout(prevCount) {
   const n  = colCount.value
   const cw = colWidth.value
@@ -164,7 +136,7 @@ function appendLayout(prevCount) {
     let minIdx = 0
     for (let j = 1; j < n; j++) if (heights[j] < heights[minIdx]) minIdx = j
     cardPositions[file.path] = { x: minIdx * (cw + GAP), y: heights[minIdx] }
-    heights[minIdx] += (cardHeights[file.path] ?? estimatedHeight(file)) + GAP
+    heights[minIdx] += cardHeight(file) + GAP
   }
   savedColHeights       = heights
   containerHeight.value = Math.max(...heights)
@@ -185,9 +157,6 @@ function cardStyle(file) {
 }
 
 // ── Viewport culling (virtualization) ────────────────────────────────────────
-// Only render cards whose (y, y+h) intersects the viewport ± BUFFER_PX. This
-// lets 10k+ items stay in store.displayEntries while keeping DOM card count to
-// a few dozen (= visible area / card height).
 const viewportTop    = ref(0)
 const viewportBottom = ref(typeof window !== 'undefined' ? window.innerHeight : 0)
 const BUFFER_PX = 800
@@ -195,9 +164,8 @@ const BUFFER_PX = 800
 function updateViewport() {
   const el = containerRef.value
   if (!el) return
-  const rect = el.getBoundingClientRect()
+  const rect  = el.getBoundingClientRect()
   const scale = zoomScale.value || 1
-  // Convert from viewport (client) coords to container-local unscaled coords.
   viewportTop.value    = (-rect.top) / scale
   viewportBottom.value = (window.innerHeight - rect.top) / scale
 }
@@ -212,7 +180,7 @@ const visibleEntries = computed(() => {
     const file = entries[i]
     const pos  = cardPositions[file.path]
     if (!pos) continue
-    const h = cardHeights[file.path] ?? estimatedHeight(file)
+    const h = cardHeight(file)
     if (pos.y + h < top || pos.y > bottom) continue
     out.push(file)
   }
@@ -222,29 +190,28 @@ const visibleEntries = computed(() => {
 let scrollRaf = null
 function onScrollOrResize() {
   if (scrollRaf) return
-  scrollRaf = requestAnimationFrame(() => {
-    scrollRaf = null
-    updateViewport()
-  })
+  scrollRaf = requestAnimationFrame(() => { scrollRaf = null; updateViewport() })
 }
 
 // ── Entries ──────────────────────────────────────────────────────────────────
+// Flag: false until onMounted fires. The immediate watch fires before onMounted,
+// so we can detect "initial mount" vs "normal pagination append".
+let mounted = false
+
 watch(() => store.entries, (newEntries) => {
   if (store.page === 1) {
     const keep = new Set(newEntries.map(e => e.path))
-    for (const p of Object.keys(cardHeights))   if (!keep.has(p)) delete cardHeights[p]
     for (const p of Object.keys(cardPositions)) if (!keep.has(p)) delete cardPositions[p]
     store.displayEntries = [...newEntries]
     if (rafId) { cancelAnimationFrame(rafId); rafId = null }
     runLayout()
+  } else if (!mounted) {
+    // Mounting with page > 1 means another view (e.g. ListView) has replaced
+    // displayEntries with only the current page. Reset to page 1 so the
+    // waterfall rebuilds cleanly from the start.
+    store.loadDirectory(store.currentPath)
   } else {
     const prevCount = store.displayEntries.length
-    if (prevCount === 0) {
-      // Mounted while store.page > 1 (e.g. switched from ListView on a non-first page).
-      // displayEntries is empty so we can't append — reset to page 1 instead.
-      store.loadDirectory(store.currentPath)
-      return
-    }
     store.displayEntries = [...store.displayEntries, ...newEntries]
     if (rafId) { cancelAnimationFrame(rafId); rafId = null }
     appendLayout(prevCount)
@@ -256,7 +223,6 @@ watch(colCount, () => {
   runLayout()
 })
 
-// Layout changes can shift containerRef in the viewport; keep cull window fresh.
 watch([containerHeight, layoutVersion], () => updateViewport())
 
 function loadMore() {
@@ -271,16 +237,12 @@ let containerRO = null
 function updateContainerMetrics(w) {
   if (w === 0) return
   containerActualWidth.value = w
-  if (!layoutComputedWidth.value || w > layoutComputedWidth.value) {
-    // 首次布局 或 容器变宽（侧边栏关闭/窗口放大）→ 重新计算
-    // layoutComputedWidth 只在这里更新，runLayout 不碰它（防止 scheduleLayout 意外重置 zoom 基准）
-    layoutComputedWidth.value = w
-    const n = widthToColCount(w)
-    colWidth.value = Math.floor((w - GAP * (n - 1)) / n)
-    if (n !== colCount.value) colCount.value = n  // watch(colCount) → runLayout
-    else runLayout()
-  }
-  // else: 容器变窄（如右侧详情面板打开）→ CSS scale 处理，colCount/colWidth/positions 全部不动
+  if (layoutComputedWidth.value) return  // already laid out; zoom handles the rest
+  layoutComputedWidth.value = w
+  const n = widthToColCount(w)
+  colWidth.value = Math.floor((w - GAP * (n - 1)) / n)
+  if (n !== colCount.value) colCount.value = n  // watch(colCount) → runLayout
+  else runLayout()
 }
 
 watch(containerRef, (el, oldEl) => {
@@ -298,6 +260,7 @@ watch(sentinelRef, (el, oldEl) => {
 })
 
 onMounted(() => {
+  mounted = true
   store.setRefreshHook(refreshAll)
 
   scrollObs = new IntersectionObserver(
@@ -315,25 +278,6 @@ onMounted(() => {
     containerRO.observe(containerRef.value)
   }
 
-  // Shared ResizeObserver for all rendered cards — replaces 1 RO per card.
-  sharedRO = new ResizeObserver(entries => {
-    let changed = false
-    for (const entry of entries) {
-      const el = entry.target
-      const path = el.dataset.path
-      if (!path) continue
-      const h = el.offsetHeight
-      if (h && cardHeights[path] !== h) {
-        cardHeights[path] = h
-        changed = true
-      }
-    }
-    if (changed) scheduleLayout()
-  })
-  // Cards mounted before sharedRO was created (template runs before onMounted).
-  for (const el of Object.values(cardEls)) sharedRO.observe(el)
-
-  // Capture-phase listener catches scroll on any ancestor (window, v-main, …).
   window.addEventListener('scroll', onScrollOrResize, { passive: true, capture: true })
   window.addEventListener('resize', onScrollOrResize, { passive: true })
   updateViewport()
@@ -345,7 +289,6 @@ onUnmounted(() => {
   if (scrollRaf) cancelAnimationFrame(scrollRaf)
   scrollObs?.disconnect()
   containerRO?.disconnect()
-  sharedRO?.disconnect()
   window.removeEventListener('scroll', onScrollOrResize, { capture: true })
   window.removeEventListener('resize', onScrollOrResize)
 })
@@ -362,31 +305,27 @@ function onRubberSelect(paths, ctrlHeld) {
 }
 
 function onCardSelect({ file, event }) {
-  if (event.shiftKey)                   store.shiftSelectTo(file, store.displayEntries)
+  if (event.shiftKey)                      store.shiftSelectTo(file, store.displayEntries)
   else if (event.ctrlKey || event.metaKey) store.toggleEntry(file)
-  else                                  store.selectEntry(file)
+  else                                     store.selectEntry(file)
 }
 
-// Virtualization-aware hit-test: DOM only holds visible cards, so a
-// rubber-band using querySelectorAll would miss off-screen items. Here we
-// intersect the drag rect against every entry's stored position instead.
 function rubberHitTest(sr) {
   const cont = containerRef.value
   if (!cont) return []
-  const rect = cont.getBoundingClientRect()
+  const rect  = cont.getBoundingClientRect()
   const scale = zoomScale.value || 1
-  const cw = colWidth.value * scale
-  const out = []
+  const cw    = colWidth.value * scale
+  const out   = []
   const entries = store.displayEntries
   for (let i = 0; i < entries.length; i++) {
     const file = entries[i]
     const pos  = cardPositions[file.path]
     if (!pos) continue
-    const h = (cardHeights[file.path] ?? estimatedHeight(file)) * scale
-    const left   = rect.left + pos.x * scale
-    const top    = rect.top  + pos.y * scale
+    const left = rect.left + pos.x * scale
+    const top  = rect.top  + pos.y * scale
     if (left + cw >= sr.left && left <= sr.right &&
-        top  + h  >= sr.top  && top  <= sr.bottom) {
+        top + cardHeight(file) * scale >= sr.top && top <= sr.bottom) {
       out.push(file.path)
     }
   }
@@ -411,9 +350,8 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
           <div
             v-for="file in visibleEntries"
             :key="file.path"
-            :ref="el => attachCardRef(el, file.path)"
-            :style="cardStyle(file)"
             :data-path="file.path"
+            :style="cardStyle(file)"
           >
             <FileCard
               :file="file"
@@ -433,14 +371,12 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
     </template>
   </div>
 
-  <!-- Rubber-band selection overlay -->
   <div
     v-if="rbDragging"
     class="rubberband-rect"
     :style="{ left: rbRect.left + 'px', top: rbRect.top + 'px', width: rbRect.width + 'px', height: rbRect.height + 'px' }"
   />
 
-  <!-- Single shared context menu for cards and background -->
   <ContextMenu v-model="menuOpen" :x="menuX" :y="menuY" />
 </template>
 
