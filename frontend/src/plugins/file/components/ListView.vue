@@ -79,7 +79,7 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
       <div>{{ t('explorer.emptyDirectory') }}</div>
     </div>
 
-    <v-list v-else lines="one" class="pa-2" style="padding-bottom: 72px !important">
+    <v-list v-else lines="one" class="pa-2" style="padding-bottom: 72px !important; min-height: 100%">
       <v-list-item
         v-for="file in store.entries"
         v-ripple
