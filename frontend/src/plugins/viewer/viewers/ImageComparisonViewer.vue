@@ -116,6 +116,38 @@ function startSlide(e) {
   sliding.value = true
 }
 
+function onTouchStart(e) {
+  if (e.touches.length !== 1) return
+  dragging.value = true
+  dragStart.x = e.touches[0].clientX - transform.x
+  dragStart.y = e.touches[0].clientY - transform.y
+}
+
+function onTouchMove(e) {
+  if (e.touches.length !== 1) return
+  e.preventDefault()
+  if (sliding.value) {
+    if (!bgEl.value) return
+    const rect = bgEl.value.getBoundingClientRect()
+    sliderPct.value = Math.max(0, Math.min(100, (e.touches[0].clientX - rect.left) / rect.width * 100))
+    return
+  }
+  if (!dragging.value) return
+  transform.x = e.touches[0].clientX - dragStart.x
+  transform.y = e.touches[0].clientY - dragStart.y
+}
+
+function onTouchEnd() {
+  dragging.value = false
+  sliding.value  = false
+}
+
+function startSlideTouch(e) {
+  e.stopPropagation()
+  e.preventDefault()
+  sliding.value = true
+}
+
 function makeImgStyle(base) {
   return {
     transform: `translate(${transform.x}px, ${transform.y}px) scale(${base * transform.scale})`,
@@ -141,6 +173,9 @@ defineExpose({ open })
       @mousemove="onMouseMove"
       @mouseup="onMouseUp"
       @mouseleave="onMouseUp"
+      @touchstart.passive="onTouchStart"
+      @touchmove.prevent="onTouchMove"
+      @touchend="onTouchEnd"
       @dblclick="reset"
     >
       <!-- Right image — clipped to show only right of the slider -->
@@ -176,6 +211,7 @@ defineExpose({ open })
         class="divider-line"
         :style="{ left: sliderPct + '%' }"
         @mousedown.stop="startSlide"
+        @touchstart.stop.prevent="startSlideTouch"
       >
         <div class="divider-handle">
           <v-icon size="14" color="#333">mdi-chevron-left</v-icon>
