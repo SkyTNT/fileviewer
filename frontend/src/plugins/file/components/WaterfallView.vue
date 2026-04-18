@@ -213,6 +213,7 @@ function updateContainerMetrics(w) {
   const n = widthToColCount(w)
   colWidth.value = Math.floor((w - GAP * (n - 1)) / n)
   colCount.value = n
+  runLayout()
 }
 
 watch(containerRef, (el, oldEl) => {
