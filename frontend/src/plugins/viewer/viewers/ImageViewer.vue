@@ -33,7 +33,7 @@ function open(file) {
 
 // ── Adjacent-image navigation ─────────────────────────────────────────────────
 
-const imageEntries = computed(() => fileStore.entries.filter(f => f.type === 'image'))
+const imageEntries = computed(() => fileStore.displayedEntries.filter(f => f.type === 'image'))
 
 const currentIndex = computed(() =>
   imageEntries.value.findIndex(f => f.path === currentFile.value?.path)
