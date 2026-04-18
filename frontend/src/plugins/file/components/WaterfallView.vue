@@ -23,16 +23,16 @@ async function refreshAll() {
   const filter = store.filterPattern || null
   store.loading = true
   try {
-    const all = []
-    let newTotal = store.total
-    for (let p = 1; p <= pages; p++) {
-      const res = await filesApi.listDirectory(path, p, size, filter, store.sortBy, store.sortOrder)
-      all.push(...res.data.entries)
-      newTotal = res.data.total
-    }
-    store.total = newTotal
+    const results = await Promise.all(
+      Array.from({ length: pages }, (_, i) =>
+        filesApi.listDirectory(path, i + 1, size, filter, store.sortBy, store.sortOrder)
+      )
+    )
+    const all = results.flatMap(r => r.data.entries)
+    store.total = results[0].data.total
     const keep = new Set(all.map(e => e.path))
     for (const k of Object.keys(cardPositions)) if (!keep.has(k)) delete cardPositions[k]
+    renderedPaths.clear()
     displayEntries.value = [...all]
     runLayout()
   } catch { /* ignore */ }
@@ -146,6 +146,9 @@ function cardStyle(file) {
 const viewportTop    = ref(0)
 const viewportBottom = ref(typeof window !== 'undefined' ? window.innerHeight : 0)
 const BUFFER_PX = 800
+const EVICT_PX  = 10000
+
+const renderedPaths = new Set()
 
 function updateViewport() {
   const el = containerRef.value
@@ -158,8 +161,10 @@ function updateViewport() {
 
 const visibleEntries = computed(() => {
   layoutVersion.value  // subscribe
-  const top    = viewportTop.value    - BUFFER_PX
-  const bottom = viewportBottom.value + BUFFER_PX
+  const top         = viewportTop.value    - BUFFER_PX
+  const bottom      = viewportBottom.value + BUFFER_PX
+  const evictTop    = viewportTop.value    - EVICT_PX
+  const evictBottom = viewportBottom.value + EVICT_PX
   const out = []
   const entries = displayEntries.value
   for (let i = 0; i < entries.length; i++) {
@@ -167,8 +172,12 @@ const visibleEntries = computed(() => {
     const pos  = cardPositions[file.path]
     if (!pos) continue
     const h = cardHeight(file)
-    if (pos.y + h < top || pos.y > bottom) continue
-    out.push(file)
+    if (pos.y + h >= top && pos.y <= bottom) {
+      renderedPaths.add(file.path)
+    } else if (pos.y + h < evictTop || pos.y > evictBottom) {
+      renderedPaths.delete(file.path)
+    }
+    if (renderedPaths.has(file.path)) out.push(file)
   }
   return out
 })
@@ -185,6 +194,7 @@ watch(() => store.entries, (newEntries) => {
   if (store.page === 1) {
     const keep = new Set(newEntries.map(e => e.path))
     for (const p of Object.keys(cardPositions)) if (!keep.has(p)) delete cardPositions[p]
+    renderedPaths.clear()
     displayEntries.value = [...newEntries]
     runLayout()
   } else {
@@ -279,7 +289,7 @@ const scrollRef = ref(null)
 function onRubberSelect(paths, ctrlHeld) {
   if (!paths.length) { if (!ctrlHeld) store.clearSelection(); return }
   const pathSet = new Set(paths)
-  const items = displayEntries.value.filter(e => pathSet.has(e.path))
+  const items = visibleEntries.value.filter(e => pathSet.has(e.path))
   if (ctrlHeld) store.addToSelection(items)
   else          store.setSelection(items)
 }
@@ -297,7 +307,7 @@ function rubberHitTest(sr) {
   const scale = zoomScale.value || 1
   const cw    = colWidth.value * scale
   const out   = []
-  const entries = displayEntries.value
+  const entries = visibleEntries.value
   for (let i = 0; i < entries.length; i++) {
     const file = entries[i]
     const pos  = cardPositions[file.path]

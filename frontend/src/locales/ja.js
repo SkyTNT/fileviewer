@@ -57,6 +57,7 @@ export default {
     totalSize: '合計サイズ',
     selected: '選択済み',
     andMore: '… さらに {n} 件',
+    dimensions: '寸法',
     meta: 'メタデータ',
     noJsonFound: '.json ファイルが見つかりません',
     compareImages: '画像を比較',

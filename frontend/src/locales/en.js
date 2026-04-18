@@ -57,6 +57,7 @@ export default {
     totalSize: 'Total size',
     selected: 'Selected',
     andMore: '… and {n} more',
+    dimensions: 'Dimensions',
     meta: 'Meta',
     noJsonFound: 'no .json found',
     compareImages: 'Compare Images',

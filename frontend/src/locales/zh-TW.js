@@ -57,6 +57,7 @@ export default {
     totalSize: '總計大小',
     selected: '已選取',
     andMore: '… 還有 {n} 項',
+    dimensions: '尺寸',
     meta: '中繼資料',
     noJsonFound: '找不到 .json 檔案',
     compareImages: '比較圖片',

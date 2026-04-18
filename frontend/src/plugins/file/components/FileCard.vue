@@ -62,7 +62,6 @@ function onContextMenu(e) {
       v-if="isImage && !imgError"
       :src="thumbnailUrl"
       :alt="file.name"
-      loading="lazy"
       class="thumb-img"
       :style="file.img_w && file.img_h ? { aspectRatio: `${file.img_w}/${file.img_h}` } : undefined"
       @error="imgError = true"

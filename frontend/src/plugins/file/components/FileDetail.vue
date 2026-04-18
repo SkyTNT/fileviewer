@@ -181,6 +181,10 @@ watch(file, async (f) => {
         <span class="info-label text-caption text-medium-emphasis">{{ t('detail.size') }}</span>
         <span class="info-value text-body-2">{{ formatSize(file.size) }}</span>
       </div>
+      <div v-if="file.img_w && file.img_h" class="info-row">
+        <span class="info-label text-caption text-medium-emphasis">{{ t('detail.dimensions') }}</span>
+        <span class="info-value text-body-2">{{ file.img_w }} × {{ file.img_h }}</span>
+      </div>
       <div class="info-row">
         <span class="info-label text-caption text-medium-emphasis">{{ t('detail.modified') }}</span>
         <span class="info-value text-body-2">{{ fmtDate(file.modified) }}</span>
