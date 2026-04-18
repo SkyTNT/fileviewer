@@ -86,6 +86,7 @@ watch(zoomScale, async (newZoom, oldZoom) => {
     clearTimeout(zoomingTim)
   zoomingTim = setTimeout(() => zoomingTim = null, 100)
   const prevY = window.scrollY
+  await nextTick()
   window.scrollTo(0, Math.round(prevY * (newZoom / oldZoom)))
 })
 
