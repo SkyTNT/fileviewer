@@ -109,6 +109,84 @@ function onMouseUp() { dragging.value = false }
 
 function onDblClick() { if (!dragMode.value) reset() }
 
+// ── Touch (single-finger pan + inertia + two-finger pinch-to-zoom) ───────────
+
+let pinchDist0 = 0, pinchScale0 = 1, pinchMidX = 0, pinchMidY = 0
+let velX = 0, velY = 0, rafId = null
+const lastPts = []
+const FRICTION = 0.95
+
+function touchDist(touches) {
+  const dx = touches[0].clientX - touches[1].clientX
+  const dy = touches[0].clientY - touches[1].clientY
+  return Math.sqrt(dx * dx + dy * dy)
+}
+
+function stopInertia() {
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null }
+}
+
+function startInertia() {
+  stopInertia()
+  const tick = () => {
+    velX *= FRICTION; velY *= FRICTION
+    if (Math.abs(velX) < 0.5 && Math.abs(velY) < 0.5) { rafId = null; return }
+    transform.x += velX; transform.y += velY
+    rafId = requestAnimationFrame(tick)
+  }
+  rafId = requestAnimationFrame(tick)
+}
+
+function onTouchStart(e) {
+  stopInertia()
+  lastPts.length = 0
+  if (e.touches.length === 1) {
+    dragging.value = true
+    dragStart.x = e.touches[0].clientX - transform.x
+    dragStart.y = e.touches[0].clientY - transform.y
+  } else if (e.touches.length === 2) {
+    dragging.value = false
+    velX = 0; velY = 0
+    pinchDist0  = touchDist(e.touches)
+    pinchScale0 = transform.scale
+    pinchMidX = (e.touches[0].clientX + e.touches[1].clientX) / 2
+    pinchMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2
+  }
+}
+
+function onTouchMove(e) {
+  if (e.touches.length === 2) {
+    const newScale = Math.max(0.05, Math.min(20, pinchScale0 * touchDist(e.touches) / pinchDist0))
+    const ratio = newScale / transform.scale
+    const cx = window.innerWidth / 2, cy = window.innerHeight / 2
+    transform.x = pinchMidX - cx - (pinchMidX - cx - transform.x) * ratio
+    transform.y = pinchMidY - cy - (pinchMidY - cy - transform.y) * ratio
+    transform.scale = newScale
+    return
+  }
+  if (!dragging.value) return
+  const t = e.touches[0]
+  transform.x = t.clientX - dragStart.x
+  transform.y = t.clientY - dragStart.y
+  lastPts.push({ x: t.clientX, y: t.clientY, t: performance.now() })
+  if (lastPts.length > 10) lastPts.shift()
+}
+
+function onTouchEnd() {
+  dragging.value = false
+  const now = performance.now()
+  const recent = lastPts.filter(p => now - p.t < 80)
+  if (recent.length >= 2) {
+    const dt = recent[recent.length - 1].t - recent[0].t
+    if (dt > 0) {
+      velX = (recent[recent.length - 1].x - recent[0].x) / dt * 16
+      velY = (recent[recent.length - 1].y - recent[0].y) / dt * 16
+      startInertia(); return
+    }
+  }
+  velX = 0; velY = 0
+}
+
 defineExpose({ open })
 </script>
 
@@ -121,6 +199,9 @@ defineExpose({ open })
       @mousemove="onMouseMove"
       @mouseup="onMouseUp"
       @mouseleave="onMouseUp"
+      @touchstart="onTouchStart"
+      @touchmove.prevent="onTouchMove"
+      @touchend="onTouchEnd"
       @dblclick="onDblClick"
     >
       <img
@@ -159,8 +240,8 @@ defineExpose({ open })
 
       <!-- Toolbar -->
       <div class="viewer-toolbar">
-        <span class="text-caption mr-2">{{ fileName }}</span>
-        <span v-if="currentIndex >= 0" class="text-caption text-medium-emphasis mr-4">
+        <span class="text-caption mr-2 toolbar-filename">{{ fileName }}</span>
+        <span v-if="currentIndex >= 0" class="text-caption text-medium-emphasis mr-4 toolbar-counter">
           {{ currentIndex + 1 }} / {{ imageEntries.length }}
         </span>
         <v-btn
@@ -199,6 +280,7 @@ defineExpose({ open })
   justify-content: center;
   overflow: hidden;
   position: relative;
+  user-select: none;
 }
 .viewer-img {
   position: absolute;
@@ -235,6 +317,19 @@ defineExpose({ open })
   border-radius: 8px;
   z-index: 10;
   backdrop-filter: blur(8px);
+  max-width: calc(100vw - 24px);
+  min-width: 0;
+}
+.toolbar-filename {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex-shrink: 1;
+}
+.toolbar-counter {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .zoom-hint {
   position: absolute;
@@ -244,5 +339,9 @@ defineExpose({ open })
   background: rgba(0,0,0,0.4);
   padding: 4px 12px;
   border-radius: 12px;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+  white-space: normal;
+  line-height: 1.5;
 }
 </style>

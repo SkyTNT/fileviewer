@@ -149,11 +149,11 @@ export default {
     close: '关闭',
     dragMode: '切换到拖拽模式',
     panMode: '切换到平移模式',
-    zoomHint: '滚轮缩放 · 拖动平移 · 双击重置',
-    dragHint: '拖拽图片到其他窗口 · 滚轮缩放',
+    zoomHint: '捏合/滚轮缩放 · 拖动平移',
+    dragHint: '拖拽图片到其他窗口 · 捏合/滚轮缩放',
   },
   imageComparison: {
-    hint: '拖动滑块比较 · 滚轮缩放 · 拖动平移 · 双击重置',
+    hint: '拖动滑块 · 捏合/滚轮缩放 · 拖动平移',
   },
   jsonViewer: {
     openAs: '打开方式…',

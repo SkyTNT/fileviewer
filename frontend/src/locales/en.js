@@ -149,11 +149,11 @@ export default {
     close: 'Close',
     dragMode: 'Switch to drag mode',
     panMode: 'Switch to pan mode',
-    zoomHint: 'Scroll to zoom · Drag to pan · Double-click to reset',
-    dragHint: 'Drag image to another window · Scroll to zoom',
+    zoomHint: 'Pinch/scroll to zoom · Drag to pan',
+    dragHint: 'Drag image to another window · Pinch/scroll to zoom',
   },
   imageComparison: {
-    hint: 'Drag slider to compare · Scroll to zoom · Drag to pan · Double-click to reset',
+    hint: 'Drag slider · Pinch/scroll to zoom · Drag to pan',
   },
   jsonViewer: {
     openAs: 'Open as…',

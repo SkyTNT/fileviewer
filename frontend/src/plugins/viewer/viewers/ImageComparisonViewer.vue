@@ -116,30 +116,90 @@ function startSlide(e) {
   sliding.value = true
 }
 
+let pinchDist0 = 0, pinchScale0 = 1, pinchMidX = 0, pinchMidY = 0
+let velX = 0, velY = 0, rafId = null
+const lastPts = []
+const FRICTION = 0.95
+
+function touchDist(touches) {
+  const dx = touches[0].clientX - touches[1].clientX
+  const dy = touches[0].clientY - touches[1].clientY
+  return Math.sqrt(dx * dx + dy * dy)
+}
+
+function stopInertia() {
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null }
+}
+
+function startInertia() {
+  stopInertia()
+  const tick = () => {
+    velX *= FRICTION; velY *= FRICTION
+    if (Math.abs(velX) < 0.5 && Math.abs(velY) < 0.5) { rafId = null; return }
+    transform.x += velX; transform.y += velY
+    rafId = requestAnimationFrame(tick)
+  }
+  rafId = requestAnimationFrame(tick)
+}
+
 function onTouchStart(e) {
-  if (e.touches.length !== 1) return
-  dragging.value = true
-  dragStart.x = e.touches[0].clientX - transform.x
-  dragStart.y = e.touches[0].clientY - transform.y
+  stopInertia()
+  lastPts.length = 0
+  if (sliding.value) return
+  if (e.touches.length === 1) {
+    dragging.value = true
+    dragStart.x = e.touches[0].clientX - transform.x
+    dragStart.y = e.touches[0].clientY - transform.y
+  } else if (e.touches.length === 2) {
+    dragging.value = false
+    velX = 0; velY = 0
+    pinchDist0  = touchDist(e.touches)
+    pinchScale0 = transform.scale
+    pinchMidX = (e.touches[0].clientX + e.touches[1].clientX) / 2
+    pinchMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2
+  }
 }
 
 function onTouchMove(e) {
-  if (e.touches.length !== 1) return
-  e.preventDefault()
   if (sliding.value) {
     if (!bgEl.value) return
     const rect = bgEl.value.getBoundingClientRect()
     sliderPct.value = Math.max(0, Math.min(100, (e.touches[0].clientX - rect.left) / rect.width * 100))
     return
   }
+  if (e.touches.length === 2) {
+    const newScale = Math.max(0.05, Math.min(20, pinchScale0 * touchDist(e.touches) / pinchDist0))
+    const ratio = newScale / transform.scale
+    const cx = window.innerWidth / 2, cy = window.innerHeight / 2
+    transform.x = pinchMidX - cx - (pinchMidX - cx - transform.x) * ratio
+    transform.y = pinchMidY - cy - (pinchMidY - cy - transform.y) * ratio
+    transform.scale = newScale
+    return
+  }
   if (!dragging.value) return
-  transform.x = e.touches[0].clientX - dragStart.x
-  transform.y = e.touches[0].clientY - dragStart.y
+  const t = e.touches[0]
+  transform.x = t.clientX - dragStart.x
+  transform.y = t.clientY - dragStart.y
+  lastPts.push({ x: t.clientX, y: t.clientY, t: performance.now() })
+  if (lastPts.length > 10) lastPts.shift()
 }
 
 function onTouchEnd() {
+  const wasSliding = sliding.value
   dragging.value = false
   sliding.value  = false
+  if (wasSliding) { velX = 0; velY = 0; return }
+  const now = performance.now()
+  const recent = lastPts.filter(p => now - p.t < 80)
+  if (recent.length >= 2) {
+    const dt = recent[recent.length - 1].t - recent[0].t
+    if (dt > 0) {
+      velX = (recent[recent.length - 1].x - recent[0].x) / dt * 16
+      velY = (recent[recent.length - 1].y - recent[0].y) / dt * 16
+      startInertia(); return
+    }
+  }
+  velX = 0; velY = 0
 }
 
 function startSlideTouch(e) {
@@ -173,7 +233,7 @@ defineExpose({ open })
       @mousemove="onMouseMove"
       @mouseup="onMouseUp"
       @mouseleave="onMouseUp"
-      @touchstart.passive="onTouchStart"
+      @touchstart="onTouchStart"
       @touchmove.prevent="onTouchMove"
       @touchend="onTouchEnd"
       @dblclick="reset"
@@ -247,6 +307,7 @@ defineExpose({ open })
   justify-content: center;
   overflow: hidden;
   position: relative;
+  user-select: none;
 }
 .viewer-img {
   position: absolute;
@@ -324,5 +385,9 @@ defineExpose({ open })
   border-radius: 12px;
   z-index: 15;
   pointer-events: none;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+  white-space: normal;
+  line-height: 1.5;
 }
 </style>
