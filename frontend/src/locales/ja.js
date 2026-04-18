@@ -32,6 +32,11 @@ export default {
     sortSize: 'サイズ',
     sortModified: '更新日時',
     sortType: '種類',
+    multiSelect: '複数選択',
+    selectAll: 'すべて選択',
+    invertSelect: '選択を反転',
+    doneSelect: '完了',
+    cancelSelect: 'キャンセル',
   },
   detail: {
     itemsSelected: '{n} 件選択中',

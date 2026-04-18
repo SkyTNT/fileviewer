@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, onActivated, onDeactivated } from 'vue'
+import { computed, ref, watch, onActivated, onDeactivated } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFileStore } from '@/plugins/file/store.js'
 import { useViewerStore } from '@/plugins/viewer/store.js'
@@ -28,14 +28,17 @@ const typeIcon   = t => TYPE_ICON[t]  || 'mdi-file-outline'
 const typeColor  = t => TYPE_COLOR[t] || undefined
 const formatSize = (bytes) => formatBytes(bytes)
 
+watch(() => store.entries, (v) => store.setDisplayedEntries(v), { immediate: true })
+
 let clickTimer = null
 
 function onClick(e, file) {
   clearTimeout(clickTimer)
   clickTimer = setTimeout(() => {
-    if (e.shiftKey)                   store.shiftSelectTo(file, store.entries)
-    else if (e.ctrlKey || e.metaKey)  store.toggleEntry(file)
-    else                              store.selectEntry(file)
+    if (store.mobileMultiSelectMode)       store.toggleEntry(file)
+    else if (e.shiftKey)                   store.shiftSelectTo(file, store.entries)
+    else if (e.ctrlKey || e.metaKey)       store.toggleEntry(file)
+    else                                   store.selectEntry(file)
   }, 250)
 }
 

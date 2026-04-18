@@ -32,6 +32,11 @@ export default {
     sortSize: 'Size',
     sortModified: 'Modified',
     sortType: 'Type',
+    multiSelect: 'Multi-select',
+    selectAll: 'Select all',
+    invertSelect: 'Invert',
+    doneSelect: 'Done',
+    cancelSelect: 'Cancel',
   },
   detail: {
     itemsSelected: '{n} items selected',

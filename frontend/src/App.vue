@@ -180,7 +180,7 @@ watch(() => authStore.loggedIn, (v) => {
 
     <!-- Right detail drawer -->
     <v-navigation-drawer
-      :model-value="store.selectedEntries.length > 0 && !store.isAtHome"
+      :model-value="store.selectedEntries.length > 0 && !store.isAtHome && !store.mobileMultiSelectMode"
       location="end"
       :width="280"
       @update:model-value="v => { if (!v) store.selectEntry(null) }"

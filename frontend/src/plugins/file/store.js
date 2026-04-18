@@ -22,10 +22,12 @@ export const useFileStore = defineStore('file', () => {
   const selectedEntry    = computed(() =>
     selectedEntries.value.length === 1 ? selectedEntries.value[0] : null
   )
-  const writeMode     = ref(false)
-  const roots         = ref([])
-  const treeRevision  = ref(0)
-  const filterPattern = ref('')
+  const writeMode              = ref(false)
+  const roots                  = ref([])
+  const treeRevision           = ref(0)
+  const filterPattern          = ref('')
+  const mobileMultiSelectMode  = ref(false)
+  const displayedEntries       = ref([])
   const sortBy        = ref(localStorage.getItem('fv-sort-by')    || 'name')
   const sortOrder     = ref(localStorage.getItem('fv-sort-order') || 'asc')
   const clipboard     = ref(null)  // { entries: [...], action: 'copy' | 'cut' }
@@ -77,6 +79,19 @@ export const useFileStore = defineStore('file', () => {
 
   function clearSelection()      { selectedEntries.value = []; selectionAnchor.value = null }
   function setSelection(entries) { selectedEntries.value = [...entries]; selectionAnchor.value = entries.at(-1) ?? null }
+
+  function setDisplayedEntries(e) { displayedEntries.value = e }
+
+  function enterMobileMultiSelect() { mobileMultiSelectMode.value = true }
+  function exitMobileMultiSelect(keepSelection = false) {
+    if (!keepSelection) clearSelection()
+    mobileMultiSelectMode.value = false
+  }
+  function selectAll()       { setSelection(displayedEntries.value) }
+  function invertSelection() {
+    const sel = new Set(selectedEntries.value.map(e => e.path))
+    setSelection(displayedEntries.value.filter(e => !sel.has(e.path)))
+  }
 
   function setCopy(entries) {
     clipboard.value = { entries: Array.isArray(entries) ? entries : [entries], action: 'copy' }
@@ -310,11 +325,12 @@ async function deleteEntries(entries) {
   }
 
   async function loadDirectory(path, push = false) {
-    entries.value = []
-    total.value   = 0
-    page.value            = 1
-    selectedEntries.value = []
-    selectionAnchor.value = null
+    entries.value           = []
+    total.value             = 0
+    page.value              = 1
+    selectedEntries.value   = []
+    selectionAnchor.value   = null
+    mobileMultiSelectMode.value = false
     if (path === '') {
       loading.value     = false
       currentPath.value = ''
@@ -344,8 +360,10 @@ async function deleteEntries(entries) {
     isAtHome, treeRevision, filterPattern, sortBy, sortOrder,
     clipboard, nameConflicts,
     contextMenuFile, isContextMenuTarget, setContextMenuFile,
+    mobileMultiSelectMode, displayedEntries,
     init, loadDirectory, goToPage, navigate,
     selectEntry, toggleEntry, shiftSelectTo, addToSelection, clearSelection, setSelection,
+    setDisplayedEntries, enterMobileMultiSelect, exitMobileMultiSelect, selectAll, invertSelection,
     invalidateTree, setFilter, setSort,
     setCopy, setCut, setCopyLink, clearClipboard, paste, resolveNameConflicts, cancelNameConflicts, deleteEntries,
     setRefreshHook, refresh,

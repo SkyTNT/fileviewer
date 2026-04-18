@@ -28,6 +28,12 @@ export function useExplorerKeyboard(allEntries = null) {
       e.preventDefault()
       fileStore.setSelection([...getList()])
     },
+    'd': (e) => {
+      if (!e.ctrlKey && !e.metaKey) return false
+      e.preventDefault()
+      const sel = new Set(fileStore.selectedEntries.map(f => f.path))
+      fileStore.setSelection(getList().filter(f => !sel.has(f.path)))
+    },
     'c': (e) => {
       if (!e.ctrlKey && !e.metaKey) return false
       if (fileStore.selectedEntries.length && !window.getSelection()?.toString()) {

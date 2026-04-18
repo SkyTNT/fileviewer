@@ -364,7 +364,27 @@ const clipboardLabel = computed(() => {
     </v-menu>
   </template>
 
-  <!-- ── Mobile overflow menu ─────────────────────────────────────────── -->
+  <!-- ── Mobile: multi-select mode active ───────────────────────────── -->
+  <template v-else-if="store.mobileMultiSelectMode">
+    <v-btn icon size="small" @click="store.selectAll()">
+      <v-icon size="20">mdi-select-all</v-icon>
+      <v-tooltip activator="parent">{{ t('toolbar.selectAll') }}</v-tooltip>
+    </v-btn>
+    <v-btn icon size="small" @click="store.invertSelection()">
+      <v-icon size="20">mdi-select-inverse</v-icon>
+      <v-tooltip activator="parent">{{ t('toolbar.invertSelect') }}</v-tooltip>
+    </v-btn>
+    <v-btn icon size="small" color="primary" @click="store.exitMobileMultiSelect(true)">
+      <v-icon size="20">mdi-check</v-icon>
+      <v-tooltip activator="parent">{{ t('toolbar.doneSelect') }}</v-tooltip>
+    </v-btn>
+    <v-btn icon size="small" @click="store.exitMobileMultiSelect(false)">
+      <v-icon size="20">mdi-close</v-icon>
+      <v-tooltip activator="parent">{{ t('toolbar.cancelSelect') }}</v-tooltip>
+    </v-btn>
+  </template>
+
+  <!-- ── Mobile: normal — overflow menu ─────────────────────────────── -->
   <v-menu v-else :close-on-content-click="false" location="bottom end">
     <template #activator="{ props }">
       <v-btn icon size="small" v-bind="props">
@@ -393,6 +413,17 @@ const clipboardLabel = computed(() => {
           </v-tooltip>
         </v-text-field>
       </div>
+
+      <!-- Multi-select -->
+      <template v-if="!store.isAtHome">
+        <v-list-item
+          prepend-icon="mdi-checkbox-multiple-outline"
+          :title="t('toolbar.multiSelect')"
+          density="compact"
+          rounded="lg"
+          @click="store.enterMobileMultiSelect()"
+        />
+      </template>
 
       <v-divider />
 

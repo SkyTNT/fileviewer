@@ -32,6 +32,11 @@ export default {
     sortSize: '大小',
     sortModified: '修改时间',
     sortType: '类型',
+    multiSelect: '多选',
+    selectAll: '全选',
+    invertSelect: '反选',
+    doneSelect: '完成',
+    cancelSelect: '取消',
   },
   detail: {
     itemsSelected: '已选 {n} 项',

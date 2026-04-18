@@ -13,6 +13,7 @@ const store = useFileStore()
 const { t } = useI18n()
 
 const displayEntries = ref([])
+watch(displayEntries, (v) => store.setDisplayedEntries(v), { immediate: true })
 
 const { menuOpen, menuX, menuY, showMenu, onBgContextMenu } = useContextMenu()
 
@@ -296,9 +297,10 @@ function onRubberSelect(paths, ctrlHeld) {
 }
 
 function onCardSelect({ file, event }) {
-  if (event.shiftKey)                      store.shiftSelectTo(file, displayEntries.value)
-  else if (event.ctrlKey || event.metaKey) store.toggleEntry(file)
-  else                                     store.selectEntry(file)
+  if (store.mobileMultiSelectMode)             store.toggleEntry(file)
+  else if (event.shiftKey)                     store.shiftSelectTo(file, displayEntries.value)
+  else if (event.ctrlKey || event.metaKey)     store.toggleEntry(file)
+  else                                         store.selectEntry(file)
 }
 
 function rubberHitTest(sr) {
