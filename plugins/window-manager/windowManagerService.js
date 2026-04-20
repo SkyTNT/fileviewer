@@ -24,8 +24,8 @@ export function createWindowManager() {
     const count  = state.windows.length
     const offset = (count % 8) * CASCADE
     return {
-      x: Math.max(0, Math.round((window.innerWidth  - w) / 2) + offset - 84),
-      y: Math.max(0, Math.round((window.innerHeight - h) / 2) + offset - 60),
+      x: Math.max(0, Math.round((window.innerWidth  - w) / 2) + offset),
+      y: Math.max(0, Math.round((window.innerHeight - h) / 2) + offset),
     }
   }
 
@@ -44,11 +44,10 @@ export function createWindowManager() {
         }
       }
 
-      const w = width  ?? 900
-      const h = height ?? 600
+      const w = Math.min(width  ?? 900, window.innerWidth)
+      const h = Math.min(height ?? 600, window.innerHeight)
       const pos = _defaultPos(w, h)
       const winId = id ?? `win-${_nextId++}`
-      const autoMaximized = maximized || w >= window.innerWidth || h >= window.innerHeight
 
       state._topZ++
       const win = reactive({
@@ -60,7 +59,7 @@ export function createWindowManager() {
         x: pos.x, y: pos.y,
         w, h,
         z:         state._topZ,
-        maximized: autoMaximized,
+        maximized: maximized,
         minimized: false,
         focused:   true,
       })

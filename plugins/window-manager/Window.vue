@@ -18,7 +18,7 @@
     >
       <v-icon size="16" class="win-icon mr-2">{{ win.icon || 'mdi-window-maximize' }}</v-icon>
       <span class="win-title text-truncate">{{ win.title }}</span>
-      <div class="win-controls ml-auto" @mousedown.stop>
+      <div class="win-controls ml-auto" @mousedown.stop @touchstart.stop>
         <button class="win-btn win-minimize" title="Minimize" @click="emit('minimize')">
           <v-icon size="14">mdi-minus</v-icon>
         </button>

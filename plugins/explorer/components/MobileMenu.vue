@@ -59,7 +59,12 @@ const clipboardIcon = computed(() => {
 })
 
 const events = inject('events')
-function triggerUpload() { events?.emit('upload:trigger') }
+const menuOpen = ref(false)
+
+function triggerUpload() { menuOpen.value = false; events?.emit('upload:trigger') }
+function openTouch()     { menuOpen.value = false; services.get('write.state').openTouch() }
+function openMkdir()     { menuOpen.value = false; services.get('write.state').openMkdir() }
+function doPaste()       { menuOpen.value = false; services.get('write.state').doPaste() }
 </script>
 
 <template>
@@ -84,7 +89,7 @@ function triggerUpload() { events?.emit('upload:trigger') }
   </template>
 
   <!-- Mobile overflow menu -->
-  <v-menu v-else-if="mobile" :close-on-content-click="false" location="bottom end">
+  <v-menu v-else-if="mobile" v-model="menuOpen" :close-on-content-click="false" location="bottom end">
     <template #activator="{ props }">
       <v-btn icon size="small" v-bind="props">
         <v-icon size="20">mdi-dots-vertical</v-icon>
@@ -151,7 +156,7 @@ function triggerUpload() { events?.emit('upload:trigger') }
           rounded="lg"
           color="primary"
           style="width:100%"
-          @update:model-value="layoutRegistry.setActive"
+          @update:model-value="key => layoutRegistry.setActive(key)"
         >
           <v-btn
             v-for="layout in layoutRegistry.layouts"
@@ -183,14 +188,14 @@ function triggerUpload() { events?.emit('upload:trigger') }
           :title="t('toolbar.newFile')"
           density="compact"
           rounded="lg"
-          @click="services.get('write.state').openTouch()"
+          @click="openTouch()"
         />
         <v-list-item
           prepend-icon="mdi-folder-plus-outline"
           :title="t('toolbar.newFolder')"
           density="compact"
           rounded="lg"
-          @click="services.get('write.state').openMkdir()"
+          @click="openMkdir()"
         />
         <template v-if="store.clipboard">
           <v-list-item
@@ -199,7 +204,7 @@ function triggerUpload() { events?.emit('upload:trigger') }
             density="compact"
             rounded="lg"
             color="primary"
-            @click="services.get('write.state').doPaste()"
+            @click="doPaste()"
           />
           <v-list-item
             prepend-icon="mdi-close-circle-outline"
