@@ -13,6 +13,7 @@
     <div
       class="win-titlebar"
       @mousedown.prevent="startDrag"
+      @touchstart.prevent="startDragTouch"
       @dblclick="toggleMaximize"
     >
       <v-icon size="16" class="win-icon mr-2">{{ win.icon || 'mdi-window-maximize' }}</v-icon>
@@ -37,14 +38,14 @@
 
     <!-- Resize handles (8 directions) -->
     <template v-if="!win.maximized">
-      <div class="resize-handle resize-n"  @mousedown.prevent.stop="startResize('n')" />
-      <div class="resize-handle resize-s"  @mousedown.prevent.stop="startResize('s')" />
-      <div class="resize-handle resize-e"  @mousedown.prevent.stop="startResize('e')" />
-      <div class="resize-handle resize-w"  @mousedown.prevent.stop="startResize('w')" />
-      <div class="resize-handle resize-ne" @mousedown.prevent.stop="startResize('ne')" />
-      <div class="resize-handle resize-nw" @mousedown.prevent.stop="startResize('nw')" />
-      <div class="resize-handle resize-se" @mousedown.prevent.stop="startResize('se')" />
-      <div class="resize-handle resize-sw" @mousedown.prevent.stop="startResize('sw')" />
+      <div class="resize-handle resize-n"  @mousedown.prevent.stop="startResize('n')"  @touchstart.prevent.stop="startResizeTouch('n')" />
+      <div class="resize-handle resize-s"  @mousedown.prevent.stop="startResize('s')"  @touchstart.prevent.stop="startResizeTouch('s')" />
+      <div class="resize-handle resize-e"  @mousedown.prevent.stop="startResize('e')"  @touchstart.prevent.stop="startResizeTouch('e')" />
+      <div class="resize-handle resize-w"  @mousedown.prevent.stop="startResize('w')"  @touchstart.prevent.stop="startResizeTouch('w')" />
+      <div class="resize-handle resize-ne" @mousedown.prevent.stop="startResize('ne')" @touchstart.prevent.stop="startResizeTouch('ne')" />
+      <div class="resize-handle resize-nw" @mousedown.prevent.stop="startResize('nw')" @touchstart.prevent.stop="startResizeTouch('nw')" />
+      <div class="resize-handle resize-se" @mousedown.prevent.stop="startResize('se')" @touchstart.prevent.stop="startResizeTouch('se')" />
+      <div class="resize-handle resize-sw" @mousedown.prevent.stop="startResize('sw')" @touchstart.prevent.stop="startResizeTouch('sw')" />
     </template>
   </div>
 </template>
@@ -97,6 +98,28 @@ function stopDrag() {
   window.removeEventListener('mousemove', onDragMove)
 }
 
+function startDragTouch(e) {
+  if (props.win.maximized) return
+  const t = e.touches[0]
+  dragOx = t.clientX - props.win.x
+  dragOy = t.clientY - props.win.y
+  window.addEventListener('touchmove', onDragMoveTouch, { passive: false })
+  window.addEventListener('touchend', stopDragTouch, { once: true })
+}
+
+function onDragMoveTouch(e) {
+  e.preventDefault()
+  const t = e.touches[0]
+  emit('update:position', {
+    x: Math.max(0, t.clientX - dragOx),
+    y: Math.max(0, t.clientY - dragOy),
+  })
+}
+
+function stopDragTouch() {
+  window.removeEventListener('touchmove', onDragMoveTouch)
+}
+
 // ── Resize ────────────────────────────────────────────────────────────────────
 let resizeDir = ''
 let resizeStartX = 0, resizeStartY = 0
@@ -140,6 +163,48 @@ function onResizeMove(e) {
 
 function stopResize() {
   window.removeEventListener('mousemove', onResizeMove)
+}
+
+function startResizeTouch(dir) {
+  const t = event.touches[0]
+  resizeDir     = dir
+  resizeStartX  = t.clientX
+  resizeStartY  = t.clientY
+  resizeStartW  = props.win.w
+  resizeStartH  = props.win.h
+  resizeStartPX = props.win.x
+  resizeStartPY = props.win.y
+  window.addEventListener('touchmove', onResizeMoveTouch, { passive: false })
+  window.addEventListener('touchend', stopResizeTouch, { once: true })
+}
+
+function onResizeMoveTouch(e) {
+  e.preventDefault()
+  const t = e.touches[0]
+  const dx = t.clientX - resizeStartX
+  const dy = t.clientY - resizeStartY
+  let x = resizeStartPX, y = resizeStartPY
+  let w = resizeStartW,  h = resizeStartH
+
+  if (resizeDir.includes('e')) w = Math.max(MIN_W, resizeStartW + dx)
+  if (resizeDir.includes('s')) h = Math.max(MIN_H, resizeStartH + dy)
+  if (resizeDir.includes('w')) {
+    const newW = Math.max(MIN_W, resizeStartW - dx)
+    x = resizeStartPX + (resizeStartW - newW)
+    w = newW
+  }
+  if (resizeDir.includes('n')) {
+    const newH = Math.max(MIN_H, resizeStartH - dy)
+    y = resizeStartPY + (resizeStartH - newH)
+    h = newH
+  }
+
+  emit('update:position', { x, y })
+  emit('update:size', { w, h })
+}
+
+function stopResizeTouch() {
+  window.removeEventListener('touchmove', onResizeMoveTouch)
 }
 </script>
 
@@ -216,4 +281,10 @@ function stopResize() {
 .resize-nw { top: 0;    left: 0;    width: 10px; height: 10px; cursor: nw-resize; }
 .resize-se { bottom: 0; right: 0;   width: 10px; height: 10px; cursor: se-resize; }
 .resize-sw { bottom: 0; left: 0;    width: 10px; height: 10px; cursor: sw-resize; }
+
+@media (pointer: coarse) {
+  .resize-n, .resize-s { height: 10px; }
+  .resize-e, .resize-w { width: 10px; }
+  .resize-ne, .resize-nw, .resize-se, .resize-sw { width: 20px; height: 20px; }
+}
 </style>
