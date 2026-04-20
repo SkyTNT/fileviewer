@@ -1,0 +1,12 @@
+[plugin]
+id       = "auth"
+version  = "1.0.0"
+name     = "Authentication"
+enabled  = true
+
+[plugin.provides]
+services = ["auth.verify", "auth.create_token", "auth.revoke"]
+
+[plugin.requires]
+services = []
+plugins  = []

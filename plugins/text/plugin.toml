@@ -1,0 +1,12 @@
+[plugin]
+id       = "text"
+version  = "1.0.0"
+name     = "Text Viewer"
+enabled  = true
+
+[plugin.provides]
+services = []
+
+[plugin.requires]
+services = ["fs.read", "fs.write"]
+plugins  = []

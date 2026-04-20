@@ -1,0 +1,38 @@
+export default {
+  action: {
+    compress: '圧縮',
+    extractHere: 'ここに展開',
+    extractSubfolder: 'サブフォルダに展開',
+  },
+  archive: {
+    app: {
+      contents: '内容',
+      entries: '{n} 件',
+      randomAccess: 'ランダムアクセス',
+      sequentialAccess: '順次アクセス',
+      password: 'パスワード',
+      passwordPrompt: 'このアーカイブはパスワードで保護されています',
+      unlock: 'ロック解除',
+      extractHere: 'ここに展開',
+      extractToSubfolder: 'サブフォルダに展開',
+      download: 'ダウンロード',
+      clickToView: 'ファイルをクリックして表示',
+      noRandomAccess: '順次フォーマット — ファイルを表示するには先に展開してください',
+      extracting: '展開中…',
+      close: '閉じる',
+    },
+    compress: {
+      title: 'アーカイブに追加',
+      outputName: '出力ファイル名',
+      format: 'フォーマット',
+      level: '圧縮レベル',
+      levelFast: '高速',
+      levelBest: '最高圧縮',
+      password: 'パスワード',
+      pwdZipNote: 'ZIP 暗号化には pyzipper が必要です',
+      contents: '圧縮内容',
+      compress: '圧縮',
+      done: '完了',
+    },
+  },
+}

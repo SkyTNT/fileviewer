@@ -1,0 +1,38 @@
+export default {
+  action: {
+    compress: 'Compress',
+    extractHere: 'Extract Here',
+    extractSubfolder: 'Extract to Subfolder',
+  },
+  archive: {
+    app: {
+      contents: 'Contents',
+      entries: '{n} entries',
+      randomAccess: 'Random Access',
+      sequentialAccess: 'Sequential',
+      password: 'Password',
+      passwordPrompt: 'This archive is password-protected',
+      unlock: 'Unlock',
+      extractHere: 'Extract Here',
+      extractToSubfolder: 'Extract to Subfolder',
+      download: 'Download',
+      clickToView: 'Click a file to view',
+      noRandomAccess: 'Sequential format — extract to view files',
+      extracting: 'Extracting…',
+      close: 'Close',
+    },
+    compress: {
+      title: 'Add to Archive',
+      outputName: 'Output filename',
+      format: 'Format',
+      level: 'Compression level',
+      levelFast: 'Fast',
+      levelBest: 'Best',
+      password: 'Password',
+      pwdZipNote: 'pyzipper required for ZIP encryption',
+      contents: 'Contents to compress',
+      compress: 'Compress',
+      done: 'Done',
+    },
+  },
+}

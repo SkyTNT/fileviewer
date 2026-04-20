@@ -1,0 +1,38 @@
+export default {
+  action: {
+    compress: '压缩',
+    extractHere: '解压到此处',
+    extractSubfolder: '解压到子文件夹',
+  },
+  archive: {
+    app: {
+      contents: '内容',
+      entries: '{n} 个条目',
+      randomAccess: '随机访问',
+      sequentialAccess: '顺序访问',
+      password: '密码',
+      passwordPrompt: '此压缩包受密码保护',
+      unlock: '解锁',
+      extractHere: '解压到此处',
+      extractToSubfolder: '解压到子文件夹',
+      download: '下载',
+      clickToView: '点击文件以查看',
+      noRandomAccess: '顺序格式 — 请先解压再查看文件',
+      extracting: '正在解压…',
+      close: '关闭',
+    },
+    compress: {
+      title: '添加到压缩包',
+      outputName: '输出文件名',
+      format: '格式',
+      level: '压缩级别',
+      levelFast: '最快',
+      levelBest: '最优',
+      password: '密码',
+      pwdZipNote: 'ZIP 加密需要安装 pyzipper',
+      contents: '待压缩内容',
+      compress: '压缩',
+      done: '完成',
+    },
+  },
+}
