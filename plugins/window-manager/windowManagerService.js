@@ -31,6 +31,7 @@ export function createWindowManager() {
 
   const manager = {
     get windows() { return state.windows },
+    get hasVisibleWindow() { return state.windows.some(w => !w.minimized) },
 
     open({ id, title, icon, component, props = {}, width, height, maximized = false }) {
       // If same id already open, just focus it

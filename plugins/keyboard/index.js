@@ -10,7 +10,7 @@ export async function setup(ctx) {
     const inEditable = EDITABLE.has(e.target?.tagName) || e.target?.isContentEditable
     if (inEditable && e.key !== 'Escape' && !e.key.startsWith('F')) return
 
-    if (winMgr()?.hasModal && e.key !== 'Escape') return
+    if (winMgr()?.hasVisibleWindow && e.key !== 'Escape') return
 
     ctx.events.emit('keyboard:keydown', {
       key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey, meta: e.metaKey, raw: e,

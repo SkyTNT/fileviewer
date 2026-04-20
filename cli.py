@@ -9,7 +9,7 @@ from pathlib import Path
 def main():
     parser = argparse.ArgumentParser(prog="fileviewerv2", description="File Viewer v2")
     parser.add_argument("path", nargs="*", default=["."], help="Root directories to serve")
-    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8001)
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--write", action="store_true", help="Enable write operations")
