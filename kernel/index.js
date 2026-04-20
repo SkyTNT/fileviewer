@@ -108,9 +108,21 @@ export class Kernel {
           .sort((a, b) => (a.priority ?? 50) - (b.priority ?? 50))
       },
       resolveDetail() {
-        return this._actions
+        const sorted = this._actions
           .filter(a => a.showIn?.detailPanel?.() === true)
           .sort((a, b) => (a.priority ?? 50) - (b.priority ?? 50))
+        const result = []
+        const grouped = new Map()
+        for (const a of sorted) {
+          if (!a.pairGroup) { result.push(a); continue }
+          if (!grouped.has(a.pairGroup)) {
+            const pair = { type: 'pair', id: a.pairGroup, items: [] }
+            grouped.set(a.pairGroup, pair)
+            result.push(pair)
+          }
+          grouped.get(a.pairGroup).items.push(a)
+        }
+        return result
       },
     })
     services.register('action.registry', actionRegistry, 'kernel')

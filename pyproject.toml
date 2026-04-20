@@ -27,3 +27,6 @@ fileviewerv2 = "cli:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["kernel*", "plugins*"]
+
+[tool.setuptools]
+py-modules = ["cli", "server", "config"]

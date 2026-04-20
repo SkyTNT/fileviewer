@@ -147,7 +147,7 @@ function cardStyle(file) {
 // ── Viewport culling (virtualization) ────────────────────────────────────────
 const viewportTop    = ref(0)
 const viewportBottom = ref(typeof window !== 'undefined' ? window.innerHeight : 0)
-const BUFFER_PX = 800
+const BUFFER_PX = 2000
 const EVICT_PX  = 10000
 
 const renderedPaths = new Set()
@@ -247,7 +247,7 @@ let savedScrollY = 0
 onMounted(() => {
   scrollObs = new IntersectionObserver(
     (entries) => { if (entries[0].isIntersecting) loadMore() },
-    { rootMargin: '400px' }
+    { rootMargin: '1200px' }
   )
   if (sentinelRef.value) scrollObs.observe(sentinelRef.value)
 

@@ -499,7 +499,7 @@ def delete_entries(req: BatchDeleteRequest):
             try:
                 if not target.exists() and not target.is_symlink():
                     raise FileNotFoundError(f"{name}: not found")
-                shutil.rmtree(target) if target.is_dir() else target.unlink()
+                shutil.rmtree(target) if (target.is_dir() and not target.is_symlink()) else target.unlink()
                 yield _sse({'type': 'progress', 'done': i+1, 'total': total, 'name': name})
             except Exception as e:
                 yield _sse({'type': 'error', 'done': i+1, 'total': total, 'name': name, 'message': str(e)})

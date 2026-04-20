@@ -64,7 +64,7 @@ def parse_path(rel_path: str) -> tuple[Path, str, Path]:
         raise HTTPException(status_code=404, detail=f"Root '{slug}' not found")
     _, _, root_abs = match
     if sub:
-        abs_path = (root_abs / sub).resolve()
+        abs_path = Path(os.path.normpath(root_abs / sub))
     else:
         abs_path = root_abs
     _check_under(abs_path, root_abs)
@@ -91,10 +91,11 @@ def validate_abs_path(abs_path_str: str) -> Path:
 
 def build_entry_path(p: Path, slug: str | None, root: Path) -> str:
     if slug is None:
-        return str(p)
+        return str(p).replace('\\', '/')
     try:
         rel = p.relative_to(root)
-        return f"{slug}/{rel}" if str(rel) != "." else slug
+        rel_str = str(rel).replace('\\', '/')
+        return f"{slug}/{rel_str}" if rel_str != "." else slug
     except ValueError:
         return str(p)
 

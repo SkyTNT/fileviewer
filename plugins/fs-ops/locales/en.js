@@ -9,6 +9,7 @@ export default {
     cut: 'Cut',
     paste: 'Paste',
     download: 'Download',
+    copyLink: 'Link',
   },
   dialog: {
     cancel: 'Cancel',

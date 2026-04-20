@@ -9,6 +9,7 @@ export default {
     cut: '剪切',
     paste: '粘贴',
     download: '下载',
+    copyLink: '链接',
   },
   dialog: {
     cancel: '取消',

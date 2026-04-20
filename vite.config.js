@@ -30,6 +30,19 @@ export default defineConfig({
       }
     }
   },
+  optimizeDeps: {
+    include: [
+      'vuetify/components/VNavigationDrawer',
+      'vuetify/components/VMain',
+      'vuetify/components/VBreadcrumbs',
+      'vuetify/components/VMenu',
+      'vuetify/components/VAppBar',
+      'vuetify/components/VBtnToggle',
+      'vuetify/components/VAvatar',
+      'vuetify/components/VSnackbar',
+      'vuetify/directives',
+    ],
+  },
   server: {
     allowedHosts: true,
     proxy: {

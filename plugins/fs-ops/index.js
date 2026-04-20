@@ -47,7 +47,9 @@ export async function setup(ctx) {
     },
     execute: () => {
       const file = ctxSel()[0]
-      if (file) ctx.services.get('app.registry').open(file)
+      if (!file) return
+      if (file.is_dir) explorerState.navigate(file.path)
+      else ctx.services.get('app.registry').open(file)
     },
   })
 
@@ -56,8 +58,8 @@ export async function setup(ctx) {
     icon: 'mdi-pencil-outline', color: undefined,
     label: () => ctx.services.get('i18n').t('action.rename'),
     showIn: {
-      contextMenu: () => ctxSel().length === 1,
-      detailPanel: () => sel().length === 1,
+      contextMenu: () => writeMode() && ctxSel().length === 1,
+      detailPanel: () => writeMode() && sel().length === 1,
     },
     execute: () => writeStore.openRename(ctxSel()[0]),
   })
@@ -67,8 +69,8 @@ export async function setup(ctx) {
     icon: 'mdi-delete-outline', color: 'error',
     label: () => ctx.services.get('i18n').t('action.delete'),
     showIn: {
-      contextMenu: () => ctxSel().length >= 1,
-      detailPanel: () => sel().length >= 1,
+      contextMenu: () => writeMode() && ctxSel().length >= 1,
+      detailPanel: () => writeMode() && sel().length >= 1,
     },
     execute: () => writeStore.openDelete(ctxSel()),
   })
@@ -97,11 +99,12 @@ export async function setup(ctx) {
 
   actionRegistry.register({
     id: 'copy', plugin: 'fs-ops', priority: 40,
+    pairGroup: 'clipboard-copy',
     icon: 'mdi-content-copy', color: undefined,
     label: () => ctx.services.get('i18n').t('action.copy'),
     showIn: {
-      contextMenu: () => ctxSel().length >= 1,
-      detailPanel: () => sel().length >= 1,
+      contextMenu: () => writeMode() && ctxSel().length >= 1,
+      detailPanel: () => writeMode() && sel().length >= 1,
     },
     execute: () => explorerState.setCopy(ctxSel()),
   })
@@ -140,6 +143,18 @@ export async function setup(ctx) {
       const path = ctxSel()[0]?.path
       if (path) window.open(ctx.services.get('files.api').downloadUrl(path))
     },
+  })
+
+  actionRegistry.register({
+    id: 'copy-link', plugin: 'fs-ops', priority: 41,
+    pairGroup: 'clipboard-copy',
+    icon: 'mdi-link-variant', color: undefined,
+    label: () => ctx.services.get('i18n').t('action.copyLink'),
+    showIn: {
+      contextMenu: () => writeMode() && ctxSel().length >= 1,
+      detailPanel: () => writeMode() && sel().length >= 1,
+    },
+    execute: () => explorerState.setCopyLink(ctxSel()),
   })
 
   toolbar.register({

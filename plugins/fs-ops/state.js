@@ -182,7 +182,7 @@ export function createWriteState(explorerState, taskState, winMgr, writeApi, rea
     const abort = new AbortController()
     const task  = taskState.add({ component: PasteTaskItem, data, cancel: () => abort.abort() })
     try {
-      const res = await writeApi.paste(entries.map(e => e.path), destDir, action, strategy, abort.signal)
+      const res = await writeApi.paste(entries, action, destDir, strategy, abort.signal)
       await readSSE(res, (ev) => {
         if (ev.type === 'progress') {
           data.done    = ev.done
@@ -206,11 +206,11 @@ export function createWriteState(explorerState, taskState, winMgr, writeApi, rea
   }
 
   async function _executeLink(entries, destDir, strategy) {
-    const data  = reactive({ done: 0, total: entries.length, current: '' })
+    const data  = reactive({ action: 'link', done: 0, total: entries.length, current: '' })
     const abort = new AbortController()
     const task  = taskState.add({ component: PasteTaskItem, data, cancel: () => abort.abort() })
     try {
-      const res = await writeApi.link(entries.map(e => e.path), destDir, strategy, abort.signal)
+      const res = await writeApi.symlink(entries, destDir, strategy, abort.signal)
       await readSSE(res, (ev) => {
         if (ev.type === 'progress') {
           data.done    = ev.done

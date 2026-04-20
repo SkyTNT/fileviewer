@@ -9,6 +9,7 @@ export default {
     cut: '切り取り',
     paste: '貼り付け',
     download: 'ダウンロード',
+    copyLink: 'リンク',
   },
   dialog: {
     cancel: 'キャンセル',
