@@ -108,13 +108,8 @@ def get_disk_usage(path: Path) -> dict | None:
         return None
 
 
-def _dtype_to_node(name: str, dtype) -> dict:
-    node = {"name": name, "dtype": str(dtype)}
-    fields = getattr(dtype, "fields", None)
-    if fields:
-        node["fields"] = [_dtype_to_node(f.name, f.dtype) for f in fields]
-    return node
-
-
-def schema_to_tree(schema) -> list[dict]:
-    return [_dtype_to_node(name, dtype) for name, dtype in schema.items()]
+def require_write() -> None:
+    from fastapi import HTTPException
+    import os
+    if os.environ.get("FILE_VIEWER_WRITE", "").lower() in ("", "0", "false", "no"):
+        raise HTTPException(status_code=403, detail="Write mode not enabled")

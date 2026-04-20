@@ -89,13 +89,9 @@ def logout(response: Response, fv_token: str | None = Cookie(None)):
 
 
 async def setup(ctx):
-    ctx.services.register("auth.verify",       _verify_request, PLUGIN_ID)
-    ctx.services.register("auth.create_token", _create_token,   PLUGIN_ID)
-    ctx.services.register("auth.revoke",       _revoke_token,   PLUGIN_ID)
+    ctx.services.register("auth.verify", _verify_request, PLUGIN_ID)
     ctx.app.include_router(router, prefix="/api/auth", tags=["auth"])
 
 
 async def teardown(ctx):
-    ctx.services.unregister("auth.verify",       PLUGIN_ID)
-    ctx.services.unregister("auth.create_token", PLUGIN_ID)
-    ctx.services.unregister("auth.revoke",       PLUGIN_ID)
+    ctx.services.unregister("auth.verify", PLUGIN_ID)

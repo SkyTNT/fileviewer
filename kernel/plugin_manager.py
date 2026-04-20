@@ -16,10 +16,6 @@ class CircularDependencyError(Exception):
     pass
 
 
-class MissingDependencyError(Exception):
-    pass
-
-
 class PluginManager:
     def __init__(self, app: FastAPI, services: ServiceRegistry, events: EventBus):
         self._app = _WrappedApp(app)
@@ -75,12 +71,6 @@ class PluginManager:
                     deps[meta.id].add(pid)
 
         # Kahn's algorithm
-        in_degree = {m.id: 0 for m in metas}
-        for pid, dep_set in deps.items():
-            for dep in dep_set:
-                in_degree[pid] = in_degree.get(pid, 0)
-                in_degree[pid] += 1
-                # re-count properly below
         in_degree = {m.id: 0 for m in metas}
         for pid, dep_set in deps.items():
             for dep in dep_set:

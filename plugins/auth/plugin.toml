@@ -5,7 +5,7 @@ name     = "Authentication"
 enabled  = true
 
 [plugin.provides]
-services = ["auth.verify", "auth.create_token", "auth.revoke"]
+services = ["auth.verify"]
 
 [plugin.requires]
 services = []

@@ -7,13 +7,6 @@ import LoginPage from './LoginPage.vue'
 import { createAuthApi } from './api.js'
 export { manifest } from './manifest.js'
 
-// Shared reactive state — components import useAuthStore() to access it
-let _authState = null
-
-export function useAuthStore() {
-  return _authState
-}
-
 export async function setup(ctx) {
   const i18n = ctx.services.get('i18n')
   i18n.extend('auth', 'en', en)
@@ -25,7 +18,7 @@ export async function setup(ctx) {
   const authApi = createAuthApi(http)
   const slotHost = ctx.services.get('slot.host')
 
-  _authState = reactive({
+  const authState = reactive({
     authRequired: false,
     loggedIn: true,
     checking: true,
@@ -51,23 +44,22 @@ export async function setup(ctx) {
     },
   })
 
-  ctx.services.register('auth.state', _authState, 'auth')
+  ctx.services.register('auth.state', authState, 'auth')
 
-  await _authState.checkStatus()
-  if (_authState.authRequired && !_authState.loggedIn) {
+  await authState.checkStatus()
+  if (authState.authRequired && !authState.loggedIn) {
     slotHost.inject('app.login', markRaw(LoginPage), 'auth')
   }
 
-  window.addEventListener('fv:unauthorized', () => {
-    _authState.loggedIn = false
+  ctx.events.on('network:unauthorized', () => {
+    authState.loggedIn = false
     if (!slotHost.has('app.login')) {
       slotHost.inject('app.login', markRaw(LoginPage), 'auth')
     }
-  })
+  }, ctx.pluginId)
 }
 
 export async function teardown(ctx) {
   ctx.services.get('slot.host').remove('app.login', 'auth')
   ctx.services.unregister('auth.state', 'auth')
-  _authState = null
 }

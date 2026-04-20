@@ -1,5 +1,4 @@
 export class CircularDependencyError extends Error {}
-export class MissingDependencyError extends Error {}
 
 export class PluginManager {
   constructor(services, events) {
@@ -50,13 +49,6 @@ export class PluginManager {
 
     // Kahn's algorithm
     const inDegree = new Map(items.map(i => [i.manifest.id, 0]))
-    for (const [, depSet] of deps) {
-      for (const dep of depSet) {
-        // dep is a dependency of the node that has depSet
-        // We need: inDegree[node] = number of deps node has
-      }
-    }
-    // Recompute: inDegree[id] = deps.get(id).size
     for (const [id] of inDegree) inDegree.set(id, deps.get(id).size)
 
     const queue = [...inDegree.entries()].filter(([, d]) => d === 0).map(([id]) => id)

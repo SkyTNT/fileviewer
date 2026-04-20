@@ -1,9 +1,5 @@
 """Kernel built-in services registered before any plugin loads."""
-import asyncio
-import json
-import os
 from collections import defaultdict
-from typing import Any
 
 
 class FileTypeRegistry:
@@ -26,21 +22,7 @@ class FileTypeRegistry:
         return self._map.get(ext.lower())
 
 
-class TaskStream:
-    """SSE task stream: create a generator that yields SSE-formatted events."""
-
-    @staticmethod
-    def sse(data: Any) -> str:
-        return f"data: {json.dumps(data)}\n\n"
-
-    @staticmethod
-    def new_id() -> str:
-        import uuid
-        return str(uuid.uuid4())
-
-
 def register_builtins(services, config_roots_fn) -> None:
     """Register kernel built-in services into the ServiceRegistry."""
     services.register("file-type.registry", FileTypeRegistry(), "kernel")
-    services.register("task.stream", TaskStream(), "kernel")
     services.register("config.roots", config_roots_fn, "kernel")

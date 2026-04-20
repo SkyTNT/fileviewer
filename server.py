@@ -12,7 +12,7 @@ from config import get_roots, get_disk_usage
 from kernel.builtins import register_builtins
 from kernel.event_bus import EventBus
 from kernel.plugin_manager import PluginManager
-from kernel.service_registry import ServiceRegistry
+from kernel.service_registry import ServiceRegistry, ServiceNotFoundError
 
 STATIC_DIR = Path(__file__).parent / "static"
 PLUGIN_DIR = Path(__file__).parent / "plugins"
@@ -29,10 +29,12 @@ async def lifespan(app: FastAPI):
     pm = PluginManager(app, services, events)
     await pm.load_all([PLUGIN_DIR])
 
-    auth_verify = services.get("auth.verify")
-    if auth_verify:
+    try:
+        auth_verify = services.get("auth.verify")
         _auth_verify_ref.clear()
         _auth_verify_ref.append(auth_verify)
+    except ServiceNotFoundError:
+        pass
 
     if STATIC_DIR.exists() and any(STATIC_DIR.iterdir()):
         app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")

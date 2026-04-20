@@ -44,7 +44,7 @@ vueApp.use(vuetify)
 vueApp.use(i18n)
 
 const kernel = await Kernel.init(vueApp)
-window.__fv_kernel = kernel
+if (import.meta.env.DEV) window.__fv_kernel = kernel
 
 // Wire i18n instance into the i18n service
 kernel.services.get('i18n').setInstance(i18n.global)

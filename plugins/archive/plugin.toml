@@ -5,7 +5,7 @@ name     = "Archive Support"
 enabled  = true
 
 [plugin.provides]
-services = ["archive.read", "archive.write", "archive.capabilities"]
+services = ["archive.capabilities"]
 
 [plugin.requires]
 services = ["fs.read", "fs.write", "fs.resolve"]

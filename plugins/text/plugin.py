@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel
-from config import validate_path
+from config import validate_path, require_write
 
 PLUGIN_ID = "text"
 router = APIRouter()
@@ -33,9 +33,7 @@ class SaveRequest(BaseModel):
 
 @router.post("/save")
 def save_file(req: SaveRequest):
-    import os
-    if os.environ.get("FILE_VIEWER_WRITE", "").lower() in ("", "0", "false", "no"):
-        raise HTTPException(status_code=403, detail="Write mode not enabled")
+    require_write()
     file_path = validate_path(req.path)
     if file_path.is_dir():
         raise HTTPException(status_code=400, detail="Path is a directory")

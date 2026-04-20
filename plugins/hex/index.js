@@ -42,6 +42,5 @@ export async function setup(ctx) {
 
 export async function teardown(ctx) {
   ctx.services.get('app.registry').unregister('hex')
-  ctx.services.get('action.registry').unregisterAll('hex')
   ctx.services.unregister('hex.api', 'hex')
 }

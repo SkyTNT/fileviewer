@@ -4,9 +4,8 @@ import PasteTaskItem  from './PasteTaskItem.vue'
 import DeleteTaskItem from './DeleteTaskItem.vue'
 import DialogNewItem       from './dialogs/DialogNewItem.vue'
 import DialogConfirmDelete from './dialogs/DialogConfirmDelete.vue'
-import { openConflictDialog } from './dialogs/openConflictDialog.js'
 
-export function createWriteState(explorerState, taskState, winMgr, writeApi, readSSE) {
+export function createWriteState(explorerState, taskState, winMgr, writeApi, readSSE, openConflictFn) {
   function openRename(file, onSuccess = null) {
     const state = reactive({ name: file?.name || '', loading: false, error: '' })
     winMgr.open({
@@ -167,7 +166,7 @@ export function createWriteState(explorerState, taskState, winMgr, writeApi, rea
     const destDir = explorerState.currentPath
     const res = await writeApi.checkConflicts(entries.map(e => ({ name: e.name, dest_parent: destDir })))
     if (res.data.conflicts.length > 0) {
-      const strategy = await openConflictDialog(winMgr, res.data.conflicts)
+      const strategy = await openConflictFn(res.data.conflicts)
       if (!strategy) return
       if (action === 'link') { await _executeLink(entries, destDir, strategy); return }
       await _executePaste(entries, action, destDir, strategy)

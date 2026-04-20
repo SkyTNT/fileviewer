@@ -8,7 +8,7 @@ from typing import Optional
 import polars as pl
 from fastapi import APIRouter, Query, HTTPException
 
-from config import validate_path, validate_abs_path, schema_to_tree
+from config import validate_path, validate_abs_path
 
 PLUGIN_ID = "dataframe"
 router = APIRouter()
@@ -19,6 +19,18 @@ CSV_EXTENSIONS   = {".csv"}
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".svg"}
 
 _http_client = None
+
+
+def _dtype_to_node(name: str, dtype) -> dict:
+    node = {"name": name, "dtype": str(dtype)}
+    fields = getattr(dtype, "fields", None)
+    if fields:
+        node["fields"] = [_dtype_to_node(f.name, f.dtype) for f in fields]
+    return node
+
+
+def schema_to_tree(schema) -> list[dict]:
+    return [_dtype_to_node(name, dtype) for name, dtype in schema.items()]
 
 
 @lru_cache(maxsize=32)

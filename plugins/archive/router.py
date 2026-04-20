@@ -936,17 +936,3 @@ def get_capabilities():
     }
 
 
-PLUGIN_ID = "archive"
-
-
-async def setup(ctx):
-    ctx.services.register("archive.read",         lambda path: None, PLUGIN_ID)
-    ctx.services.register("archive.write",        lambda path: None, PLUGIN_ID)
-    ctx.services.register("archive.capabilities", get_capabilities,  PLUGIN_ID)
-    ctx.app.include_router(router, prefix="/api/archive", tags=["archive"])
-
-
-async def teardown(ctx):
-    ctx.services.unregister("archive.read",         PLUGIN_ID)
-    ctx.services.unregister("archive.write",        PLUGIN_ID)
-    ctx.services.unregister("archive.capabilities", PLUGIN_ID)

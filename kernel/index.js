@@ -1,4 +1,4 @@
-import { reactive, markRaw, nextTick } from 'vue'
+import { reactive, markRaw } from 'vue'
 import { ServiceRegistry } from './ServiceRegistry.js'
 import { EventBus } from './EventBus.js'
 import { PluginManager } from './PluginManager.js'
@@ -33,9 +33,7 @@ export class Kernel {
     // app.registry
     const appRegistry = reactive({
       _descriptors: [],
-      _activeId: null,
       register(descriptor) {
-        descriptor._ref = { value: null }
         this._descriptors.push(descriptor)
       },
       unregister(key) {
@@ -48,33 +46,20 @@ export class Kernel {
           ? this._descriptors.find(d => d.key === opts.app)
           : [...this._descriptors].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0)).find(d => d.match(target, opts))
         if (!desc) return null
-
         const winMgr = services.get('window.manager')
-        if (winMgr) {
-          const winId = `app:${desc.key}:${target.path ?? target}`
-          winMgr.open({
-            id:        winId,
-            title:     target.name ?? String(target),
-            icon:      desc.icon ?? 'mdi-file-outline',
-            component: desc.component,
-            props:     { file: target, appOpts: opts },
-            width:     desc.defaultWidth  ?? 900,
-            height:    desc.defaultHeight ?? 600,
-            maximized: desc.overlay ?? false,
-          })
-          return winId
-        }
-
-        // Fallback: legacy dialog-based open
-        this._activeId = desc.key
-        nextTick(() => desc._ref.value?.open(target, opts))
-        return desc._ref.value
+        const winId = `app:${desc.key}:${target.path ?? target}`
+        winMgr.open({
+          id:        winId,
+          title:     target.name ?? String(target),
+          icon:      desc.icon ?? 'mdi-file-outline',
+          component: desc.component,
+          props:     { file: target, appOpts: opts },
+          width:     desc.defaultWidth  ?? 900,
+          height:    desc.defaultHeight ?? 600,
+          maximized: desc.overlay ?? false,
+        })
+        return winId
       },
-      close() {
-        this._activeId = null
-      },
-      get activeId() { return this._activeId },
-      isOpen(key) { return this._activeId === key },
       get descriptors() { return this._descriptors },
     })
     services.register('app.registry', appRegistry, 'kernel')
@@ -147,18 +132,6 @@ export class Kernel {
       },
     })
     services.register('toolbar.registry', toolbarRegistry, 'kernel')
-
-    // task.manager
-    let _taskCounter = 0
-    const taskManager = reactive({
-      _tasks: new Map(),
-      newId() { return `task-${++_taskCounter}` },
-      add(id, task) { this._tasks.set(id, reactive(task)) },
-      get(id) { return this._tasks.get(id) },
-      remove(id) { this._tasks.delete(id) },
-      get all() { return [...this._tasks.values()] },
-    })
-    services.register('task.manager', taskManager, 'kernel')
 
     // i18n
     const i18nService = {

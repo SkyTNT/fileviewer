@@ -2,15 +2,7 @@ import axios from 'axios'
 
 const http = axios.create({ baseURL: '/api', withCredentials: true })
 
-http.interceptors.response.use(
-  r => r,
-  err => {
-    if (err.response?.status === 401) {
-      window.dispatchEvent(new CustomEvent('fv:unauthorized'))
-    }
-    return Promise.reject(err)
-  }
-)
+http.interceptors.response.use(r => r, err => Promise.reject(err))
 
 export const httpStream = {
   get: (path, options = {}) =>
