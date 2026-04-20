@@ -18,6 +18,17 @@ export default defineConfig({
     outDir: 'static',
     emptyOutDir: true,
     target: 'esnext',
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('vuetify')) return 'vuetify'
+            if (id.includes('codemirror') || id.includes('@codemirror')) return 'codemirror'
+            return 'vendor'
+          }
+        }
+      }
+    }
   },
   server: {
     allowedHosts: true,
