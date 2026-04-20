@@ -24,29 +24,32 @@ export async function setup(ctx) {
   i18n.extend('image', 'ja', ja)
 
   const http = ctx.services.get('network.http')
+  const winMgr    = ctx.services.get('window.manager')
   const imagesApi = createImagesApi(http)
   ctx.services.register('images.api', imagesApi, 'image')
-  const registry      = ctx.services.get('app.registry')
+  const registry = ctx.services.get('app.registry')
 
   registry.register({
     key: 'image',
-    component: markRaw(ImageViewer),
     icon: 'mdi-image-outline',
-    defaultWidth: 900,
-    defaultHeight: 650,
-    overlay: true,
     priority: 50,
     match: (target) => !Array.isArray(target) && isImage(target),
+    open(target) {
+      const id = `app:image:${target.path}`
+      winMgr.open({ id, title: target.name, icon: 'mdi-image-outline', component: markRaw(ImageViewer), props: { file: target }, width: 900, height: 650, maximized: true })
+      return id
+    },
   })
 
   registry.register({
     key: 'image-compare',
-    component: markRaw(ImageComparisonViewer),
     icon: 'mdi-compare',
-    defaultWidth: 1000,
-    defaultHeight: 650,
-    overlay: true,
     match: (target) => Array.isArray(target) && target.length === 2 && target.every(isImage),
+    open(target) {
+      const id = `app:image-compare:${target[0].path}|${target[1].path}`
+      winMgr.open({ id, title: `${target[0].name} / ${target[1].name}`, icon: 'mdi-compare', component: markRaw(ImageComparisonViewer), props: { file: target }, width: 1000, height: 650, maximized: true })
+      return id
+    },
   })
 
   const actionRegistry = ctx.services.get('action.registry')

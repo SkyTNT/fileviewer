@@ -20,12 +20,14 @@ export async function setup(ctx) {
   const winMgr         = ctx.services.get('window.manager')
   appRegistry.register({
     key: 'hex',
-    component: markRaw(HexViewer),
     icon: 'mdi-hexadecimal',
-    defaultWidth: 760,
-    defaultHeight: 560,
     priority: -10,
     match: (target) => !Array.isArray(target) && !target?.is_dir,
+    open(target) {
+      const id = `app:hex:${target.path}`
+      winMgr.open({ id, title: target.name, icon: 'mdi-hexadecimal', component: markRaw(HexViewer), props: { file: target }, width: 760, height: 560, maximized: false })
+      return id
+    },
   })
 
   const explorerState = ctx.services.get('explorer.state')

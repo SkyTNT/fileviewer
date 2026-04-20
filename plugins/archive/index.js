@@ -32,12 +32,14 @@ export async function setup(ctx) {
 
   registry.register({
     key: 'archive',
-    component: markRaw(ArchiveViewer),
     icon: 'mdi-archive-outline',
     priority: 10,
-    defaultWidth: 1000,
-    defaultHeight: 680,
     match: (target) => !Array.isArray(target) && target?.type === 'archive',
+    open(target) {
+      const id = `app:archive:${target.path}`
+      winMgr.open({ id, title: target.name, icon: 'mdi-archive-outline', component: markRaw(ArchiveViewer), props: { file: target }, width: 1000, height: 680, maximized: false })
+      return id
+    },
   })
 
   const actionRegistry = ctx.services.get('action.registry')

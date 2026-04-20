@@ -3,5 +3,5 @@ export const manifest = {
   name: 'Image App',
   version: '1.0.0',
   provides: { services: ['images.api'] },
-  requires: { services: ['network.http', 'app.registry', 'explorer.state'], plugins: [] },
+  requires: { services: ['network.http', 'app.registry', 'explorer.state', 'window.manager'], plugins: [] },
 }

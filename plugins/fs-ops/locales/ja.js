@@ -10,6 +10,7 @@ export default {
     paste: '貼り付け',
     download: 'ダウンロード',
     copyLink: 'リンク',
+    copyContent: '内容をコピー',
   },
   dialog: {
     cancel: 'キャンセル',
@@ -44,5 +45,6 @@ export default {
     cancel: 'キャンセル',
     andMore: '… さらに {n} 件',
     copiedToClipboard: 'クリップボードにコピーしました',
+    binaryFileError: 'バイナリファイルをテキストとしてコピーできません',
   },
 }

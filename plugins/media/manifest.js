@@ -3,5 +3,5 @@ export const manifest = {
   name: 'Media App',
   version: '1.0.0',
   provides: { services: ['media.api'] },
-  requires: { services: ['app.registry'], plugins: [] },
+  requires: { services: ['app.registry', 'window.manager'], plugins: [] },
 }

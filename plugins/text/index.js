@@ -18,26 +18,31 @@ export async function setup(ctx) {
 
   ctx.services.register('text.api', createTextApi(ctx.services.get('network.http')), 'text')
 
+  const winMgr   = ctx.services.get('window.manager')
   const registry = ctx.services.get('app.registry')
 
   registry.register({
     key: 'json',
-    component: markRaw(JsonViewer),
     icon: 'mdi-code-json',
-    defaultWidth: 900,
-    defaultHeight: 620,
     priority: 10,
     match: (target) => !Array.isArray(target) && ['json', 'jsonl'].includes(target?.type),
+    open(target) {
+      const id = `app:json:${target.path}`
+      winMgr.open({ id, title: target.name, icon: 'mdi-code-json', component: markRaw(JsonViewer), props: { file: target }, width: 900, height: 620, maximized: false })
+      return id
+    },
   })
 
   registry.register({
     key: 'text',
-    component: markRaw(TextViewer),
     icon: 'mdi-file-document-outline',
-    defaultWidth: 1100,
-    defaultHeight: 700,
     priority: -10,
     match: (target) => !Array.isArray(target) && target?.type === 'text',
+    open(target) {
+      const id = `app:text:${target.path}`
+      winMgr.open({ id, title: target.name, icon: 'mdi-file-document-outline', component: markRaw(TextViewer), props: { file: target }, width: 1100, height: 700, maximized: false })
+      return id
+    },
   })
 
   ctx.services.register('ui.json-node',   markRaw(JsonNode),   'text')

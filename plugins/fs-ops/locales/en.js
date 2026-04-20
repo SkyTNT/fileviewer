@@ -10,6 +10,7 @@ export default {
     paste: 'Paste',
     download: 'Download',
     copyLink: 'Link',
+    copyContent: 'Copy Content',
   },
   dialog: {
     cancel: 'Cancel',
@@ -44,5 +45,6 @@ export default {
     cancel: 'Cancel',
     andMore: '… and {n} more',
     copiedToClipboard: 'Copied to clipboard',
+    binaryFileError: 'Cannot copy binary file as text',
   },
 }

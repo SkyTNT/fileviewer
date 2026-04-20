@@ -10,6 +10,7 @@ export default {
     paste: '貼上',
     download: '下載',
     copyLink: '連結',
+    copyContent: '複製內容',
   },
   dialog: {
     cancel: '取消',
@@ -44,5 +45,6 @@ export default {
     cancel: '取消',
     andMore: '… 還有 {n} 項',
     copiedToClipboard: '已複製到剪貼簿',
+    binaryFileError: '無法將二進位檔案複製為文字',
   },
 }

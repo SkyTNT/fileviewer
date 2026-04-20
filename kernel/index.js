@@ -46,19 +46,7 @@ export class Kernel {
           ? this._descriptors.find(d => d.key === opts.app)
           : [...this._descriptors].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0)).find(d => d.match(target, opts))
         if (!desc) return null
-        const winMgr = services.get('window.manager')
-        const winId = `app:${desc.key}:${target.path ?? target}`
-        winMgr.open({
-          id:        winId,
-          title:     target.name ?? String(target),
-          icon:      desc.icon ?? 'mdi-file-outline',
-          component: desc.component,
-          props:     { file: target, appOpts: opts },
-          width:     desc.defaultWidth  ?? 900,
-          height:    desc.defaultHeight ?? 600,
-          maximized: desc.overlay ?? false,
-        })
-        return winId
+        return desc.open(target, opts)
       },
       get descriptors() { return this._descriptors },
     })

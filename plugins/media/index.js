@@ -5,15 +5,18 @@ export { manifest } from './manifest.js'
 
 export async function setup(ctx) {
   ctx.services.register('media.api', createMediaApi(), 'media')
-  const registry   = ctx.services.get('app.registry')
+  const winMgr   = ctx.services.get('window.manager')
+  const registry = ctx.services.get('app.registry')
 
   registry.register({
     key: 'media',
-    component: markRaw(MediaPlayer),
     icon: 'mdi-play-circle-outline',
-    defaultWidth: 960,
-    defaultHeight: 580,
     match: (target) => !Array.isArray(target) && ['video', 'audio'].includes(target?.type),
+    open(target) {
+      const id = `app:media:${target.path}`
+      winMgr.open({ id, title: target.name, icon: 'mdi-play-circle-outline', component: markRaw(MediaPlayer), props: { file: target }, width: 960, height: 580, maximized: false })
+      return id
+    },
   })
 }
 

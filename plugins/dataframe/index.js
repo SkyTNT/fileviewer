@@ -16,14 +16,17 @@ export async function setup(ctx) {
 
   ctx.services.register('dataframe.api', createDataframeApi(ctx.services.get('network.http')), 'dataframe')
 
+  const winMgr = ctx.services.get('window.manager')
   ctx.services.get('app.registry').register({
     key: 'dataframe',
-    component: markRaw(DataFrameViewer),
     icon: 'mdi-table-large',
-    defaultWidth: 1200,
-    defaultHeight: 680,
     priority: 20,
     match: (target) => !Array.isArray(target) && ['parquet', 'csv', 'jsonl'].includes(target?.type),
+    open(target) {
+      const id = `app:dataframe:${target.path}`
+      winMgr.open({ id, title: target.name, icon: 'mdi-table-large', component: markRaw(DataFrameViewer), props: { file: target }, width: 1200, height: 680, maximized: false })
+      return id
+    },
   })
 }
 
