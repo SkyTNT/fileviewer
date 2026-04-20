@@ -16,11 +16,11 @@ export async function setup(ctx) {
 
   const slotHost  = ctx.services.get('slot.host')
   const taskState = createTaskState()
-  ctx.services.register('task.store', taskState, 'task-panel')
+  ctx.services.register('task.state', taskState, 'task-panel')
   slotHost.inject('task.panel', markRaw(TaskPanel), 'task-panel')
 }
 
 export async function teardown(ctx) {
   ctx.services.get('slot.host').remove('task.panel', 'task-panel')
-  ctx.services.unregister('task.store', 'task-panel')
+  ctx.services.unregister('task.state', 'task-panel')
 }

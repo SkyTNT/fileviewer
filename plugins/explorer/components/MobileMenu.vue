@@ -183,14 +183,14 @@ function triggerUpload() { events?.emit('upload:trigger') }
           :title="t('toolbar.newFile')"
           density="compact"
           rounded="lg"
-          @click="services.get('write.store').openTouch()"
+          @click="services.get('write.state').openTouch()"
         />
         <v-list-item
           prepend-icon="mdi-folder-plus-outline"
           :title="t('toolbar.newFolder')"
           density="compact"
           rounded="lg"
-          @click="services.get('write.store').openMkdir()"
+          @click="services.get('write.state').openMkdir()"
         />
         <template v-if="store.clipboard">
           <v-list-item
@@ -199,7 +199,7 @@ function triggerUpload() { events?.emit('upload:trigger') }
             density="compact"
             rounded="lg"
             color="primary"
-            @click="services.get('write.store').doPaste()"
+            @click="services.get('write.state').doPaste()"
           />
           <v-list-item
             prepend-icon="mdi-close-circle-outline"

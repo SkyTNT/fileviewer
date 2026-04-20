@@ -12,7 +12,7 @@ const props = defineProps({
 const { t }        = useI18n()
 const services     = inject('services')
 const fileStore    = services?.get('explorer.state')
-const archiveStore = services?.get('archive.store')
+const archiveStore = services?.get('archive.state')
 const archiveApi   = services?.get('archive.api')
 
 const outputName  = ref('')

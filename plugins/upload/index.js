@@ -15,7 +15,7 @@ export async function setup(ctx) {
   i18n.extend('upload', 'ja', ja)
 
   const explorerState = ctx.services.get('explorer.state')
-  const taskState     = ctx.services.get('task.store')
+  const taskState     = ctx.services.get('task.state')
   const appConfig     = ctx.services.get('app.config')
   const winMgr        = ctx.services.get('window.manager')
   const toolbar       = ctx.services.get('toolbar.registry')
@@ -23,7 +23,7 @@ export async function setup(ctx) {
   const writeApi           = ctx.services.get('write.api')
   const openConflictDialog = ctx.services.get('fs-ops.conflict-dialog')
   const uploadState        = createUploadState(explorerState, taskState, winMgr, writeApi, openConflictDialog)
-  ctx.services.register('upload.store', uploadState, 'upload')
+  ctx.services.register('upload.state', uploadState, 'upload')
 
   slotHost.inject('windows', markRaw(UploadTrigger), 'upload')
 
@@ -49,5 +49,5 @@ export async function setup(ctx) {
 export async function teardown(ctx) {
   ctx.services.get('slot.host').remove('windows', 'upload')
   ctx.services.get('toolbar.registry').unregister('upload-button')
-  ctx.services.unregister('upload.store', 'upload')
+  ctx.services.unregister('upload.state', 'upload')
 }

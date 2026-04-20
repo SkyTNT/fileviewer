@@ -2,7 +2,7 @@
 import { computed, inject } from 'vue'
 
 const props     = defineProps({ task: Object })
-const taskStore = inject('services').get('task.store')
+const taskStore = inject('services').get('task.state')
 
 const d       = computed(() => props.task.data)
 const percent = computed(() =>

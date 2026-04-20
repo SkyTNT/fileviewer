@@ -17,7 +17,7 @@ export async function setup(ctx) {
 
   const registry      = ctx.services.get('app.registry')
   const explorerState = ctx.services.get('explorer.state')
-  const taskState     = ctx.services.get('task.store')
+  const taskState     = ctx.services.get('task.state')
   const appConfig     = ctx.services.get('app.config')
   const winMgr        = ctx.services.get('window.manager')
   const writeApi      = ctx.services.get('write.api')
@@ -27,7 +27,7 @@ export async function setup(ctx) {
   const openConflictDialog = ctx.services.get('fs-ops.conflict-dialog')
   const archiveApi         = createArchiveApi(http, httpStream)
   const archiveState       = createArchiveState(explorerState, taskState, winMgr, archiveApi, writeApi, readSSE, openConflictDialog)
-  ctx.services.register('archive.store', archiveState, 'archive')
+  ctx.services.register('archive.state', archiveState, 'archive')
   ctx.services.register('archive.api', archiveApi, 'archive')
 
   registry.register({
@@ -90,6 +90,6 @@ export async function setup(ctx) {
 export async function teardown(ctx) {
   ctx.services.get('app.registry').unregister('archive')
   ctx.services.get('action.registry').unregisterAll('archive')
-  ctx.services.unregister('archive.store', 'archive')
+  ctx.services.unregister('archive.state', 'archive')
   ctx.services.unregister('archive.api', 'archive')
 }

@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 const props     = defineProps({ task: Object })
 const { t }     = useI18n()
-const taskStore = inject('services').get('task.store')
+const taskStore = inject('services').get('task.state')
 
 const files     = computed(() => props.task.data.files)
 const uploading = computed(() => files.value.filter(f => f.status === 'uploading').length)

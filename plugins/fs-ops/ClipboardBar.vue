@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 const services    = inject('services')
 const store       = services.get('explorer.state')
-const writeStore  = services.get('write.store')
+const writeStore  = services.get('write.state')
 const { t } = useI18n()
 
 const clipboardLabel = computed(() => {

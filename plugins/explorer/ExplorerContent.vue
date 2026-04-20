@@ -66,7 +66,7 @@ function onDrop(e) {
   if (!canWriteHere.value) return
   const files = Array.from(e.dataTransfer?.files ?? [])
   if (files.length) {
-    const uploadStore = services.get('upload.store')
+    const uploadStore = services.get('upload.state')
     uploadStore?.addUploads(store.currentPath, files)
   }
 }

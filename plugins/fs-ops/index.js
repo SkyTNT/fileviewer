@@ -17,7 +17,7 @@ export async function setup(ctx) {
   i18n.extend('fs-ops', 'ja', ja)
 
   const explorerState = ctx.services.get('explorer.state')
-  const taskState     = ctx.services.get('task.store')
+  const taskState     = ctx.services.get('task.state')
   const appConfig     = ctx.services.get('app.config')
   const winMgr        = ctx.services.get('window.manager')
   const toolbar       = ctx.services.get('toolbar.registry')
@@ -28,7 +28,7 @@ export async function setup(ctx) {
   const conflictDialogFn = (conflicts) => openConflictDialog(winMgr, conflicts)
   ctx.services.register('fs-ops.conflict-dialog', conflictDialogFn, 'fs-ops')
   const writeStore    = createWriteState(explorerState, taskState, winMgr, writeApi, readSSE, conflictDialogFn)
-  ctx.services.register('write.store', writeStore, 'fs-ops')
+  ctx.services.register('write.state', writeStore, 'fs-ops')
   ctx.services.register('write.api', writeApi, 'fs-ops')
 
   const actionRegistry = ctx.services.get('action.registry')
@@ -194,7 +194,7 @@ export async function setup(ctx) {
 
 export async function teardown(ctx) {
   ctx.services.unregister('fs-ops.conflict-dialog', 'fs-ops')
-  ctx.services.unregister('write.store', 'fs-ops')
+  ctx.services.unregister('write.state', 'fs-ops')
   ctx.services.unregister('write.api', 'fs-ops')
   ctx.services.get('action.registry').unregisterAll('fs-ops')
   ctx.services.get('toolbar.registry').unregister('mkdir-button')

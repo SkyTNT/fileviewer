@@ -4,7 +4,7 @@ import { ref, inject, onMounted, onUnmounted } from 'vue'
 const services     = inject('services')
 const events       = inject('events')
 const explorerState = services.get('explorer.state')
-const uploadStore  = services.get('upload.store')
+const uploadStore  = services.get('upload.state')
 
 const uploadInput = ref(null)
 

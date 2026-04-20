@@ -3,7 +3,7 @@ import { ref, computed, watch, inject } from 'vue'
 import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 
-const taskStore = inject('services').get('task.store')
+const taskStore = inject('services').get('task.state')
 const { mobile } = useDisplay()
 const { t }      = useI18n()
 const collapsed  = ref(false)
