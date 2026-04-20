@@ -3,7 +3,7 @@ import { computed, ref, watch, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const fileStore = inject('services')?.get('explorer.state')
-const JsonNode  = inject('services')?.get('ui.json-node')
+const JsonNode  = inject('services')?.get('text.json-node')
 const { t }     = useI18n()
 const services  = inject('services')
 const imagesApi = services?.get('images.api')

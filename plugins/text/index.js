@@ -45,15 +45,15 @@ export async function setup(ctx) {
     },
   })
 
-  ctx.services.register('ui.json-node',   markRaw(JsonNode),   'text')
-  ctx.services.register('ui.json-viewer', markRaw(JsonViewer), 'text')
+  ctx.services.register('text.json-node',   markRaw(JsonNode),   'text')
+  ctx.services.register('text.json-viewer', markRaw(JsonViewer), 'text')
 }
 
 export async function teardown(ctx) {
   const registry = ctx.services.get('app.registry')
   registry.unregister('json')
   registry.unregister('text')
-  ctx.services.unregister('ui.json-node',   'text')
-  ctx.services.unregister('ui.json-viewer', 'text')
+  ctx.services.unregister('text.json-node',   'text')
+  ctx.services.unregister('text.json-viewer', 'text')
   ctx.services.unregister('text.api', 'text')
 }

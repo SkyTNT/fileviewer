@@ -120,6 +120,7 @@ function startCompress() {
         :label="t('archive.compress.format')"
         density="compact"
         variant="outlined"
+        :menu-props="{ zIndex: 3000 }"
         style="flex:1"
       />
       <div style="flex:1">

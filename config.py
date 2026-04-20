@@ -22,7 +22,7 @@ def _make_slugs(bases: list[str]) -> list[str]:
             result.append(b)
         else:
             count[b] += 1
-            result.append(f"{b}_{count[b] + 1}")
+            result.append(f"{b}_{count[b]}")
     return result
 
 

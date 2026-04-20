@@ -1,5 +1,6 @@
 import os
 import secrets
+import threading
 import time
 from fastapi import APIRouter, Request, Response, Cookie, HTTPException
 from pydantic import BaseModel
@@ -8,6 +9,7 @@ PLUGIN_ID = "auth"
 
 TOKEN_EXPIRY = 86400 * 30
 _session_tokens: dict[str, float] = {}
+_tokens_lock = threading.Lock()
 
 
 def _auth_required() -> bool:
@@ -25,11 +27,12 @@ def _check_credentials(username: str, password: str) -> bool:
 
 def _create_token() -> str:
     now = time.time()
-    expired = [t for t, exp in _session_tokens.items() if exp < now]
-    for t in expired:
-        del _session_tokens[t]
-    token = secrets.token_hex(32)
-    _session_tokens[token] = now + TOKEN_EXPIRY
+    with _tokens_lock:
+        expired = [t for t, exp in _session_tokens.items() if exp < now]
+        for t in expired:
+            del _session_tokens[t]
+        token = secrets.token_hex(32)
+        _session_tokens[token] = now + TOKEN_EXPIRY
     return token
 
 
@@ -37,15 +40,17 @@ def _verify_token(token: str | None) -> bool:
     if not token:
         return False
     now = time.time()
-    for stored, exp in _session_tokens.items():
-        if exp >= now and secrets.compare_digest(token, stored):
-            return True
+    with _tokens_lock:
+        for stored, exp in _session_tokens.items():
+            if exp >= now and secrets.compare_digest(token, stored):
+                return True
     return False
 
 
 def _revoke_token(token: str | None) -> None:
-    if token and token in _session_tokens:
-        del _session_tokens[token]
+    if token:
+        with _tokens_lock:
+            _session_tokens.pop(token, None)
 
 
 def _verify_request(request: Request) -> bool:

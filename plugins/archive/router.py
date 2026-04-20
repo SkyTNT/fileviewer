@@ -6,10 +6,10 @@ import time
 import zipfile
 import tarfile
 from datetime import datetime
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
-from config import validate_path
+from config import validate_path, require_write
 
 router = APIRouter()
 
@@ -375,7 +375,12 @@ def _sse_resp(gen):
 
 def _resolve_dest(dest_dir: pathlib.Path, entry_path: str, strategy: str) -> pathlib.Path | None:
     """Return the output path for a file, or None to skip it."""
-    out = dest_dir / pathlib.PurePosixPath(entry_path)
+    out = (dest_dir / pathlib.PurePosixPath(entry_path)).resolve()
+    # Guard against path traversal (e.g. ../../etc/passwd in archive member names)
+    try:
+        out.relative_to(dest_dir.resolve())
+    except ValueError:
+        return None
     if not out.exists() or strategy == 'overwrite':
         return out
     if strategy == 'skip':
@@ -410,7 +415,7 @@ class ExtractRequest(BaseModel):
 
 
 @router.post('/extract')
-def extract(req: ExtractRequest):
+def extract(req: ExtractRequest, _: None = Depends(require_write)):
     archive_path = validate_path(req.path)
     dest_path    = validate_path(req.dest)
     if not archive_path.exists():
@@ -465,7 +470,12 @@ def _do_extract_zip(arc, dest, pwd, filt, strategy='overwrite'):
             for i, m in enumerate(members):
                 is_dir = m.filename.endswith('/')
                 if is_dir:
-                    (dest / pathlib.PurePosixPath(m.filename)).mkdir(parents=True, exist_ok=True)
+                    dir_path = (dest / pathlib.PurePosixPath(m.filename)).resolve()
+                    try:
+                        dir_path.relative_to(dest.resolve())
+                        dir_path.mkdir(parents=True, exist_ok=True)
+                    except ValueError:
+                        pass  # skip traversal attempt
                     yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.filename})
                     continue
 
@@ -506,7 +516,12 @@ def _do_extract_tar(arc, dest, filt, strategy='overwrite'):
 
             for i, m in enumerate(members):
                 if m.isdir():
-                    (dest / pathlib.PurePosixPath(m.name)).mkdir(parents=True, exist_ok=True)
+                    dir_path = (dest / pathlib.PurePosixPath(m.name)).resolve()
+                    try:
+                        dir_path.relative_to(dest.resolve())
+                        dir_path.mkdir(parents=True, exist_ok=True)
+                    except ValueError:
+                        pass  # skip traversal attempt
                     yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.name})
                     continue
 
@@ -582,7 +597,12 @@ def _do_extract_7z(arc, dest, pwd, filt, strategy='overwrite'):
 
     # Create directories
     for m in dirs:
-        (dest / pathlib.PurePosixPath(m.filename)).mkdir(parents=True, exist_ok=True)
+        dir_path = (dest / pathlib.PurePosixPath(m.filename)).resolve()
+        try:
+            dir_path.relative_to(dest.resolve())
+            dir_path.mkdir(parents=True, exist_ok=True)
+        except ValueError:
+            pass  # skip traversal attempt
 
     # Bulk-extract the non-conflicting files in one pass
     if direct:
@@ -685,7 +705,7 @@ def _collect_scan(sources, exclude_abs):
 
 
 @router.post('/create')
-def create(req: CreateRequest):
+def create(req: CreateRequest, _: None = Depends(require_write)):
     out_path = validate_path(req.output_path)
 
     src_paths: list[pathlib.Path] = []

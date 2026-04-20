@@ -203,7 +203,7 @@ function openRow(row) {
     id: `row-detail:${props.file.path}:${_rowSeq++}`,
     title: props.file.name,
     icon: 'mdi-code-json',
-    component: markRaw(services.get('ui.json-viewer')),
+    component: markRaw(services.get('text.json-viewer')),
     width: 520,
     height: 480,
     props: { value: row },
