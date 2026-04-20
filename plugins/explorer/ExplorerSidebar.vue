@@ -89,7 +89,6 @@ events?.on('explorer:toggle-sidebar', () => { sidebarVisible.value = !sidebarVis
   top: 0; right: 0;
   width: 4px; height: 100%;
   cursor: col-resize;
-  z-index: 100;
   transition: background 0.15s;
 }
 .sidebar-resizer:hover, .sidebar-resizer.active {

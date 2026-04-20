@@ -335,7 +335,6 @@ const rightImgStyle = computed(() => makeImgStyle(baseScales.right))
   background: rgba(255, 255, 255, 0.9);
   transform: translateX(-50%);
   cursor: col-resize;
-  z-index: 20;
   user-select: none;
 }
 .divider-handle {
@@ -361,7 +360,6 @@ const rightImgStyle = computed(() => makeImgStyle(baseScales.right))
   padding: 3px 10px;
   border-radius: 8px;
   font-size: 12px;
-  z-index: 15;
   pointer-events: none;
   white-space: nowrap;
   max-width: 240px;
@@ -379,7 +377,6 @@ const rightImgStyle = computed(() => makeImgStyle(baseScales.right))
   background: rgba(var(--v-theme-surface), 0.75);
   padding: 6px 12px;
   border-radius: 8px;
-  z-index: 30;
   backdrop-filter: blur(8px);
 }
 .zoom-hint {
@@ -390,7 +387,6 @@ const rightImgStyle = computed(() => makeImgStyle(baseScales.right))
   background: rgba(0, 0, 0, 0.4);
   padding: 4px 12px;
   border-radius: 12px;
-  z-index: 15;
   pointer-events: none;
   max-width: calc(100vw - 32px);
   text-align: center;

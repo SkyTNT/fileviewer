@@ -76,7 +76,6 @@ function onDrop(e) {
 .drop-overlay {
   position: absolute;
   inset: 0;
-  z-index: 200;
   display: flex;
   align-items: center;
   justify-content: center;

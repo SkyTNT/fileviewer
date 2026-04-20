@@ -283,7 +283,7 @@ onUnmounted(() => eventBus?.off('keyboard:keydown', onKey))
   border: none; border-radius: 50%;
   width: 48px; height: 48px;
   display: flex; align-items: center; justify-content: center;
-  cursor: pointer; color: #fff; z-index: 10;
+  cursor: pointer; color: #fff;
   transition: background 0.15s;
 }
 .nav-btn:hover { background: rgba(0,0,0,0.7); }
@@ -296,7 +296,6 @@ onUnmounted(() => eventBus?.off('keyboard:keydown', onKey))
   background: rgba(var(--v-theme-surface), 0.75);
   padding: 4px 8px;
   border-radius: 8px;
-  z-index: 10;
   backdrop-filter: blur(8px);
 }
 .toolbar-counter { white-space: nowrap; flex-shrink: 0; }

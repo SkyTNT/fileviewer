@@ -333,7 +333,6 @@ function openImgPreview(value) {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 4;
   pointer-events: none;
 }
 .loading-overlay :deep(.v-progress-circular) {

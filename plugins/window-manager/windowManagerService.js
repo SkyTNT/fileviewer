@@ -48,6 +48,7 @@ export function createWindowManager() {
       const h = height ?? 600
       const pos = _defaultPos(w, h)
       const winId = id ?? `win-${_nextId++}`
+      const autoMaximized = maximized || w >= window.innerWidth || h >= window.innerHeight
 
       state._topZ++
       const win = reactive({
@@ -59,7 +60,7 @@ export function createWindowManager() {
         x: pos.x, y: pos.y,
         w, h,
         z:         state._topZ,
-        maximized,
+        maximized: autoMaximized,
         minimized: false,
         focused:   true,
       })

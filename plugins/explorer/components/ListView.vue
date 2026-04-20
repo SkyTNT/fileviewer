@@ -144,13 +144,11 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
   pointer-events: none;
   border: 1px solid rgb(var(--v-theme-primary));
   background: rgba(var(--v-theme-primary), 0.08);
-  z-index: 999;
 }
 .pagination-fab {
   position: fixed;
   bottom: 16px;
   left: calc(var(--v-layout-left, 0px) + 16px);
-  z-index: 10;
   background: rgb(var(--v-theme-surface));
   border-radius: 28px;
   box-shadow: 0 3px 10px rgba(0,0,0,.2);

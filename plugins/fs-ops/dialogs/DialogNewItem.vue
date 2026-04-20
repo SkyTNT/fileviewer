@@ -27,7 +27,7 @@ function close() { props.winManager?.close(props.winId) }
       :error-messages="error"
       density="compact"
       variant="outlined"
-      class="mb-2"
+      class="mb-2 flex-grow-0"
       @update:model-value="emit('update:name', $event)"
       @keydown.enter="emit('confirm')"
       @keydown.esc="close"

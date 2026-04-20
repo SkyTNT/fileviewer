@@ -482,28 +482,6 @@ onUnmounted(() => _cancelScan())
         <v-alert type="error" density="compact" :text="error" />
       </div>
 
-      <!-- ── extract progress overlay ──────────────────────────────────────── -->
-      <div v-if="extracting" class="extract-overlay pa-4">
-        <v-card class="extract-card pa-4" max-width="480">
-          <div class="d-flex align-center mb-3">
-            <v-icon class="mr-2" color="primary">mdi-archive-arrow-down-outline</v-icon>
-            <span class="text-subtitle-1 font-weight-medium">{{ t('archive.app.extracting') }}</span>
-          </div>
-          <v-progress-linear
-            :model-value="extractPercent"
-            :indeterminate="extractTotal === 0"
-            color="primary" height="8" rounded class="mb-2"
-          />
-          <div class="text-caption text-medium-emphasis mb-3">{{ extractDone }} / {{ extractTotal || '…' }}</div>
-          <div v-if="extractErrors.length" class="mb-3">
-            <div v-for="(err, i) in extractErrors.slice(0, 5)" :key="i" class="text-caption text-error">{{ err }}</div>
-          </div>
-          <v-btn v-if="extractFinished" color="primary" variant="tonal" block @click="closeExtract">
-            {{ t('archive.app.close') }}
-          </v-btn>
-        </v-card>
-      </div>
-
       <!-- ── main content ───────────────────────────────────────────────────── -->
       <div v-if="archiveInfo && !error" class="archive-body">
 
@@ -638,6 +616,28 @@ onUnmounted(() => _cancelScan())
         </div>
 
       </div>
+
+      <!-- ── extract progress overlay ──────────────────────────────────────── -->
+      <div v-if="extracting" class="extract-overlay pa-4">
+        <v-card class="extract-card pa-4" max-width="480">
+          <div class="d-flex align-center mb-3">
+            <v-icon class="mr-2" color="primary">mdi-archive-arrow-down-outline</v-icon>
+            <span class="text-subtitle-1 font-weight-medium">{{ t('archive.app.extracting') }}</span>
+          </div>
+          <v-progress-linear
+            :model-value="extractPercent"
+            :indeterminate="extractTotal === 0"
+            color="primary" height="8" rounded class="mb-2"
+          />
+          <div class="text-caption text-medium-emphasis mb-3">{{ extractDone }} / {{ extractTotal || '…' }}</div>
+          <div v-if="extractErrors.length" class="mb-3">
+            <div v-for="(err, i) in extractErrors.slice(0, 5)" :key="i" class="text-caption text-error">{{ err }}</div>
+          </div>
+          <v-btn v-if="extractFinished" color="primary" variant="tonal" block @click="closeExtract">
+            {{ t('archive.app.close') }}
+          </v-btn>
+        </v-card>
+      </div>
   </div>
 </template>
 
@@ -699,7 +699,6 @@ onUnmounted(() => _cancelScan())
   width: 4px;
   height: 100%;
   cursor: col-resize;
-  z-index: 10;
   transition: background 0.15s;
 }
 .archive-tree-resizer:hover,
@@ -755,7 +754,6 @@ onUnmounted(() => _cancelScan())
 .extract-overlay {
   position: absolute;
   inset: 0;
-  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: center;

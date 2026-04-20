@@ -207,7 +207,6 @@ function stopResize() {
 /* Resize handles */
 .resize-handle {
   position: absolute;
-  z-index: 10;
 }
 .resize-n  { top: 0;    left: 4px;  right: 4px;  height: 4px; cursor: n-resize; }
 .resize-s  { bottom: 0; left: 4px;  right: 4px;  height: 4px; cursor: s-resize; }

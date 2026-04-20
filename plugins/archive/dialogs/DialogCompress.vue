@@ -110,7 +110,7 @@ function startCompress() {
       density="compact"
       variant="outlined"
       prepend-inner-icon="mdi-archive-outline"
-      class="mb-3"
+      class="mb-3 flex-grow-0"
     />
 
     <div class="d-flex ga-3 mb-3">
@@ -147,7 +147,7 @@ function startCompress() {
       prepend-inner-icon="mdi-lock-outline"
       :append-inner-icon="showPwd ? 'mdi-eye-off' : 'mdi-eye'"
       persistent-hint
-      class="mb-3"
+      class="mb-3 flex-grow-0"
       @click:append-inner="showPwd = !showPwd"
     />
 
@@ -180,7 +180,7 @@ function startCompress() {
 
 <style scoped>
 .compress-tree-wrap {
-  max-height: 280px;
+  min-height: 100px;
   overflow-y: auto;
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 8px;

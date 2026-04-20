@@ -185,3 +185,4 @@ node_modules
 static/
 .claude
 .playwright
+.playwright-cli

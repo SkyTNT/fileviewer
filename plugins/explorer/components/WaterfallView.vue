@@ -391,6 +391,5 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
   pointer-events: none;
   border: 1px solid rgb(var(--v-theme-primary));
   background: rgba(var(--v-theme-primary), 0.08);
-  z-index: 999;
 }
 </style>
