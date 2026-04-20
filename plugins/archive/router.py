@@ -427,25 +427,30 @@ def extract(req: ExtractRequest, _: None = Depends(require_write)):
         raise HTTPException(400, 'Unsupported archive format')
 
     cs = req.conflict_strategy if req.conflict_strategy in ('overwrite', 'skip', 'coexist') else 'overwrite'
+    cancelled = threading.Event()
 
     def gen():
         try:
             if fmt == 'zip':
-                yield from _do_extract_zip(archive_path, dest_path, req.password, req.entries, cs)
+                yield from _do_extract_zip(archive_path, dest_path, req.password, req.entries, cs, cancelled)
             elif fmt in ('tar', 'tar.gz', 'tar.bz2', 'tar.xz'):
-                yield from _do_extract_tar(archive_path, dest_path, req.entries, cs)
+                yield from _do_extract_tar(archive_path, dest_path, req.entries, cs, cancelled)
             elif fmt == '7z':
-                yield from _do_extract_7z(archive_path, dest_path, req.password, req.entries, cs)
+                yield from _do_extract_7z(archive_path, dest_path, req.password, req.entries, cs, cancelled)
             else:
                 yield _sse({'type': 'error', 'message': f'Unsupported format: {fmt}'})
         except Exception as e:
             yield _sse({'type': 'error', 'message': str(e)})
-        yield _sse({'type': 'done'})
+        except GeneratorExit:
+            cancelled.set()
+            raise
+        if not cancelled.is_set():
+            yield _sse({'type': 'done'})
 
     return _sse_resp(gen())
 
 
-def _do_extract_zip(arc, dest, pwd, filt, strategy='overwrite'):
+def _do_extract_zip(arc, dest, pwd, filt, strategy='overwrite', cancelled: threading.Event | None = None):
     bpwd = pwd.encode() if pwd else None
 
     # Detect AES-encrypted ZIP (compress_type 99 = WinZip AES, used by pyzipper)
@@ -468,6 +473,8 @@ def _do_extract_zip(arc, dest, pwd, filt, strategy='overwrite'):
             total = len(members)
 
             for i, m in enumerate(members):
+                if cancelled is not None and cancelled.is_set():
+                    break
                 is_dir = m.filename.endswith('/')
                 if is_dir:
                     dir_path = (dest / pathlib.PurePosixPath(m.filename)).resolve()
@@ -506,7 +513,7 @@ def _do_extract_zip(arc, dest, pwd, filt, strategy='overwrite'):
         yield _sse({'type': 'error', 'message': str(e)})
 
 
-def _do_extract_tar(arc, dest, filt, strategy='overwrite'):
+def _do_extract_tar(arc, dest, filt, strategy='overwrite', cancelled: threading.Event | None = None):
     try:
         with tarfile.open(arc, 'r:*') as tf:
             members = tf.getmembers()
@@ -515,6 +522,8 @@ def _do_extract_tar(arc, dest, filt, strategy='overwrite'):
             total = len(members)
 
             for i, m in enumerate(members):
+                if cancelled is not None and cancelled.is_set():
+                    break
                 if m.isdir():
                     dir_path = (dest / pathlib.PurePosixPath(m.name)).resolve()
                     try:
@@ -553,7 +562,7 @@ def _do_extract_tar(arc, dest, filt, strategy='overwrite'):
         yield _sse({'type': 'error', 'message': str(e)})
 
 
-def _do_extract_7z(arc, dest, pwd, filt, strategy='overwrite'):
+def _do_extract_7z(arc, dest, pwd, filt, strategy='overwrite', cancelled: threading.Event | None = None):
     try:
         with py7zr.SevenZipFile(arc, 'r', password=pwd) as z:
             all_members = z.list()
@@ -566,6 +575,8 @@ def _do_extract_7z(arc, dest, pwd, filt, strategy='overwrite'):
     total = len(members)
 
     if strategy == 'overwrite':
+        if cancelled is not None and cancelled.is_set():
+            return
         try:
             with py7zr.SevenZipFile(arc, 'r', password=pwd) as z:
                 if filt is not None:
@@ -573,6 +584,8 @@ def _do_extract_7z(arc, dest, pwd, filt, strategy='overwrite'):
                 else:
                     z.extractall(path=str(dest))
             for i, m in enumerate(members):
+                if cancelled is not None and cancelled.is_set():
+                    break
                 yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.filename})
         except Exception as e:
             msg = str(e).lower()
@@ -604,6 +617,9 @@ def _do_extract_7z(arc, dest, pwd, filt, strategy='overwrite'):
         except ValueError:
             pass  # skip traversal attempt
 
+    if cancelled is not None and cancelled.is_set():
+        return
+
     # Bulk-extract the non-conflicting files in one pass
     if direct:
         try:
@@ -628,12 +644,18 @@ def _do_extract_7z(arc, dest, pwd, filt, strategy='overwrite'):
 
     done = 0
     for m in dirs:
+        if cancelled is not None and cancelled.is_set():
+            break
         done += 1
         yield _sse({'type': 'progress', 'done': done, 'total': total, 'name': m.filename})
     for m in direct:
+        if cancelled is not None and cancelled.is_set():
+            break
         done += 1
         yield _sse({'type': 'progress', 'done': done, 'total': total, 'name': m.filename})
     for m, out in renamed:
+        if cancelled is not None and cancelled.is_set():
+            break
         done += 1
         if out is None:  # skipped
             yield _sse({'type': 'progress', 'done': done, 'total': total, 'name': m.filename})
@@ -729,18 +751,23 @@ def create(req: CreateRequest, _: None = Depends(require_write)):
             pass
 
     level = max(0, min(9, req.level))
+    cancelled = threading.Event()
 
     def gen():
         try:
             if req.format == 'zip':
-                yield from _do_create_zip(src_paths, out_path, level, req.password, exclude_abs)
+                yield from _do_create_zip(src_paths, out_path, level, req.password, exclude_abs, cancelled)
             elif req.format in ('tar', 'tar.gz', 'tar.bz2', 'tar.xz'):
-                yield from _do_create_tar(src_paths, out_path, req.format, level, exclude_abs)
+                yield from _do_create_tar(src_paths, out_path, req.format, level, exclude_abs, cancelled)
             elif req.format == '7z':
-                yield from _do_create_7z(src_paths, out_path, level, req.password, exclude_abs)
+                yield from _do_create_7z(src_paths, out_path, level, req.password, exclude_abs, cancelled)
         except Exception as e:
             yield _sse({'type': 'error', 'message': str(e)})
-        yield _sse({'type': 'done'})
+        except GeneratorExit:
+            cancelled.set()
+            raise
+        if not cancelled.is_set():
+            yield _sse({'type': 'done'})
 
     return _sse_resp(gen())
 
@@ -802,7 +829,7 @@ def _tar_file_with_progress(tf: tarfile.TarFile, f_path: pathlib.Path, arc_name:
         yield curr - last
 
 
-def _do_create_zip(sources, output, level, pwd, excludes):
+def _do_create_zip(sources, output, level, pwd, excludes, cancelled: threading.Event):
     files, bytes_total = yield from _collect_scan(sources, excludes)
     total = len(files)
     done = bytes_done = 0
@@ -827,10 +854,14 @@ def _do_create_zip(sources, output, level, pwd, excludes):
     try:
         with _open() as zf:
             for f, arc_name in files:
+                if cancelled.is_set():
+                    break
                 # ZipFile.open('w') allows chunked writes — no thread needed
                 with zf.open(arc_name, 'w', force_zip64=True) as dest:
                     with open(f, 'rb') as src:
                         while True:
+                            if cancelled.is_set():
+                                break
                             chunk = src.read(_CHUNK)
                             if not chunk:
                                 break
@@ -842,10 +873,13 @@ def _do_create_zip(sources, output, level, pwd, excludes):
                                 yield _sse({'type': 'progress', 'done': done, 'total': total,
                                             'name': arc_name, 'bytes_done': bytes_done,
                                             'bytes_total': bytes_total})
+                if cancelled.is_set():
+                    break
                 done += 1
                 yield _sse({'type': 'progress', 'done': done, 'total': total, 'name': arc_name,
                             'bytes_done': bytes_done, 'bytes_total': bytes_total})
-        completed = True
+        if not cancelled.is_set():
+            completed = True
     except Exception as e:
         yield _sse({'type': 'error', 'message': str(e)})
     finally:
@@ -854,18 +888,19 @@ def _do_create_zip(sources, output, level, pwd, excludes):
             except OSError: pass
 
 
-def _do_create_tar(sources, output, fmt, level, excludes):
+def _do_create_tar(sources, output, fmt, level, excludes, cancelled: threading.Event):
     files, bytes_total = yield from _collect_scan(sources, excludes)
     total = len(files)
     mode = {'tar': 'w', 'tar.gz': 'w:gz', 'tar.bz2': 'w:bz2', 'tar.xz': 'w:xz'}.get(fmt, 'w:gz')
     done = bytes_done = 0
     last_yield_time = 0.0
     completed = False
-    cancel_event = threading.Event()
     try:
         with tarfile.open(output, mode) as tf:
             for f, arc_name in files:
-                for delta in _tar_file_with_progress(tf, f, arc_name, cancel_event):
+                if cancelled.is_set():
+                    break
+                for delta in _tar_file_with_progress(tf, f, arc_name, cancelled):
                     bytes_done += delta
                     now = time.monotonic()
                     if now - last_yield_time >= 0.2:
@@ -873,29 +908,27 @@ def _do_create_tar(sources, output, fmt, level, excludes):
                         yield _sse({'type': 'progress', 'done': done, 'total': total,
                                     'name': arc_name, 'bytes_done': bytes_done,
                                     'bytes_total': bytes_total})
-                if cancel_event.is_set():
+                if cancelled.is_set():
                     break
                 done += 1
                 yield _sse({'type': 'progress', 'done': done, 'total': total, 'name': arc_name,
                             'bytes_done': bytes_done, 'bytes_total': bytes_total})
-        if not cancel_event.is_set():
+        if not cancelled.is_set():
             completed = True
     except Exception as e:
         yield _sse({'type': 'error', 'message': str(e)})
     finally:
-        cancel_event.set()
         if not completed:
             try: output.unlink(missing_ok=True)
             except OSError: pass
 
 
-def _do_create_7z(sources, output, level, pwd, excludes):
+def _do_create_7z(sources, output, level, pwd, excludes, cancelled: threading.Event):
     files, bytes_total = yield from _collect_scan(sources, excludes)
     total = len(files)
     done = bytes_done = 0
     last_yield_time = 0.0
     completed = False
-    cancelled = threading.Event()
     try:
         with py7zr.SevenZipFile(str(output), 'w', password=pwd or None) as z:
             for f, arc_name in files:
@@ -941,7 +974,6 @@ def _do_create_7z(sources, output, level, pwd, excludes):
     except Exception as e:
         yield _sse({'type': 'error', 'message': str(e)})
     finally:
-        cancelled.set()
         if not completed:
             try: output.unlink(missing_ok=True)
             except OSError: pass

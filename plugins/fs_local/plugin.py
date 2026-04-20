@@ -257,7 +257,7 @@ def _get_total_size(path: Path) -> int:
     return total
 
 
-def _copy_file_with_poll(src: Path, dst: Path):
+def _copy_file_with_poll(src: Path, dst: Path, cancel: threading.Event | None = None):
     err = [None]; done = [False]
     def _worker():
         try: shutil.copy2(src, dst)
@@ -266,32 +266,43 @@ def _copy_file_with_poll(src: Path, dst: Path):
     worker = threading.Thread(target=_worker, daemon=True)
     worker.start()
     last_size = 0
-    while not done[0]:
-        worker.join(timeout=0.1)
-        try: current = dst.stat().st_size
-        except OSError: current = last_size
-        if current > last_size:
-            yield current - last_size
-            last_size = current
+    try:
+        while not done[0]:
+            worker.join(timeout=0.1)
+            if cancel is not None and cancel.is_set():
+                return
+            try: current = dst.stat().st_size
+            except OSError: current = last_size
+            if current > last_size:
+                yield current - last_size
+                last_size = current
+    except GeneratorExit:
+        if cancel is not None:
+            cancel.set()
+        raise
     if err[0]: raise err[0]
     try: final = dst.stat().st_size
     except OSError: final = last_size
     if final > last_size: yield final - last_size
 
 
-def _copy_dir_with_poll(src: Path, dst: Path):
+def _copy_dir_with_poll(src: Path, dst: Path, cancel: threading.Event | None = None):
     dst.mkdir(parents=True, exist_ok=True)
     stack = [(src, dst)]
     while stack:
+        if cancel is not None and cancel.is_set():
+            return
         cur_src, cur_dst = stack.pop()
         with os.scandir(cur_src) as it:
             for entry in it:
+                if cancel is not None and cancel.is_set():
+                    return
                 dst_item = cur_dst / entry.name
                 if entry.is_dir(follow_symlinks=False):
                     dst_item.mkdir(exist_ok=True)
                     stack.append((Path(entry.path), dst_item))
                 else:
-                    yield from _copy_file_with_poll(Path(entry.path), dst_item)
+                    yield from _copy_file_with_poll(Path(entry.path), dst_item, cancel)
     try: shutil.copystat(src, dst)
     except OSError: pass
 
@@ -413,6 +424,7 @@ def check_conflicts(req: CheckConflictsRequest):
 
 @write_router.post("/paste")
 def paste(req: BatchPasteRequest):
+    cancel = threading.Event()
     def generate():
         total = len(req.entries)
         entry_srcs  = [validate_path(e.src) for e in req.entries]
@@ -427,83 +439,111 @@ def paste(req: BatchPasteRequest):
             return _sse({'type': 'error', 'done': done_count, 'total': total,
                          'name': name, 'bytes_done': bytes_done, 'bytes_total': bytes_total, 'message': message})
 
-        for i, entry in enumerate(req.entries):
-            src = entry_srcs[i]; name = src.name
-            if _is_root(src):
-                bytes_done += entry_sizes[i]
-                yield _err(i + 1, name, 'Cannot copy/move a root directory')
-                continue
-            dest_dir = validate_path(entry.dest_parent)
-            dest = dest_dir / name; bytes_before = bytes_done
-            try:
-                if dest.exists():
-                    if req.on_conflict == "skip":
-                        bytes_done += entry_sizes[i]; yield _prog(i + 1, name, skipped=True); continue
-                    elif req.on_conflict == "overwrite":
-                        if dest == src:
-                            bytes_done += entry_sizes[i]; yield _prog(i + 1, name); continue
-                        shutil.rmtree(dest) if dest.is_dir() else dest.unlink()
-                    elif req.on_conflict == "coexist":
-                        name = _coexist_name(dest_dir, name); dest = dest_dir / name
-                if req.action == "move":
-                    try:
-                        src.rename(dest); bytes_done += entry_sizes[i]; yield _prog(i + 1, name); continue
-                    except OSError: pass
-                gen = _copy_dir_with_poll(src, dest) if src.is_dir() else _copy_file_with_poll(src, dest)
-                for delta in gen:
-                    bytes_done += delta
-                    now = time.monotonic()
-                    if now - last_yield_time >= 0.2:
-                        last_yield_time = now; yield _prog(i, name)
-                if req.action == "move":
-                    shutil.rmtree(src) if src.is_dir() else src.unlink()
-                yield _prog(i + 1, name)
-            except Exception as e:
-                bytes_done = max(bytes_done, bytes_before + entry_sizes[i])
-                yield _err(i + 1, name, str(e))
-        yield _sse({'type': 'done'})
+        try:
+            for i, entry in enumerate(req.entries):
+                if cancel.is_set():
+                    break
+                src = entry_srcs[i]; name = src.name
+                if _is_root(src):
+                    bytes_done += entry_sizes[i]
+                    yield _err(i + 1, name, 'Cannot copy/move a root directory')
+                    continue
+                dest_dir = validate_path(entry.dest_parent)
+                dest = dest_dir / name; bytes_before = bytes_done
+                try:
+                    if dest.exists():
+                        if req.on_conflict == "skip":
+                            bytes_done += entry_sizes[i]; yield _prog(i + 1, name, skipped=True); continue
+                        elif req.on_conflict == "overwrite":
+                            if dest == src:
+                                bytes_done += entry_sizes[i]; yield _prog(i + 1, name); continue
+                            shutil.rmtree(dest) if dest.is_dir() else dest.unlink()
+                        elif req.on_conflict == "coexist":
+                            name = _coexist_name(dest_dir, name); dest = dest_dir / name
+                    if req.action == "move":
+                        try:
+                            src.rename(dest); bytes_done += entry_sizes[i]; yield _prog(i + 1, name); continue
+                        except OSError: pass
+                    copy_gen = _copy_dir_with_poll(src, dest, cancel) if src.is_dir() else _copy_file_with_poll(src, dest, cancel)
+                    for delta in copy_gen:
+                        bytes_done += delta
+                        now = time.monotonic()
+                        if now - last_yield_time >= 0.2:
+                            last_yield_time = now; yield _prog(i, name)
+                    if cancel.is_set():
+                        try:
+                            shutil.rmtree(dest) if dest.is_dir() else dest.unlink()
+                        except OSError: pass
+                        break
+                    if req.action == "move":
+                        shutil.rmtree(src) if src.is_dir() else src.unlink()
+                    yield _prog(i + 1, name)
+                except Exception as e:
+                    bytes_done = max(bytes_done, bytes_before + entry_sizes[i])
+                    yield _err(i + 1, name, str(e))
+            if not cancel.is_set():
+                yield _sse({'type': 'done'})
+        except GeneratorExit:
+            cancel.set()
+            raise
     return _sse_response(generate())
 
 
 @write_router.post("/symlink")
 def create_symlinks(req: BatchSymlinkRequest):
+    cancel = threading.Event()
     def generate():
         total = len(req.entries)
-        for i, entry in enumerate(req.entries):
-            src = validate_path(entry.src); name = src.name
-            dest_dir = validate_path(entry.dest_parent); dest = dest_dir / name
-            try:
-                if dest.exists() or dest.is_symlink():
-                    if req.on_conflict == "skip":
-                        yield _sse({'type': 'progress', 'done': i+1, 'total': total, 'name': name, 'skipped': True}); continue
-                    elif req.on_conflict == "overwrite":
-                        shutil.rmtree(dest) if (dest.is_dir() and not dest.is_symlink()) else dest.unlink()
-                    elif req.on_conflict == "coexist":
-                        name = _coexist_name(dest_dir, name); dest = dest_dir / name
-                os.symlink(src, dest)
-                yield _sse({'type': 'progress', 'done': i+1, 'total': total, 'name': name})
-            except Exception as e:
-                yield _sse({'type': 'error', 'done': i+1, 'total': total, 'name': name, 'message': str(e)})
-        yield _sse({'type': 'done'})
+        try:
+            for i, entry in enumerate(req.entries):
+                if cancel.is_set():
+                    break
+                src = validate_path(entry.src); name = src.name
+                dest_dir = validate_path(entry.dest_parent); dest = dest_dir / name
+                try:
+                    if dest.exists() or dest.is_symlink():
+                        if req.on_conflict == "skip":
+                            yield _sse({'type': 'progress', 'done': i+1, 'total': total, 'name': name, 'skipped': True}); continue
+                        elif req.on_conflict == "overwrite":
+                            shutil.rmtree(dest) if (dest.is_dir() and not dest.is_symlink()) else dest.unlink()
+                        elif req.on_conflict == "coexist":
+                            name = _coexist_name(dest_dir, name); dest = dest_dir / name
+                    os.symlink(src, dest)
+                    yield _sse({'type': 'progress', 'done': i+1, 'total': total, 'name': name})
+                except Exception as e:
+                    yield _sse({'type': 'error', 'done': i+1, 'total': total, 'name': name, 'message': str(e)})
+            if not cancel.is_set():
+                yield _sse({'type': 'done'})
+        except GeneratorExit:
+            cancel.set()
+            raise
     return _sse_response(generate())
 
 
 @write_router.post("/delete")
 def delete_entries(req: BatchDeleteRequest):
+    cancel = threading.Event()
     def generate():
         total = len(req.paths)
-        for i, path in enumerate(req.paths):
-            target = validate_path(path); name = target.name
-            if _is_root(target):
-                yield _sse({'type': 'error', 'done': i+1, 'total': total, 'name': name, 'message': 'Cannot delete a root directory'}); continue
-            try:
-                if not target.exists() and not target.is_symlink():
-                    raise FileNotFoundError(f"{name}: not found")
-                shutil.rmtree(target) if (target.is_dir() and not target.is_symlink()) else target.unlink()
-                yield _sse({'type': 'progress', 'done': i+1, 'total': total, 'name': name})
-            except Exception as e:
-                yield _sse({'type': 'error', 'done': i+1, 'total': total, 'name': name, 'message': str(e)})
-        yield _sse({'type': 'done'})
+        try:
+            for i, path in enumerate(req.paths):
+                if cancel.is_set():
+                    break
+                target = validate_path(path); name = target.name
+                if _is_root(target):
+                    yield _sse({'type': 'error', 'done': i+1, 'total': total, 'name': name, 'message': 'Cannot delete a root directory'}); continue
+                try:
+                    if not target.exists() and not target.is_symlink():
+                        raise FileNotFoundError(f"{name}: not found")
+                    shutil.rmtree(target) if (target.is_dir() and not target.is_symlink()) else target.unlink()
+                    yield _sse({'type': 'progress', 'done': i+1, 'total': total, 'name': name})
+                except Exception as e:
+                    yield _sse({'type': 'error', 'done': i+1, 'total': total, 'name': name, 'message': str(e)})
+            if not cancel.is_set():
+                yield _sse({'type': 'done'})
+        except GeneratorExit:
+            cancel.set()
+            raise
     return _sse_response(generate())
 
 
