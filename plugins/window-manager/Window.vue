@@ -1,5 +1,5 @@
 <template>
-  <div
+  <v-card
     class="app-window"
     :class="{
       'is-maximized': win.maximized,
@@ -7,29 +7,58 @@
       'is-focused':   win.focused,
     }"
     :style="windowStyle"
+    :elevation="win.focused ? 16 : 4"
+    rounded="lg"
     @mousedown.capture="onFocus"
   >
     <!-- Title bar -->
-    <div
+    <v-toolbar
       class="win-titlebar"
+      :color="win.focused ? 'primary' : 'surface-variant'"
+      density="compact"
+      height="36"
       @mousedown.prevent="startDrag"
       @touchstart.prevent="startDragTouch"
       @dblclick="toggleMaximize"
     >
-      <v-icon size="16" class="win-icon mr-2">{{ win.icon || 'mdi-window-maximize' }}</v-icon>
-      <span class="win-title text-truncate">{{ win.title }}</span>
-      <div class="win-controls ml-auto" @mousedown.stop @touchstart.stop>
-        <button class="win-btn win-minimize" title="Minimize" @click="emit('minimize')">
-          <v-icon size="14">mdi-minus</v-icon>
-        </button>
-        <button class="win-btn win-maximize" title="Maximize" @click="toggleMaximize">
-          <v-icon size="14">{{ win.maximized ? 'mdi-window-restore' : 'mdi-window-maximize' }}</v-icon>
-        </button>
-        <button class="win-btn win-close" title="Close" @click="emit('close')">
-          <v-icon size="14">mdi-close</v-icon>
-        </button>
+      <v-icon size="16" class="ml-2 mr-1" :color="win.focused ? 'on-primary' : undefined">
+        {{ win.icon || 'mdi-window-maximize' }}
+      </v-icon>
+      <v-toolbar-title
+        class="win-title"
+        :style="win.focused ? 'color: rgb(var(--v-theme-on-primary))' : ''"
+      >
+        {{ win.title }}
+      </v-toolbar-title>
+
+      <div class="win-controls" @mousedown.stop @touchstart.stop>
+        <v-btn
+          :color="win.focused ? 'on-primary' : undefined"
+          icon size="x-small" variant="text"
+          title="Minimize"
+          @click="emit('minimize')"
+        >
+          <v-icon size="16">mdi-minus</v-icon>
+        </v-btn>
+        <v-btn
+          :color="win.focused ? 'on-primary' : undefined"
+          icon size="x-small" variant="text"
+          title="Maximize"
+          @click="toggleMaximize"
+        >
+          <v-icon size="16">{{ win.maximized ? 'mdi-window-restore' : 'mdi-window-maximize' }}</v-icon>
+        </v-btn>
+        <v-btn
+          color="error"
+          icon size="x-small" variant="text"
+          title="Close"
+          class="win-close-btn"
+          @click="emit('close')"
+        >
+          <v-icon size="16">mdi-close</v-icon>
+        </v-btn>
       </div>
-    </div>
+    </v-toolbar>
 
     <!-- Content -->
     <div class="win-content">
@@ -47,7 +76,7 @@
       <div class="resize-handle resize-se" @mousedown.prevent.stop="startResize('se')" @touchstart.prevent.stop="startResizeTouch('se')" />
       <div class="resize-handle resize-sw" @mousedown.prevent.stop="startResize('sw')" @touchstart.prevent.stop="startResizeTouch('sw')" />
     </template>
-  </div>
+  </v-card>
 </template>
 
 <script setup>
@@ -210,56 +239,42 @@ function stopResizeTouch() {
 
 <style scoped>
 .app-window {
-  position: fixed;
+  position: fixed !important;
   display: flex;
   flex-direction: column;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.2);
-  background: rgb(var(--v-theme-surface));
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  transition: box-shadow 0.15s;
   min-width: 320px;
   min-height: 200px;
+  transition: box-shadow 0.2s, left 0s, top 0s, width 0s, height 0s;
 }
 .app-window.is-maximized {
-  position: fixed;
-  inset: 0;
-  border-radius: 0;
+  inset: 0 !important;
   width: 100vw !important;
   height: 100vh !important;
-}
-.app-window.is-focused {
-  box-shadow: 0 12px 48px rgba(0,0,0,0.45), 0 4px 12px rgba(0,0,0,0.25);
+  border-radius: 0 !important;
 }
 
 .win-titlebar {
-  display: flex;
-  align-items: center;
-  padding: 0 8px;
-  height: 36px;
-  flex-shrink: 0;
   cursor: move;
   user-select: none;
-  background: rgba(var(--v-theme-surface-variant), 0.6);
-  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  flex-shrink: 0;
 }
-.win-icon  { opacity: 0.7; flex-shrink: 0; }
-.win-title { font-size: 13px; font-weight: 500; flex: 1; min-width: 0; }
 
-.win-controls { display: flex; gap: 4px; }
-.win-btn {
-  width: 24px; height: 24px;
-  border: none; border-radius: 4px;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  background: transparent;
-  color: rgb(var(--v-theme-on-surface));
-  opacity: 0.6;
-  transition: opacity 0.1s, background 0.1s;
+.win-title {
+  font-size: 13px !important;
+  font-weight: 500;
 }
-.win-btn:hover { opacity: 1; background: rgba(var(--v-theme-on-surface), 0.1); }
-.win-close:hover { background: rgba(var(--v-theme-error), 0.8) !important; color: white; opacity: 1; }
+
+.win-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+}
+
+.win-close-btn:hover {
+  background: rgba(var(--v-theme-error), 0.9) !important;
+  color: white !important;
+}
 
 .win-content {
   flex: 1;
@@ -270,9 +285,7 @@ function stopResizeTouch() {
 }
 
 /* Resize handles */
-.resize-handle {
-  position: absolute;
-}
+.resize-handle { position: absolute; }
 .resize-n  { top: 0;    left: 4px;  right: 4px;  height: 4px; cursor: n-resize; }
 .resize-s  { bottom: 0; left: 4px;  right: 4px;  height: 4px; cursor: s-resize; }
 .resize-e  { right: 0;  top: 4px;   bottom: 4px; width: 4px;  cursor: e-resize; }
