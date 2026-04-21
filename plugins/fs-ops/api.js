@@ -32,7 +32,7 @@ export function createWriteApi(http, httpStream) {
     paste: (entries, action, destParent, onConflict, signal = undefined) =>
       httpStream.post('/write/paste', {
         entries: entries.map(e => ({ src: e.path, dest_parent: destParent })),
-        action, on_conflict: onConflict,
+        action: action === 'cut' ? 'move' : action, on_conflict: onConflict,
       }, signal ? { signal } : {}),
     symlink: (entries, destParent, onConflict, signal = undefined) =>
       httpStream.post('/write/symlink', {

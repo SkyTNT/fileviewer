@@ -174,9 +174,12 @@ const visibleEntries = computed(() => {
     const pos  = cardPositions[file.path]
     if (!pos) continue
     const h = cardHeight(file)
-     if (pos.y + h >= top && pos.y <= bottom) {
-        out.push(file)
-      }
+    if (pos.y + h >= top && pos.y <= bottom) {
+      renderedPaths.add(file.path)
+    } else if (pos.y + h < evictTop || pos.y > evictBottom) {
+      renderedPaths.delete(file.path)
+    }
+    if (renderedPaths.has(file.path)) out.push(file)
   }
   return out
 })
@@ -376,7 +379,7 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
 }
 .masonry-outer {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 .masonry {
   position: relative;
