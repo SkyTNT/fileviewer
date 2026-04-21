@@ -1,3 +1,4 @@
+import asyncio
 import io
 from functools import lru_cache
 from pathlib import Path
@@ -68,6 +69,10 @@ async def _fetch_url(url: str) -> tuple[bytes, str]:
 @alru_cache(maxsize=128)
 async def _url_thumbnail(url: str, size: int) -> bytes:
     data, _ = await _fetch_url(url)
+    return await asyncio.to_thread(_pil_to_jpeg_from_bytes, data, size)
+
+
+def _pil_to_jpeg_from_bytes(data: bytes, size: int) -> bytes:
     with Image.open(io.BytesIO(data)) as img:
         return _pil_to_jpeg(img, size)
 
@@ -93,7 +98,7 @@ async def get_thumbnail(request: Request, path: str = Query(...), size: int = Qu
         etag = f'"{mtime}"'
         if request.headers.get("if-none-match") == etag:
             return Response(status_code=304)
-        data = _generate_thumbnail(str(file_path), size, mtime)
+        data = await asyncio.to_thread(_generate_thumbnail, str(file_path), size, mtime)
         return Response(content=data, media_type="image/jpeg",
                         headers={"Cache-Control": "no-cache", "ETag": etag})
     except Exception:
