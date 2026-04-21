@@ -36,6 +36,7 @@ export async function setup(ctx) {
       await authApi.login(username, password)
       this.loggedIn = true
       slotHost.remove('app.login', 'auth')
+      ctx.events.emit('auth:logged-in')
     },
     async logout() {
       await authApi.logout()

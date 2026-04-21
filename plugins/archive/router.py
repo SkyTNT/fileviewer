@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import pathlib
@@ -6,7 +7,7 @@ import time
 import zipfile
 import tarfile
 from datetime import datetime
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 from config import validate_path, require_write
@@ -19,11 +20,7 @@ try:
 except ImportError:
     HAS_7Z = False
 
-try:
-    import pyzipper
-    HAS_PYZIPPER = True
-except ImportError:
-    HAS_PYZIPPER = False
+import pyzipper
 
 _ARCHIVE_EXTS: dict[str, str] = {
     '.zip':     'zip',
@@ -88,7 +85,7 @@ def _list_zip(p: pathlib.Path, pwd: str | None) -> list[dict]:
             return out
     except RuntimeError as e:
         if 'password' in str(e).lower():
-            raise HTTPException(401, 'Password required or incorrect')
+            raise HTTPException(422, 'Password required or incorrect')
         raise HTTPException(400, str(e))
     except zipfile.BadZipFile as e:
         raise HTTPException(400, f'Invalid ZIP file: {e}')
@@ -125,7 +122,7 @@ def _list_7z(p: pathlib.Path, pwd: str | None) -> list[dict]:
     except Exception as e:
         msg = str(e).lower()
         if 'password' in msg or 'encrypted' in msg:
-            raise HTTPException(401, 'Password required or incorrect')
+            raise HTTPException(422, 'Password required or incorrect')
         raise HTTPException(400, f'Invalid 7Z file: {e}')
 
 
@@ -176,7 +173,7 @@ def get_info(path: str = Query(...), password: str | None = Query(None)):
                         count += 1
             except RuntimeError as e:
                 if 'password' in str(e).lower():
-                    yield _sse({'type': 'error', 'status': 401, 'message': 'Password required or incorrect'})
+                    yield _sse({'type': 'error', 'code': 'password_required', 'message': 'Password required or incorrect'})
                     return
                 yield _sse({'type': 'error', 'message': str(e)})
                 return
@@ -211,7 +208,7 @@ def get_info(path: str = Query(...), password: str | None = Query(None)):
             except Exception as e:
                 msg = str(e).lower()
                 if 'password' in msg or 'encrypted' in msg:
-                    yield _sse({'type': 'error', 'status': 401, 'message': 'Password required or incorrect'})
+                    yield _sse({'type': 'error', 'code': 'password_required', 'message': 'Password required or incorrect'})
                     return
                 yield _sse({'type': 'error', 'message': f'Invalid 7Z file: {e}'})
                 return
@@ -295,11 +292,9 @@ def get_entry(
             raise HTTPException(404, 'Entry not found')
         except RuntimeError as e:
             if 'password' in str(e).lower():
-                raise HTTPException(401, 'Password required or incorrect')
+                raise HTTPException(422, 'Password required or incorrect')
             # AES-encrypted ZIP (pyzipper-created) — standard zipfile raises
             # NotImplementedError (subclass of RuntimeError) without 'password'
-            if not HAS_PYZIPPER:
-                raise HTTPException(400, str(e))
             try:
                 with pyzipper.AESZipFile(p, 'r') as zf:
                     if bpwd:
@@ -309,7 +304,7 @@ def get_entry(
                 raise HTTPException(404, 'Entry not found')
             except Exception as e2:
                 if 'password' in str(e2).lower():
-                    raise HTTPException(401, 'Password required or incorrect')
+                    raise HTTPException(422, 'Password required or incorrect')
                 raise HTTPException(400, str(e2))
 
     elif fmt == '7z':
@@ -324,7 +319,7 @@ def get_entry(
         except Exception as e:
             msg = str(e).lower()
             if 'password' in msg:
-                raise HTTPException(401, 'Password required or incorrect')
+                raise HTTPException(422, 'Password required or incorrect')
             raise HTTPException(400, str(e))
 
     if content is None:
@@ -455,12 +450,11 @@ def _do_extract_zip(arc, dest, pwd, filt, strategy='overwrite', cancelled: threa
 
     # Detect AES-encrypted ZIP (compress_type 99 = WinZip AES, used by pyzipper)
     use_pyzipper = False
-    if HAS_PYZIPPER:
-        try:
-            with zipfile.ZipFile(arc, 'r') as zf:
-                use_pyzipper = any(m.compress_type == 99 for m in zf.infolist()[:10])
-        except Exception:
-            pass
+    try:
+        with zipfile.ZipFile(arc, 'r') as zf:
+            use_pyzipper = any(m.compress_type == 99 for m in zf.infolist()[:10])
+    except Exception:
+        pass
 
     opener = (lambda: pyzipper.AESZipFile(arc, 'r')) if use_pyzipper else (lambda: zipfile.ZipFile(arc, 'r'))
     try:
@@ -568,7 +562,7 @@ def _do_extract_7z(arc, dest, pwd, filt, strategy='overwrite', cancelled: thread
             all_members = z.list()
     except Exception as e:
         msg = str(e).lower()
-        yield _sse({'type': 'error', 'message': 'Password required or incorrect' if 'password' in msg else str(e)})
+        yield _sse({'type': 'error', 'code': 'password_required', 'message': 'Password required or incorrect'} if 'password' in msg else {'type': 'error', 'message': str(e)})
         return
 
     members = [m for m in all_members if (filt is None or _matches(m.filename, filt))]
@@ -589,7 +583,7 @@ def _do_extract_7z(arc, dest, pwd, filt, strategy='overwrite', cancelled: thread
                 yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.filename})
         except Exception as e:
             msg = str(e).lower()
-            yield _sse({'type': 'error', 'message': 'Password required or incorrect' if 'password' in msg else str(e)})
+            yield _sse({'type': 'error', 'code': 'password_required', 'message': 'Password required or incorrect'} if 'password' in msg else {'type': 'error', 'message': str(e)})
         return
 
     # skip / coexist: split members into direct-extract and conflict groups
@@ -627,7 +621,7 @@ def _do_extract_7z(arc, dest, pwd, filt, strategy='overwrite', cancelled: thread
                 z.extract(path=str(dest), targets=[m.filename for m in direct])
         except Exception as e:
             msg = str(e).lower()
-            yield _sse({'type': 'error', 'message': 'Password required or incorrect' if 'password' in msg else str(e)})
+            yield _sse({'type': 'error', 'code': 'password_required', 'message': 'Password required or incorrect'} if 'password' in msg else {'type': 'error', 'message': str(e)})
             return
 
     # Read conflicting files via z.read() and write to their resolved paths
@@ -639,7 +633,7 @@ def _do_extract_7z(arc, dest, pwd, filt, strategy='overwrite', cancelled: thread
                 read_data = z.read(targets=[m.filename for m in need_read])
         except Exception as e:
             msg = str(e).lower()
-            yield _sse({'type': 'error', 'message': 'Password required or incorrect' if 'password' in msg else str(e)})
+            yield _sse({'type': 'error', 'code': 'password_required', 'message': 'Password required or incorrect'} if 'password' in msg else {'type': 'error', 'message': str(e)})
             return
 
     done = 0
@@ -727,7 +721,7 @@ def _collect_scan(sources, exclude_abs):
 
 
 @router.post('/create')
-def create(req: CreateRequest, _: None = Depends(require_write)):
+async def create(req: CreateRequest, request: Request, _: None = Depends(require_write)):
     out_path = validate_path(req.output_path)
 
     src_paths: list[pathlib.Path] = []
@@ -753,6 +747,16 @@ def create(req: CreateRequest, _: None = Depends(require_write)):
     level = max(0, min(9, req.level))
     cancelled = threading.Event()
 
+    async def _watch_disconnect():
+        while not cancelled.is_set():
+            if await request.is_disconnected():
+                cancelled.set()
+                return
+            await asyncio.sleep(0.5)
+
+    loop = asyncio.get_running_loop()
+    watch_task = asyncio.create_task(_watch_disconnect())
+
     def gen():
         try:
             if req.format == 'zip':
@@ -766,6 +770,8 @@ def create(req: CreateRequest, _: None = Depends(require_write)):
         except GeneratorExit:
             cancelled.set()
             raise
+        finally:
+            loop.call_soon_threadsafe(watch_task.cancel)
         if not cancelled.is_set():
             yield _sse({'type': 'done'})
 
@@ -836,10 +842,9 @@ def _do_create_zip(sources, output, level, pwd, excludes, cancelled: threading.E
     last_yield_time = 0.0
     completed = False
 
-    if pwd and HAS_PYZIPPER:
-        import pyzipper as pz
+    if pwd:
         def _open():
-            zf = pz.AESZipFile(output, 'w', compression=pz.ZIP_DEFLATED, encryption=pz.WZ_AES)
+            zf = pyzipper.AESZipFile(output, 'w', compression=pyzipper.ZIP_DEFLATED, encryption=pyzipper.WZ_AES)
             zf.setpassword(pwd.encode())
             return zf
     else:
@@ -847,9 +852,6 @@ def _do_create_zip(sources, output, level, pwd, excludes, cancelled: threading.E
         cl = level if level > 0 else None
         def _open():
             return zipfile.ZipFile(output, 'w', compression=ct, compresslevel=cl)
-        if pwd and not HAS_PYZIPPER:
-            yield _sse({'type': 'warning',
-                        'message': 'pyzipper not installed; archive created without encryption'})
 
     try:
         with _open() as zf:
@@ -983,7 +985,6 @@ def _do_create_7z(sources, output, level, pwd, excludes, cancelled: threading.Ev
 def get_capabilities():
     return {
         'formats': sorted({'zip', 'tar', 'tar.gz', 'tar.bz2', 'tar.xz'} | ({'7z'} if HAS_7Z else set())),
-        'zip_encrypt': HAS_PYZIPPER,
         '7z_available': HAS_7Z,
     }
 

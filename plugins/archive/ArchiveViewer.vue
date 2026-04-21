@@ -214,7 +214,7 @@ async function loadArchive() {
     loading.value = false
 
     if (!res.ok) {
-      if (res.status === 401) {
+      if (res.status === 422) {
         passwordRequired.value = true
         if (password.value) passwordError.value = true
       } else {
@@ -258,7 +258,7 @@ async function loadArchive() {
           totalCompressed.value   = _totalComp
         } else if (data.type === 'error') {
           _cancelScan()
-          if (data.status === 401) {
+          if (data.code === 'password_required') {
             passwordRequired.value = true
             if (password.value) passwordError.value = true
           } else {
@@ -313,9 +313,10 @@ async function selectEntry(entry) {
         entryText.value = text
       }
     } catch (e) {
-      if (e.response?.status === 401) {
+      if (e.response?.status === 422) {
         passwordRequired.value = true
         passwordError.value = !!password.value
+        entryError.value = t('archive.app.passwordRequired')
       } else {
         entryError.value = e.message
       }
@@ -330,8 +331,8 @@ function onImgError() {
   if (archiveInfo.value?.encrypted) {
     passwordRequired.value = true
     passwordError.value = !!password.value
+    entryError.value = t('archive.app.passwordRequired')
   }
-  // else: falls through to download fallback view
 }
 
 // ── extract ───────────────────────────────────────────────────────────────────

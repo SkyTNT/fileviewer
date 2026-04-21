@@ -104,13 +104,13 @@ export function createArchiveState(explorerState, taskState, winMgr, archiveApi,
             try {
               const ev = JSON.parse(line.slice(5).trim())
               if (ev.type === 'meta') { needsPassword = ev.encrypted; break outer }
-              if (ev.type === 'error' && ev.status === 401) { needsPassword = true; break outer }
+              if (ev.type === 'error' && ev.code === 'password_required') { needsPassword = true; break outer }
             } catch {}
           }
           buf = buf.slice(buf.lastIndexOf('\n\n') + 2)
         }
         reader.cancel()
-      } else if (res.status === 401) {
+      } else if (res.status === 422) {
         needsPassword = true
       }
     } catch { /* ignore */ }

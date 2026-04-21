@@ -21,7 +21,7 @@ const level       = ref(6)
 const password    = ref('')
 const showPwd     = ref(false)
 
-const caps = ref({ formats: ['zip', 'tar', 'tar.gz', 'tar.bz2', 'tar.xz'], zip_encrypt: false, '7z_available': false })
+const caps = ref({ formats: ['zip', 'tar', 'tar.gz', 'tar.bz2', 'tar.xz'], '7z_available': false })
 archiveApi.getCapabilities().then(r => { caps.value = r.data }).catch(() => {})
 
 const formatOptions = computed(() =>
@@ -29,7 +29,7 @@ const formatOptions = computed(() =>
 )
 
 const supportsPassword = computed(() =>
-  format.value === '7z' || (format.value === 'zip' && caps.value.zip_encrypt)
+  format.value === '7z' || format.value === 'zip'
 )
 
 const defaultExtension = computed(() => {
@@ -135,18 +135,15 @@ function startCompress() {
     </div>
 
     <v-text-field
-      v-if="supportsPassword || format === 'zip'"
+      v-if="supportsPassword"
       v-model="password"
       :type="showPwd ? 'text' : 'password'"
-      autocomplete="off"
+      autocomplete="new-password"
       :label="t('archive.compress.password')"
-      :hint="!supportsPassword && format === 'zip' ? t('archive.compress.pwdZipNote') : ''"
-      :disabled="!supportsPassword"
       density="compact"
       variant="outlined"
       prepend-inner-icon="mdi-lock-outline"
       :append-inner-icon="showPwd ? 'mdi-eye-off' : 'mdi-eye'"
-      persistent-hint
       class="mb-3 flex-grow-0"
       @click:append-inner="showPwd = !showPwd"
     />

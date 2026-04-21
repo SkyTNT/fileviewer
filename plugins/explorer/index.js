@@ -39,6 +39,13 @@ export async function setup(ctx) {
 
   await explorerState.init()
 
+  ctx.events.on('auth:logged-in', async () => {
+    await appConfig.load()
+    explorerState.writeMode = appConfig.writeMode
+    explorerState.roots     = appConfig.roots
+    await explorerState.init()
+  }, ctx.pluginId)
+
   slotHost.inject('sidebar.top', markRaw(ExplorerSidebar), 'explorer')
   slotHost.inject('toolbar', markRaw(ExplorerAppBar), 'explorer')
   slotHost.inject('content.layout', markRaw(ExplorerContent), 'explorer')
