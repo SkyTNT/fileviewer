@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="FileViewer v2 API", lifespan=lifespan)
+app = FastAPI(title="FileViewer API", lifespan=lifespan)
 
 _cors = [o.strip() for o in os.environ.get("FILE_VIEWER_CORS_ORIGINS", "").split(",") if o.strip()]
 if _cors:

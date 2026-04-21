@@ -3,9 +3,9 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fileviewerv2"
+name = "fileviewer"
 version = "2.0.0"
-description = "File Viewer v2 — plugin-based architecture"
+description = "File Viewer — plugin-based architecture"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.111",
@@ -23,7 +23,7 @@ dependencies = [
 archive = ["py7zr"]
 
 [project.scripts]
-fileviewerv2 = "cli:main"
+fileviewer = "cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

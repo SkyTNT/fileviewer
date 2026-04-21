@@ -2,84 +2,68 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## What This Is
+
+FileViewer is a plugin-based file browser and viewer. The Python/FastAPI backend serves filesystem data; the Vue 3/Vuetify frontend renders it. Both sides mirror the same plugin architecture (service registry, event bus, plugin manager).
+Design principle: **kernel minimized, domain cohesion, clear plugin↔plugin and plugin↔kernel boundaries.**
+
 ## Commands
 
-**Frontend (use pnpm, never npm):**
-```sh
-pnpm dev          # dev server with HMR (proxies /api → localhost:8001)
-pnpm build        # build Vue app to static/
-pnpm preview      # preview production build
+**Frontend:**
+```bash
+pnpm install        # install deps
+pnpm run dev        # Vite dev server (proxies /api → localhost:8001)
+pnpm run build      # build to static/
 ```
 
 **Backend:**
-```sh
-fileviewerv2 [path] --host 127.0.0.1 --port 8001   # run server
-uvicorn server:app --reload                        # dev mode with reload
+```bash
+pip install -e .              # install CLI in editable mode
+pip install -e ".[archive]"   # include py7zr for archive support
+fileviewer /path --port 8001 --write  # run the app
 ```
-Options: `--write`, `--user <u>`, `--password <p>`, `--no-browser`, `--name <label>`
 
-**Full dev setup:** run `pnpm dev` and `uvicorn server:app --reload` concurrently. Vite proxies `/api` to `:8001`.
+**Dev workflow:** run `pnpm run dev` + `fileviewer .` simultaneously; the Vite dev server proxies API requests.
 
 ## Architecture
 
-FileViewer v2 is a plugin-based file browser: a Vue 3 + Vuetify 3 SPA over a FastAPI backend. Both sides use a symmetric plugin kernel.
-Design principle: **kernel minimized, domain cohesion, clear plugin↔plugin and plugin↔kernel boundaries.**
+### Backend (Python)
 
-### Dual Kernel (JS + Python, mirrored)
+Entry points: `cli.py` (arg parsing, sets env vars, launches uvicorn) → `server.py` (FastAPI app with lifespan startup).
 
-`/kernel/` exists in both JS and Python with matching interfaces:
-- **ServiceRegistry** — DI container; plugins declare `provides.services` and `requires.services`
-- **EventBus** — pub/sub for cross-plugin communication
-- **PluginManager** — loads plugins in dependency order (Kahn's topological sort, circular dep detection)
-- Each plugin exposes `setup(ctx)` and optional `teardown(ctx)`
+On startup, `server.py` initializes a **service registry** and **event bus**, then the **plugin manager** loads all `plugins/*/plugin.py` files. Plugins are topologically sorted by declared `requires`/`provides` in their `plugin.toml`. Each plugin registers FastAPI routes and services.
 
-JS plugins: `manifest.js` declares metadata/deps; `index.js` runs `setup(ctx)`.  
-Python plugins: `plugin.toml` declares metadata/deps; `plugin.py` runs `setup(ctx)`.
+Key env vars (set by CLI args):
+- `FILE_VIEWER_ROOTS` — `"path1|name1;path2|name2"`
+- `FILE_VIEWER_WRITE` — `"1"` enables mutations
+- `FILE_VIEWER_USER` / `FILE_VIEWER_PASS` — basic auth
+- `FILE_VIEWER_CORS_ORIGINS` — comma-separated CORS origins
 
-### Plugin Extension Points (Frontend)
+### Frontend (JavaScript)
 
-Plugins extend the UI without coupling via registries on `ctx`:
-- `app.registry` — file opener: `{ match(file), component }` (priority fallback)
-- `toolbar.registry`, `action.registry` — toolbar buttons and context menu actions
-- `layout.registry` — content layout engines
-- `slot.host` — inject Vue components into named slots: `sidebar.top`, `toolbar`, `content.layout`, `windows`, `task.panel`, `notifications`
-- `file-type.registry` — map extensions to MIME-like type names
+Entry: `index.html` → `main.js` → creates Vue app with Vuetify + i18n, then a **Kernel** (service registry, event bus, plugin manager). Plugins are dynamically imported from `./plugins/*/index.js`.
 
-### Plugin Extension Points (Backend)
+The frontend kernel exposes registries consumed by plugins:
+- **App Registry** — maps file types to viewer components (priority-based)
+- **Layout Registry** — list, waterfall, etc.
+- **Action Registry** — context menus and detail panels
+- **Toolbar Registry** — toolbar buttons
+- **Plugin Slots** — UI injection points: `app.login`, `sidebar.top`, `toolbar`, `content.layout`, `windows`, `taskbar`, `task.panel`, `notifications`
 
-- `ctx.app.include_router(router, prefix="/api/[plugin]")` — mount FastAPI router
-- Backend plugins wrap FastAPI via `_WrappedApp` to detect route conflicts
+i18n: vue-i18n, supports `en`, `zh-CN`, `zh-TW`, `ja`. Plugins extend messages via their own locale files.
 
-### Key Plugins
+### Plugin Structure
 
-| ID | Purpose |
-|----|---------|
-| `explorer` | File browser: sidebar tree, toolbar, list/grid views |
-| `text` | Text/JSON/Markdown viewer (CodeMirror 6) |
-| `dataframe` | CSV/Parquet/JSONL viewer (Polars on backend) |
-| `image` | Image viewer (Pillow on backend) |
-| `media` | Audio/video streaming |
-| `hex` | Hex dump viewer |
-| `archive` | ZIP/7z reader |
-| `fs-ops` | File operations (copy, move, delete) |
-| `upload` | File upload |
-| `auth` | Optional HTTP basic auth middleware |
+Every plugin lives in `plugins/<name>/` with this layout:
+```
+plugin.toml     # id, version, enabled, provides[], requires[]
+plugin.py       # backend: FastAPI routes + service registrations
+index.js        # frontend: kernel plugin initialization
+manifest.js     # frontend: plugin metadata
+```
 
-### Path Security
-
-All file access goes through `config.py`: `parse_path()` → `validate_path()` → `_check_under()`. This prevents directory traversal. Roots are set via env var `FILE_VIEWER_ROOTS` (semicolon-separated `path|display_name`).
-
-### State & i18n
-
-Frontend state is plain Vue `reactive()` objects held in services — no Pinia/Vuex. Components access services via `useService(id)` composable.
-
-i18n: each plugin extends the `i18n` service at setup time with its own locale keys. Supported locales: `en`, `zh-CN`, `zh-TW`, `ja`.
-
-### Write Mode & Auth
-
-Write mode: `FILE_VIEWER_WRITE=1` env var or `--write` CLI flag. Backend checks this per-request; frontend shows indicator.  
-Auth: optional; `--user`/`--password` flags set env vars read by the `auth` plugin, which provides an `auth.verify` service that server middleware calls.
+Notable plugins: `fs_local` (filesystem I/O), `explorer` (core browser UI), `auth`, `archive` (ZIP/TAR/7Z via py7zr), `dataframe` (CSV/Parquet via Polars), `image`, `media`, `hex`.
 
 ### Build Output
 
-`pnpm build` emits to `static/`. FastAPI serves this directory as static files — build before running the server in production.
+`pnpm run build` outputs to `static/` with Vite-chunked JS (`vuetify.js`, `codemirror.js`, `vendor.js`, `main.js`) + hash-based filenames. The FastAPI app serves `static/` as static files.
