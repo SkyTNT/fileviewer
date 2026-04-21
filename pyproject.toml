@@ -27,8 +27,10 @@ fileviewer = "cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["kernel*", "plugins*"]
+include = ["kernel*", "plugins*", "static*"]
+
+[tool.setuptools.package-data]
+static = ["**/*"]
 
 [tool.setuptools]
 py-modules = ["cli", "server", "config"]
-include-package-data = true
