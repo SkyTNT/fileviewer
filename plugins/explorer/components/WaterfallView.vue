@@ -249,7 +249,7 @@ let savedScrollY = 0
 onMounted(() => {
   scrollObs = new IntersectionObserver(
     (entries) => { if (entries[0].isIntersecting) loadMore() },
-    { rootMargin: '1200px' }
+    { rootMargin: '400px' }
   )
   if (sentinelRef.value) scrollObs.observe(sentinelRef.value)
 
