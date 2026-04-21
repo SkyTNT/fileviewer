@@ -127,7 +127,7 @@ function runLayout(startIndex = 0) {
     heights[minIdx] += cardHeight(file) + GAP
   }
   savedColHeights       = heights
-  containerHeight.value = heights.length ? Math.max(...heights) : 0
+  containerHeight.value = heights.length ? Math.max(0, Math.max(...heights) - GAP) : 0
   layoutVersion.value++
 }
 
@@ -174,12 +174,9 @@ const visibleEntries = computed(() => {
     const pos  = cardPositions[file.path]
     if (!pos) continue
     const h = cardHeight(file)
-    if (pos.y + h >= top && pos.y <= bottom) {
-      renderedPaths.add(file.path)
-    } else if (pos.y + h < evictTop || pos.y > evictBottom) {
-      renderedPaths.delete(file.path)
-    }
-    if (renderedPaths.has(file.path)) out.push(file)
+     if (pos.y + h >= top && pos.y <= bottom) {
+        out.push(file)
+      }
   }
   return out
 })
@@ -379,7 +376,7 @@ const { isDragging: rbDragging, selRect: rbRect, onMouseDown: rbMouseDown } =
 }
 .masonry-outer {
   position: relative;
-  overflow: visible;
+  overflow: hidden;
 }
 .masonry {
   position: relative;
