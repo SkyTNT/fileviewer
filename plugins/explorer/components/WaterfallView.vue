@@ -147,7 +147,7 @@ function cardStyle(file) {
 // ── Viewport culling (virtualization) ────────────────────────────────────────
 const viewportTop    = ref(0)
 const viewportBottom = ref(typeof window !== 'undefined' ? window.innerHeight : 0)
-const BUFFER_PX = 2000
+const BUFFER_PX = 800
 const EVICT_PX  = 10000
 
 const renderedPaths = new Set()
@@ -181,11 +181,13 @@ const visibleEntries = computed(() => {
     }
     if (renderedPaths.has(file.path)) out.push(file)
   }
+  console.trace(`WaterfallView: ${out.length} visible entries, ${renderedPaths.size} rendered entries, total ${entries.length} entries`)
   return out
 })
 
 let scrollRaf = null
 function onScrollOrResize() {
+  console.trace('scroll or resize event')
   savedScrollY = window.scrollY
   if (scrollRaf || zoomingTim) return
   scrollRaf = requestAnimationFrame(() => { scrollRaf = null; updateViewport() })
@@ -258,6 +260,10 @@ onMounted(() => {
     updateContainerMetrics(containerRef.value.clientWidth)
     containerRO.observe(containerRef.value)
   }
+
+  store.setRefreshHook(refreshAll)
+  window.addEventListener('scroll', onScrollOrResize, { passive: true, capture: true })
+  window.addEventListener('resize', onScrollOrResize, { passive: true })
 })
 
 onActivated(() => {
