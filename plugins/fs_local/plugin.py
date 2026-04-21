@@ -239,6 +239,7 @@ def download_file(path: str = Query(...)):
 # ── Write operations ──────────────────────────────────────────────────────────
 
 def _get_total_size(path: Path) -> int:
+    if path.is_symlink(): return 0
     if not path.exists(): return 0
     if path.is_file():
         try: return path.stat().st_size
@@ -444,19 +445,26 @@ def paste(req: BatchPasteRequest):
                 dest_dir = validate_path(entry.dest_parent)
                 dest = dest_dir / name; bytes_before = bytes_done
                 try:
-                    if dest.exists():
+                    if dest.exists() or dest.is_symlink():
                         if req.on_conflict == "skip":
                             bytes_done += entry_sizes[i]; yield _prog(i + 1, name, skipped=True); continue
                         elif req.on_conflict == "overwrite":
                             if dest == src:
                                 bytes_done += entry_sizes[i]; yield _prog(i + 1, name); continue
-                            shutil.rmtree(dest) if dest.is_dir() else dest.unlink()
+                            shutil.rmtree(dest) if (dest.is_dir() and not dest.is_symlink()) else dest.unlink()
                         elif req.on_conflict == "coexist":
                             name = _coexist_name(dest_dir, name); dest = dest_dir / name
                     if req.action == "move":
                         try:
                             src.rename(dest); bytes_done += entry_sizes[i]; yield _prog(i + 1, name); continue
                         except OSError: pass
+                    if src.is_symlink():
+                        os.symlink(os.readlink(src), dest)
+                        bytes_done += entry_sizes[i]
+                        if req.action == "move":
+                            src.unlink()
+                        yield _prog(i + 1, name)
+                        continue
                     copy_gen = _copy_dir_with_poll(src, dest, cancel) if src.is_dir() else _copy_file_with_poll(src, dest, cancel)
                     for delta in copy_gen:
                         bytes_done += delta
