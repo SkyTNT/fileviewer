@@ -234,12 +234,14 @@ function openImgPreview(value) {
         v-if="hasImageCols"
         v-model="imgRowHeight"
         :items="[40, 64, 96, 128, 200]"
+        :menu-props="{ zIndex: 3000 }"
         :label="t('dataframe.imgHeight')"
         density="compact" hide-details variant="outlined" style="max-width:110px"
       />
       <v-select
         v-model="pageSize"
         :items="[50, 100, 250, 500]"
+        :menu-props="{ zIndex: 3000 }"
         :label="t('dataframe.rowsPerPage')"
         density="compact" hide-details variant="outlined" style="max-width:110px"
         @update:model-value="onPageSizeChange"
