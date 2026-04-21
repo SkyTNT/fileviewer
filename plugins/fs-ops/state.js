@@ -177,16 +177,18 @@ export function createWriteState(explorerState, taskState, winMgr, writeApi, rea
   }
 
   async function _executePaste(entries, action, destDir, strategy) {
-    const data  = reactive({ done: 0, total: entries.length, current: '' })
+    const data  = reactive({ action, done: 0, total: entries.length, current: '', bytes_done: 0, bytes_total: 0 })
     const abort = new AbortController()
     const task  = taskState.add({ component: PasteTaskItem, data, cancel: () => abort.abort() })
     try {
       const res = await writeApi.paste(entries, action, destDir, strategy, abort.signal)
       await readSSE(res, (ev) => {
         if (ev.type === 'progress') {
-          data.done    = ev.done
-          data.total   = ev.total
-          data.current = ev.name || ''
+          data.done        = ev.done
+          data.total       = ev.total
+          data.current     = ev.name || ''
+          data.bytes_done  = ev.bytes_done  ?? data.bytes_done
+          data.bytes_total = ev.bytes_total ?? data.bytes_total
         } else if (ev.type === 'error') {
           task.errors.push(ev.message || ev.name || 'Error')
         } else if (ev.type === 'done') {

@@ -257,33 +257,26 @@ def _get_total_size(path: Path) -> int:
     return total
 
 
+_COPY_CHUNK = 4 * 1024 * 1024  # 4 MB
+
+
 def _copy_file_with_poll(src: Path, dst: Path, cancel: threading.Event | None = None):
-    err = [None]; done = [False]
-    def _worker():
-        try: shutil.copy2(src, dst)
-        except Exception as e: err[0] = e
-        finally: done[0] = True
-    worker = threading.Thread(target=_worker, daemon=True)
-    worker.start()
-    last_size = 0
     try:
-        while not done[0]:
-            worker.join(timeout=0.1)
-            if cancel is not None and cancel.is_set():
-                return
-            try: current = dst.stat().st_size
-            except OSError: current = last_size
-            if current > last_size:
-                yield current - last_size
-                last_size = current
+        with open(src, 'rb') as fsrc, open(dst, 'wb') as fdst:
+            while True:
+                if cancel is not None and cancel.is_set():
+                    return
+                chunk = fsrc.read(_COPY_CHUNK)
+                if not chunk:
+                    break
+                fdst.write(chunk)
+                yield len(chunk)
+        try: shutil.copystat(src, dst)
+        except OSError: pass
     except GeneratorExit:
         if cancel is not None:
             cancel.set()
         raise
-    if err[0]: raise err[0]
-    try: final = dst.stat().st_size
-    except OSError: final = last_size
-    if final > last_size: yield final - last_size
 
 
 def _copy_dir_with_poll(src: Path, dst: Path, cancel: threading.Event | None = None):
