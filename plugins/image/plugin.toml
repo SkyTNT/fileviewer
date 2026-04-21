@@ -1,0 +1,12 @@
+[plugin]
+id       = "image"
+version  = "1.0.0"
+name     = "Image Viewer"
+enabled  = true
+
+[plugin.provides]
+services = []
+
+[plugin.requires]
+services = ["fs.read", "fs.resolve"]
+plugins  = []

@@ -182,5 +182,7 @@ cython_debug/
 
 .idea
 node_modules
-fileviewer/static/
+static/
 .claude
+.playwright
+.playwright-cli

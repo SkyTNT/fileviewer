@@ -1,0 +1,12 @@
+[plugin]
+id       = "dataframe"
+version  = "1.0.0"
+name     = "DataFrame Viewer"
+enabled  = true
+
+[plugin.provides]
+services = []
+
+[plugin.requires]
+services = ["fs.read"]
+plugins  = []

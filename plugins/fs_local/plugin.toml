@@ -1,0 +1,12 @@
+[plugin]
+id       = "fs_local"
+version  = "1.0.0"
+name     = "Local Filesystem"
+enabled  = true
+
+[plugin.provides]
+services = ["fs.read", "fs.write", "fs.resolve"]
+
+[plugin.requires]
+services = []
+plugins  = []

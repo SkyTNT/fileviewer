@@ -1,0 +1,12 @@
+[plugin]
+id       = "media"
+version  = "1.0.0"
+name     = "Media Player"
+enabled  = true
+
+[plugin.provides]
+services = []
+
+[plugin.requires]
+services = ["fs.read", "fs.resolve"]
+plugins  = []

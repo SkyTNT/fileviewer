@@ -1,0 +1,12 @@
+[plugin]
+id       = "upload"
+version  = "1.0.0"
+name     = "Upload"
+enabled  = true
+
+[plugin.provides]
+services = []
+
+[plugin.requires]
+services = ["fs.write", "fs.resolve"]
+plugins  = []

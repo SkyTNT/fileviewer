@@ -1,0 +1,12 @@
+[plugin]
+id       = "hex"
+version  = "1.0.0"
+name     = "Hex Viewer"
+enabled  = true
+
+[plugin.provides]
+services = []
+
+[plugin.requires]
+services = ["fs.read"]
+plugins  = []
