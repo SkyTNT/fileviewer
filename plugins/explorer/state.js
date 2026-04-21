@@ -142,7 +142,7 @@ export function createExplorerState(filesApi) {
       writeHash(res.data.path, push)
     } catch (e) {
       error.value = e.message
-      if (path !== '' && p === 1) await loadDirectory('')
+      if (path !== '' && p === 1 && e.response?.status !== 401) await loadDirectory('')
     } finally {
       loading.value = false
     }
