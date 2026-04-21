@@ -7,9 +7,11 @@ const props = defineProps({
   sources:    { type: Array,  default: () => [] },
   winId:      { type: String, default: null },
   winManager: { type: Object, default: null },
+  win:        { type: Object, default: null },
 })
 
 const { t }        = useI18n()
+const menuZ        = computed(() => (props.win?.z ?? 3000) + 1)
 const services     = inject('services')
 const fileStore    = services?.get('explorer.state')
 const archiveStore = services?.get('archive.state')
@@ -120,7 +122,7 @@ function startCompress() {
         :label="t('archive.compress.format')"
         density="compact"
         variant="outlined"
-        :menu-props="{ zIndex: 3000 }"
+        :menu-props="{ zIndex: menuZ }"
         style="flex:1"
       />
       <div style="flex:1">

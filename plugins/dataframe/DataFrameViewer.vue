@@ -9,9 +9,10 @@ import { autocompletion, completionKeymap, acceptCompletion } from '@codemirror/
 
 const props = defineProps({
   file:       { type: Object, required: true },
-  appOpts: { type: Object, default: () => ({}) },
+  appOpts:    { type: Object, default: () => ({}) },
   winId:      { type: String, default: null },
   winManager: { type: Object, default: null },
+  win:        { type: Object, default: null },
 })
 
 const services      = inject('services')
@@ -22,6 +23,7 @@ const imagesApi     = services.get('images.api')
 const { t } = useI18n()
 
 const fileType = computed(() => props.appOpts?.type ?? 'parquet')
+const menuZ    = computed(() => (props.win?.z ?? 3000) + 1)
 
 const columns  = ref([])
 const dtypes   = ref([])
@@ -234,14 +236,14 @@ function openImgPreview(value) {
         v-if="hasImageCols"
         v-model="imgRowHeight"
         :items="[40, 64, 96, 128, 200]"
-        :menu-props="{ zIndex: 3000 }"
+        :menu-props="{ zIndex: menuZ }"
         :label="t('dataframe.imgHeight')"
         density="compact" hide-details variant="outlined" style="max-width:110px"
       />
       <v-select
         v-model="pageSize"
         :items="[50, 100, 250, 500]"
-        :menu-props="{ zIndex: 3000 }"
+        :menu-props="{ zIndex: menuZ }"
         :label="t('dataframe.rowsPerPage')"
         density="compact" hide-details variant="outlined" style="max-width:110px"
         @update:model-value="onPageSizeChange"

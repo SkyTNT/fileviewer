@@ -15,6 +15,7 @@
         v-bind="win.props"
         :win-id="win.id"
         :win-manager="manager"
+        :win="win"
       />
     </AppWindow>
     </Teleport>
