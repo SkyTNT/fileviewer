@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "fileviewer"
 version = "2.0.0"
 description = "File Viewer — plugin-based architecture"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.30",
