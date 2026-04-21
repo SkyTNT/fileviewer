@@ -181,13 +181,11 @@ const visibleEntries = computed(() => {
     }
     if (renderedPaths.has(file.path)) out.push(file)
   }
-  console.trace(`WaterfallView: ${out.length} visible entries, ${renderedPaths.size} rendered entries, total ${entries.length} entries`)
   return out
 })
 
 let scrollRaf = null
 function onScrollOrResize() {
-  console.trace('scroll or resize event')
   savedScrollY = window.scrollY
   if (scrollRaf || zoomingTim) return
   scrollRaf = requestAnimationFrame(() => { scrollRaf = null; updateViewport() })

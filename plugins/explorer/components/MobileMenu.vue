@@ -121,7 +121,7 @@ function doPaste()       { menuOpen.value = false; services.get('write.state').d
           :title="t('toolbar.multiSelect')"
           density="compact"
           rounded="lg"
-          @click="store.enterMobileMultiSelect()"
+          @click="menuOpen = false; store.enterMobileMultiSelect()"
         />
       </template>
 
