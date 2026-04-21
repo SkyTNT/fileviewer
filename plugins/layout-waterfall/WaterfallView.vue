@@ -2,14 +2,15 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted, onActivated, onDeactivated, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { useRubberBand } from '../useRubberBand.js'
-import { useContextMenu } from '../useContextMenu.js'
-import { useExplorerKeyboard } from '../useExplorerKeyboard.js'
 import FileCard from './FileCard.vue'
-import ContextMenu from './ContextMenu.vue'
 
-const store = inject('services').get('explorer.state')
-const filesApi = inject('services').get('files.api')
+const services            = inject('services')
+const useRubberBand       = services.get('explorer.useRubberBand')
+const useContextMenu      = services.get('explorer.useContextMenu')
+const useExplorerKeyboard = services.get('explorer.useExplorerKeyboard')
+const ContextMenu         = services.get('explorer.ContextMenu')
+const store    = services.get('explorer.state')
+const filesApi = services.get('files.api')
 const { t } = useI18n()
 
 const displayEntries = ref([])

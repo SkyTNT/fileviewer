@@ -12,9 +12,11 @@ import SettingsMenu    from './components/SettingsMenu.vue'
 import EntryCount      from './components/EntryCount.vue'
 import MobileMenu      from './components/MobileMenu.vue'
 import WriteModeChip   from './components/WriteModeChip.vue'
-import ListView      from './components/ListView.vue'
-import WaterfallView from './components/WaterfallView.vue'
 import { createExplorerState } from './state.js'
+import { useRubberBand }       from './useRubberBand.js'
+import { useContextMenu }      from './useContextMenu.js'
+import { useExplorerKeyboard } from './useExplorerKeyboard.js'
+import ContextMenu             from './components/ContextMenu.vue'
 export { manifest } from './manifest.js'
 
 export async function setup(ctx) {
@@ -35,7 +37,10 @@ export async function setup(ctx) {
   explorerState.roots     = appConfig.roots
 
   ctx.services.register('explorer.state', explorerState, 'explorer')
-  ctx.services.register('explorer.views', { list: markRaw(ListView), waterfall: markRaw(WaterfallView) }, 'explorer')
+  ctx.services.register('explorer.useRubberBand', useRubberBand, 'explorer')
+  ctx.services.register('explorer.useContextMenu', useContextMenu, 'explorer')
+  ctx.services.register('explorer.useExplorerKeyboard', useExplorerKeyboard, 'explorer')
+  ctx.services.register('explorer.ContextMenu', markRaw(ContextMenu), 'explorer')
 
   await explorerState.init()
 
@@ -140,6 +145,9 @@ export async function teardown(ctx) {
   slotHost.remove('content.layout', 'explorer')
   slotHost.remove('toolbar', 'explorer')
   ctx.services.get('toolbar.registry').unregisterAll('explorer')
-  ctx.services.unregister('explorer.views', 'explorer')
+  ctx.services.unregister('explorer.ContextMenu', 'explorer')
+  ctx.services.unregister('explorer.useExplorerKeyboard', 'explorer')
+  ctx.services.unregister('explorer.useContextMenu', 'explorer')
+  ctx.services.unregister('explorer.useRubberBand', 'explorer')
   ctx.services.unregister('explorer.state', 'explorer')
 }
