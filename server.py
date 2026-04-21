@@ -5,6 +5,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -45,6 +46,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="FileViewer API", lifespan=lifespan)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 _cors = [o.strip() for o in os.environ.get("FILE_VIEWER_CORS_ORIGINS", "").split(",") if o.strip()]
 if _cors:
