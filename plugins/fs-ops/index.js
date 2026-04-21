@@ -232,6 +232,7 @@ export async function setup(ctx) {
   })
 
   ctx.events.on('keyboard:keydown', ({ key, ctrl, meta, raw }) => {
+    if (winMgr?.windows.some(w => !w.minimized)) return
     const mod = ctrl || meta
     if (mod && key === 'c' && sel().length > 0 && !window.getSelection()?.toString()) {
       raw.preventDefault(); explorerState.setCopy(sel())

@@ -2,6 +2,7 @@ import { inject, onMounted, onUnmounted } from 'vue'
 
 export function useExplorerKeyboard(allEntries = null) {
   const fileStore = inject('services').get('explorer.state')
+  const winMgr    = inject('services').get('window.manager')
   const events     = inject('events')
 
   function getList() {
@@ -11,6 +12,7 @@ export function useExplorerKeyboard(allEntries = null) {
   }
 
   function handler({ key, ctrl, shift, meta, raw }) {
+    if (winMgr?.hasVisibleWindow && key !== 'Escape' && !key?.startsWith('F')) return
     switch (key) {
       case 'F5':
         raw.preventDefault()
