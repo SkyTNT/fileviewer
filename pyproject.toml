@@ -31,3 +31,4 @@ include = ["kernel*", "plugins*"]
 
 [tool.setuptools]
 py-modules = ["cli", "server", "config"]
+include-package-data = true
