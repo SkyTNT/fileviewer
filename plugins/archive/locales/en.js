@@ -19,6 +19,7 @@ export default {
       download: 'Download',
       clickToView: 'Click a file to view',
       noRandomAccess: 'Sequential format — extract to view files',
+      extract: 'Extract',
       extracting: 'Extracting…',
       close: 'Close',
     },

@@ -10,12 +10,11 @@ const props = defineProps({
 
 const { t }    = useI18n()
 const services = inject('services')
-const store              = services?.get('explorer.state')
-const JsonNode           = services?.get('text.json-node')
-const archiveApi         = services?.get('archive.api')
-const writeApi           = services?.get('write.api')
-const ft                 = services?.get('file.types')
-const openConflictDialog = services?.get('fs-ops.conflict-dialog')
+const store        = services?.get('explorer.state')
+const JsonNode     = services?.get('text.json-node')
+const archiveApi   = services?.get('archive.api')
+const archiveState = services?.get('archive.state')
+const ft           = services?.get('file.types')
 
 // ── state ─────────────────────────────────────────────────────────────────────
 const loading      = ref(false)
@@ -110,13 +109,6 @@ const entryJson      = ref(null)
 const entryImgUrl    = ref(null)
 const entryError     = ref(null)
 
-// ── extract progress ──────────────────────────────────────────────────────────
-const extracting      = ref(false)
-const extractDone     = ref(0)
-const extractTotal    = ref(0)
-const extractErrors   = ref([])
-const extractFinished = ref(false)
-
 // ── totals (set once on done event) ──────────────────────────────────────────
 const totalUncompressed = ref(0)
 const totalCompressed   = ref(0)
@@ -173,8 +165,6 @@ watch(() => props.file, async (f) => {
   selectedEntry.value    = null
   mobileShowApp.value = false
   checkedPaths.value     = new Set()
-  extracting.value       = false
-  extractFinished.value  = false
   await loadArchive()
 }, { immediate: true })
 
@@ -243,6 +233,7 @@ async function loadArchive() {
 
         if (data.type === 'meta') {
           archiveInfo.value = { format: data.format, random_access: data.random_access, encrypted: data.encrypted, entry_count: 0 }
+          if (data.encrypted && !password.value) passwordRequired.value = true
           scanning.value = true
         } else if (data.type === 'entry') {
           _allEntriesAcc.push(data)
@@ -336,74 +327,12 @@ function onImgError() {
 }
 
 // ── extract ───────────────────────────────────────────────────────────────────
-async function extractHere() { await doExtract(store.currentPath) }
-
-async function extractToSubfolder() {
-  if (!props.file) return
-  const name = props.file.name
-  let folder = name
-  for (const ext of ['.tar.gz', '.tar.bz2', '.tar.xz']) {
-    if (name.toLowerCase().endsWith(ext)) { folder = name.slice(0, -ext.length); break }
-  }
-  if (folder === name) { const dot = name.lastIndexOf('.'); if (dot > 0) folder = name.slice(0, dot) }
-  try { await writeApi.mkdir(store.currentPath, folder) } catch { /* already exists */ }
-  await doExtract(store.currentPath + '/' + folder)
+function extractHere() {
+  archiveState.extractDirect(props.file, store.currentPath, password.value || null, extractEntries.value)
 }
 
-async function doExtract(dest) {
-  extracting.value      = true
-  extractDone.value     = 0
-  extractTotal.value    = 0
-  extractErrors.value   = []
-  extractFinished.value = false
-
-  // Check for conflicts before starting
-  const entries = extractEntries.value
-  let strategy = 'overwrite'
-  try {
-    const res = await archiveApi.checkConflicts(props.file.path, dest, password.value || null, entries)
-    if (res.data.conflicts.length > 0) {
-      strategy = await openConflictDialog(res.data.conflicts)
-      if (!strategy) { extracting.value = false; return }
-    }
-  } catch { /* ignore, proceed with overwrite */ }
-
-  try {
-    const res     = await archiveApi.extract(props.file.path, dest, password.value || null, entries, strategy)
-    const reader  = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buf = ''
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buf += decoder.decode(value, { stream: true })
-      const parts = buf.split('\n\n')
-      buf = parts.pop()
-      for (const part of parts) {
-        const line = part.trim()
-        if (!line.startsWith('data: ')) continue
-        try {
-          const data = JSON.parse(line.slice(6))
-          if (data.type === 'progress')      { extractDone.value = data.done; extractTotal.value = data.total }
-          else if (data.type === 'error')    { extractErrors.value.push(data.message || data.name || 'Error') }
-          else if (data.type === 'done')     { extractFinished.value = true; store.refresh(); store.invalidateTree?.() }
-        } catch { /* bad SSE */ }
-      }
-    }
-  } catch (e) {
-    extractErrors.value.push(e.message)
-    extractFinished.value = true
-  }
-}
-
-const extractPercent = computed(() =>
-  extractTotal.value > 0 ? Math.round((extractDone.value / extractTotal.value) * 100) : 0
-)
-
-function closeExtract() {
-  extracting.value      = false
-  extractFinished.value = false
-  extractErrors.value   = []
+function extractToSubfolder() {
+  archiveState.extractToSubfolderDirect(props.file, password.value || null, extractEntries.value)
 }
 
 // Cancel in-progress scan when component is unmounted
@@ -438,7 +367,7 @@ onUnmounted(() => _cancelScan())
 
       <v-spacer />
 
-      <template v-if="archiveInfo && !extracting && store.writeMode && !store.isAtHome">
+      <template v-if="archiveInfo && store.writeMode && !store.isAtHome">
         <v-btn icon size="small" :title="t('archive.app.extractHere')" @click="extractHere">
           <v-icon size="18">mdi-archive-arrow-down-outline</v-icon>
         </v-btn>
@@ -618,27 +547,6 @@ onUnmounted(() => _cancelScan())
 
       </div>
 
-      <!-- ── extract progress overlay ──────────────────────────────────────── -->
-      <div v-if="extracting" class="extract-overlay pa-4">
-        <v-card class="extract-card pa-4" max-width="480">
-          <div class="d-flex align-center mb-3">
-            <v-icon class="mr-2" color="primary">mdi-archive-arrow-down-outline</v-icon>
-            <span class="text-subtitle-1 font-weight-medium">{{ t('archive.app.extracting') }}</span>
-          </div>
-          <v-progress-linear
-            :model-value="extractPercent"
-            :indeterminate="extractTotal === 0"
-            color="primary" height="8" rounded class="mb-2"
-          />
-          <div class="text-caption text-medium-emphasis mb-3">{{ extractDone }} / {{ extractTotal || '…' }}</div>
-          <div v-if="extractErrors.length" class="mb-3">
-            <div v-for="(err, i) in extractErrors.slice(0, 5)" :key="i" class="text-caption text-error">{{ err }}</div>
-          </div>
-          <v-btn v-if="extractFinished" color="primary" variant="tonal" block @click="closeExtract">
-            {{ t('archive.app.close') }}
-          </v-btn>
-        </v-card>
-      </div>
   </div>
 </template>
 
@@ -750,18 +658,6 @@ onUnmounted(() => _cancelScan())
   margin: 0;
   tab-size: 4;
 }
-
-/* ── Extract overlay ──────────────────────────────────────────────────────── */
-.extract-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(var(--v-theme-surface), 0.85);
-  backdrop-filter: blur(4px);
-}
-.extract-card { width: 100%; }
 
 /* ── Mobile ───────────────────────────────────────────────────────────────── */
 @media (max-width: 639px) {

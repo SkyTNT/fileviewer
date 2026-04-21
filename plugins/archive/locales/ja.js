@@ -19,6 +19,7 @@ export default {
       download: 'ダウンロード',
       clickToView: 'ファイルをクリックして表示',
       noRandomAccess: '順次フォーマット — ファイルを表示するには先に展開してください',
+      extract: '展開',
       extracting: '展開中…',
       close: '閉じる',
     },

@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import pathlib
+import tempfile
 import threading
 import time
 import zipfile
@@ -465,6 +466,8 @@ def _do_extract_zip(arc, dest, pwd, filt, strategy='overwrite', cancelled: threa
             if filt is not None:
                 members = [m for m in members if _matches(m.filename, filt)]
             total = len(members)
+            bytes_total = sum(m.file_size for m in members if not m.filename.endswith('/'))
+            bytes_done = 0
 
             for i, m in enumerate(members):
                 if cancelled is not None and cancelled.is_set():
@@ -477,7 +480,8 @@ def _do_extract_zip(arc, dest, pwd, filt, strategy='overwrite', cancelled: threa
                         dir_path.mkdir(parents=True, exist_ok=True)
                     except ValueError:
                         pass  # skip traversal attempt
-                    yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.filename})
+                    yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.filename,
+                                'bytes_done': bytes_done, 'bytes_total': bytes_total})
                     continue
 
                 if strategy == 'overwrite':
@@ -486,20 +490,25 @@ def _do_extract_zip(arc, dest, pwd, filt, strategy='overwrite', cancelled: threa
                             zf.extract(m, dest)
                         else:
                             zf.extract(m, dest, pwd=bpwd)
-                        yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.filename})
+                        bytes_done += m.file_size
+                        yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.filename,
+                                    'bytes_done': bytes_done, 'bytes_total': bytes_total})
                     except Exception as e:
                         yield _sse({'type': 'error', 'done': i + 1, 'total': total,
                                     'name': m.filename, 'message': str(e)})
                 else:
                     out = _resolve_dest(dest, m.filename, strategy)
                     if out is None:
-                        yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.filename})
+                        yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.filename,
+                                    'bytes_done': bytes_done, 'bytes_total': bytes_total})
                         continue
                     try:
                         data = zf.read(m.filename) if use_pyzipper else zf.read(m.filename, pwd=bpwd)
                         out.parent.mkdir(parents=True, exist_ok=True)
                         out.write_bytes(data)
-                        yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.filename})
+                        bytes_done += m.file_size
+                        yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.filename,
+                                    'bytes_done': bytes_done, 'bytes_total': bytes_total})
                     except Exception as e:
                         yield _sse({'type': 'error', 'done': i + 1, 'total': total,
                                     'name': m.filename, 'message': str(e)})
@@ -514,6 +523,8 @@ def _do_extract_tar(arc, dest, filt, strategy='overwrite', cancelled: threading.
             if filt is not None:
                 members = [m for m in members if _matches(m.name, filt)]
             total = len(members)
+            bytes_total = sum(m.size for m in members if not m.isdir())
+            bytes_done = 0
 
             for i, m in enumerate(members):
                 if cancelled is not None and cancelled.is_set():
@@ -525,7 +536,8 @@ def _do_extract_tar(arc, dest, filt, strategy='overwrite', cancelled: threading.
                         dir_path.mkdir(parents=True, exist_ok=True)
                     except ValueError:
                         pass  # skip traversal attempt
-                    yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.name})
+                    yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.name,
+                                'bytes_done': bytes_done, 'bytes_total': bytes_total})
                     continue
 
                 if strategy == 'overwrite':
@@ -534,21 +546,26 @@ def _do_extract_tar(arc, dest, filt, strategy='overwrite', cancelled: threading.
                             tf.extract(m, dest, filter='data')
                         except TypeError:
                             tf.extract(m, dest)
-                        yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.name})
+                        bytes_done += m.size
+                        yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.name,
+                                    'bytes_done': bytes_done, 'bytes_total': bytes_total})
                     except Exception as e:
                         yield _sse({'type': 'error', 'done': i + 1, 'total': total,
                                     'name': m.name, 'message': str(e)})
                 else:
                     out = _resolve_dest(dest, m.name, strategy)
                     if out is None:
-                        yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.name})
+                        yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.name,
+                                    'bytes_done': bytes_done, 'bytes_total': bytes_total})
                         continue
                     try:
                         f = tf.extractfile(m)
                         if f:
                             out.parent.mkdir(parents=True, exist_ok=True)
                             out.write_bytes(f.read())
-                        yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.name})
+                        bytes_done += m.size
+                        yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.name,
+                                    'bytes_done': bytes_done, 'bytes_total': bytes_total})
                     except Exception as e:
                         yield _sse({'type': 'error', 'done': i + 1, 'total': total,
                                     'name': m.name, 'message': str(e)})
@@ -567,6 +584,7 @@ def _do_extract_7z(arc, dest, pwd, filt, strategy='overwrite', cancelled: thread
 
     members = [m for m in all_members if (filt is None or _matches(m.filename, filt))]
     total = len(members)
+    bytes_total = sum(getattr(m, 'uncompressed', 0) or 0 for m in members if not getattr(m, 'is_directory', False))
 
     if strategy == 'overwrite':
         if cancelled is not None and cancelled.is_set():
@@ -577,10 +595,13 @@ def _do_extract_7z(arc, dest, pwd, filt, strategy='overwrite', cancelled: thread
                     z.extract(path=str(dest), targets=[m.filename for m in members])
                 else:
                     z.extractall(path=str(dest))
+            bytes_done = 0
             for i, m in enumerate(members):
                 if cancelled is not None and cancelled.is_set():
                     break
-                yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.filename})
+                bytes_done += getattr(m, 'uncompressed', 0) or 0
+                yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.filename,
+                            'bytes_done': bytes_done, 'bytes_total': bytes_total})
         except Exception as e:
             msg = str(e).lower()
             yield _sse({'type': 'error', 'code': 'password_required', 'message': 'Password required or incorrect'} if 'password' in msg else {'type': 'error', 'message': str(e)})
@@ -624,42 +645,54 @@ def _do_extract_7z(arc, dest, pwd, filt, strategy='overwrite', cancelled: thread
             yield _sse({'type': 'error', 'code': 'password_required', 'message': 'Password required or incorrect'} if 'password' in msg else {'type': 'error', 'message': str(e)})
             return
 
-    # Read conflicting files via z.read() and write to their resolved paths
+    # Extract conflicting files to a temp dir, then move to resolved paths
     need_read = [m for m, out in renamed if out is not None]
-    read_data = {}
+    read_data = {}  # filename -> bytes
     if need_read:
         try:
-            with py7zr.SevenZipFile(arc, 'r', password=pwd) as z:
-                read_data = z.read(targets=[m.filename for m in need_read])
+            with tempfile.TemporaryDirectory() as tmp:
+                with py7zr.SevenZipFile(arc, 'r', password=pwd) as z:
+                    z.extract(path=tmp, targets=[m.filename for m in need_read])
+                for m in need_read:
+                    tmp_file = pathlib.Path(tmp) / pathlib.PurePosixPath(m.filename)
+                    if tmp_file.exists():
+                        read_data[m.filename] = tmp_file.read_bytes()
         except Exception as e:
             msg = str(e).lower()
             yield _sse({'type': 'error', 'code': 'password_required', 'message': 'Password required or incorrect'} if 'password' in msg else {'type': 'error', 'message': str(e)})
             return
 
     done = 0
+    bytes_done = 0
     for m in dirs:
         if cancelled is not None and cancelled.is_set():
             break
         done += 1
-        yield _sse({'type': 'progress', 'done': done, 'total': total, 'name': m.filename})
+        yield _sse({'type': 'progress', 'done': done, 'total': total, 'name': m.filename,
+                    'bytes_done': bytes_done, 'bytes_total': bytes_total})
     for m in direct:
         if cancelled is not None and cancelled.is_set():
             break
         done += 1
-        yield _sse({'type': 'progress', 'done': done, 'total': total, 'name': m.filename})
+        bytes_done += getattr(m, 'uncompressed', 0) or 0
+        yield _sse({'type': 'progress', 'done': done, 'total': total, 'name': m.filename,
+                    'bytes_done': bytes_done, 'bytes_total': bytes_total})
     for m, out in renamed:
         if cancelled is not None and cancelled.is_set():
             break
         done += 1
         if out is None:  # skipped
-            yield _sse({'type': 'progress', 'done': done, 'total': total, 'name': m.filename})
+            yield _sse({'type': 'progress', 'done': done, 'total': total, 'name': m.filename,
+                        'bytes_done': bytes_done, 'bytes_total': bytes_total})
             continue
         bio = read_data.get(m.filename)
-        if bio:
+        if bio is not None:
             try:
                 out.parent.mkdir(parents=True, exist_ok=True)
-                out.write_bytes(bio.read())
-                yield _sse({'type': 'progress', 'done': done, 'total': total, 'name': m.filename})
+                out.write_bytes(bio)
+                bytes_done += getattr(m, 'uncompressed', 0) or 0
+                yield _sse({'type': 'progress', 'done': done, 'total': total, 'name': m.filename,
+                            'bytes_done': bytes_done, 'bytes_total': bytes_total})
             except Exception as e:
                 yield _sse({'type': 'error', 'done': done, 'total': total,
                             'name': m.filename, 'message': str(e)})

@@ -8,7 +8,7 @@ export async function setup(ctx) {
 
   _handler = (e) => {
     const inEditable = EDITABLE.has(e.target?.tagName) || e.target?.isContentEditable
-    if (inEditable && e.key !== 'Escape' && !e.key.startsWith('F')) return
+    if (inEditable && e.key !== 'Escape' && !e.key?.startsWith('F')) return
 
     if (winMgr()?.hasVisibleWindow && e.key !== 'Escape') return
 

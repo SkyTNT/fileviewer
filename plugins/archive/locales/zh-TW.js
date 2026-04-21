@@ -19,6 +19,7 @@ export default {
       download: '下載',
       clickToView: '點擊檔案以檢視',
       noRandomAccess: '循序格式 — 請先解壓縮再檢視',
+      extract: '解壓縮',
       extracting: '正在解壓縮…',
       close: '關閉',
     },

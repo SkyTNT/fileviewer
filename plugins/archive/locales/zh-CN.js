@@ -19,6 +19,7 @@ export default {
       download: '下载',
       clickToView: '点击文件以查看',
       noRandomAccess: '顺序格式 — 请先解压再查看文件',
+      extract: '解压',
       extracting: '正在解压…',
       close: '关闭',
     },

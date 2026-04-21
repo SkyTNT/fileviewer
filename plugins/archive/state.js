@@ -140,18 +140,41 @@ export function createArchiveState(explorerState, taskState, winMgr, archiveApi,
     _runExtract(file, dest, null, strategy)
   }
 
-  async function _runExtract(file, dest, password, strategy = 'overwrite') {
-    const data  = reactive({ done: 0, total: 0, current: '' })
+  async function extractDirect(file, dest, password, entries) {
+    const strategy = await _checkConflicts(file, dest, password)
+    if (strategy === null) return
+    _runExtract(file, dest, password, strategy, entries)
+  }
+
+  async function extractToSubfolderDirect(file, password, entries) {
+    const name = file.name
+    let folder = name
+    for (const ext of ['.tar.gz', '.tar.bz2', '.tar.xz']) {
+      if (name.toLowerCase().endsWith(ext)) { folder = name.slice(0, -ext.length); break }
+    }
+    if (folder === name) {
+      const dot = name.lastIndexOf('.')
+      if (dot > 0) folder = name.slice(0, dot)
+    }
+    const dest = explorerState.currentPath + '/' + folder
+    try { await writeApi.mkdir(explorerState.currentPath, folder) } catch { /* already exists */ }
+    await extractDirect(file, dest, password, entries)
+  }
+
+  async function _runExtract(file, dest, password, strategy = 'overwrite', entries = null) {
+    const data  = reactive({ fileName: file.name, done: 0, total: 0, current: '', bytes_done: 0, bytes_total: 0 })
     const abort = new AbortController()
     const task  = taskState.add({ component: ExtractTaskItem, data, cancel: () => abort.abort() })
 
     try {
-      const res = await archiveApi.extract(file.path, dest, password, null, strategy, abort.signal)
+      const res = await archiveApi.extract(file.path, dest, password, entries, strategy, abort.signal)
       await readSSE(res, (ev) => {
         if (ev.type === 'progress') {
-          data.done    = ev.done
-          data.total   = ev.total
-          data.current = ev.name || ''
+          data.done       = ev.done
+          data.total      = ev.total
+          data.current    = ev.name || ''
+          data.bytes_done  = ev.bytes_done  ?? data.bytes_done
+          data.bytes_total = ev.bytes_total ?? data.bytes_total
         } else if (ev.type === 'error') {
           task.errors.push(ev.message || ev.name || 'Error')
         } else if (ev.type === 'done') {
@@ -171,5 +194,6 @@ export function createArchiveState(explorerState, taskState, winMgr, archiveApi,
   return reactive({
     openCompress, startCompress,
     extractHere, extractToSubfolder,
+    extractDirect, extractToSubfolderDirect,
   })
 }
