@@ -13,6 +13,7 @@
   >
     <!-- Title bar -->
     <v-toolbar
+      v-if="!win.noTitleBar"
       class="win-titlebar"
       :color="win.focused ? 'primary' : 'surface-variant'"
       density="compact"
@@ -80,15 +81,15 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, provide } from 'vue'
 
 const props = defineProps({
   win: { type: Object, required: true },
 })
 const emit = defineEmits(['focus', 'close', 'minimize', 'maximize', 'update:position', 'update:size'])
 
-const MIN_W = 320
-const MIN_H = 200
+const MIN_W = 20
+const MIN_H = 20
 
 const windowStyle = computed(() => {
   if (props.win.minimized) return { display: 'none' }
@@ -148,6 +149,8 @@ function onDragMoveTouch(e) {
 function stopDragTouch() {
   window.removeEventListener('touchmove', onDragMoveTouch)
 }
+
+provide('winDrag', { startDrag, startDragTouch })
 
 // ── Resize ────────────────────────────────────────────────────────────────────
 let resizeDir = ''
@@ -242,8 +245,6 @@ function stopResizeTouch() {
   position: fixed !important;
   display: flex;
   flex-direction: column;
-  min-width: 320px;
-  min-height: 200px;
   transition: box-shadow 0.2s, left 0s, top 0s, width 0s, height 0s;
 }
 .app-window.is-maximized {

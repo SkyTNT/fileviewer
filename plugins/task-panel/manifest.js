@@ -3,5 +3,5 @@ export const manifest = {
   name: 'Task Panel',
   version: '1.0.0',
   provides: { services: ['task.state'] },
-  requires: { services: [], plugins: [] },
+  requires: { services: ['window.manager'], plugins: [] },
 }

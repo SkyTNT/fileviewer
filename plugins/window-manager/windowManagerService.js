@@ -20,7 +20,10 @@ export function createWindowManager() {
     }
   }
 
-  function _defaultPos(w, h) {
+  function _defaultPos(w, h, customX, customY) {
+    if (customX !== undefined && customY !== undefined) {
+      return { x: Math.max(0, customX), y: Math.max(0, customY) }
+    }
     const count  = state.windows.length
     const offset = (count % 8) * CASCADE
     return {
@@ -33,7 +36,7 @@ export function createWindowManager() {
     get windows() { return state.windows },
     get hasVisibleWindow() { return state.windows.some(w => !w.minimized) },
 
-    open({ id, title, icon, component, props = {}, width, height, maximized = false }) {
+    open({ id, title, icon, component, props = {}, width, height, x, y, maximized = false, noTitleBar = false }) {
       // If same id already open, just focus it
       if (id) {
         const existing = state.windows.find(w => w.id === id)
@@ -44,9 +47,9 @@ export function createWindowManager() {
         }
       }
 
-      const w = Math.min(width  ?? 900, window.innerWidth)
+      const w = Math.min(width ?? 900, window.innerWidth)
       const h = Math.min(height ?? 600, window.innerHeight)
-      const pos = _defaultPos(w, h)
+      const pos = _defaultPos(w, h, x, y)
       const winId = id ?? `win-${_nextId++}`
 
       state._topZ++
@@ -62,6 +65,7 @@ export function createWindowManager() {
         maximized: maximized,
         minimized: false,
         focused:   true,
+        noTitleBar,
       })
       state.windows.forEach(w => { w.focused = false })
       state.windows.push(win)
