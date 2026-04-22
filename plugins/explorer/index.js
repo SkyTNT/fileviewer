@@ -20,9 +20,11 @@ import ContextMenu             from './components/ContextMenu.vue'
 export { manifest } from './manifest.js'
 
 export async function setup(ctx) {
-  const slotHost  = ctx.services.get('slot.host')
-  const appConfig = ctx.services.get('app.config')
-  const i18n      = ctx.services.get('i18n')
+  const [slotHost, appConfig, i18n] = await Promise.all([
+    ctx.services.getAsync('slot.host'),
+    ctx.services.getAsync('app.config'),
+    ctx.services.getAsync('i18n'),
+  ])
 
   i18n.extend('explorer', 'en', en)
   i18n.extend('explorer', 'zh-CN', zhCN)
@@ -31,7 +33,7 @@ export async function setup(ctx) {
 
   await appConfig.load()
 
-  const filesApi      = ctx.services.get('files.api')
+  const filesApi      = await ctx.services.getAsync('files.api')
   const explorerState = createExplorerState(filesApi)
   explorerState.writeMode = appConfig.writeMode
   explorerState.roots     = appConfig.roots
@@ -55,7 +57,7 @@ export async function setup(ctx) {
   slotHost.inject('toolbar', markRaw(ExplorerAppBar), 'explorer')
   slotHost.inject('content.layout', markRaw(ExplorerContent), 'explorer')
 
-  const toolbar = ctx.services.get('toolbar.registry')
+  const toolbar = await ctx.services.getAsync('toolbar.registry')
   toolbar.registerGroup({ id: 'nav',      priority: 10, divider: false })
   toolbar.registerGroup({ id: 'actions',  priority: 35, divider: false })
   toolbar.registerGroup({ id: 'view',     priority: 30, divider: false })

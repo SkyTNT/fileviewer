@@ -10,20 +10,23 @@ import { createWriteApi } from './api.js'
 export { manifest } from './manifest.js'
 
 export async function setup(ctx) {
-  const i18n = ctx.services.get('i18n')
+  const i18n = await ctx.services.getAsync('i18n')
   i18n.extend('fs-ops', 'en', en)
   i18n.extend('fs-ops', 'zh-CN', zhCN)
   i18n.extend('fs-ops', 'zh-TW', zhTW)
   i18n.extend('fs-ops', 'ja', ja)
 
-  const explorerState = ctx.services.get('explorer.state')
-  const taskState     = ctx.services.get('task.state')
-  const appConfig     = ctx.services.get('app.config')
-  const winMgr        = ctx.services.get('window.manager')
-  const toolbar       = ctx.services.get('toolbar.registry')
-  const http       = ctx.services.get('network.http')
-  const httpStream = ctx.services.get('network.httpStream')
-  const readSSE    = ctx.services.get('network.sse')
+  const [explorerState, taskState, appConfig, winMgr, toolbar, http, httpStream, readSSE] =
+    await Promise.all([
+      ctx.services.getAsync('explorer.state'),
+      ctx.services.getAsync('task.state'),
+      ctx.services.getAsync('app.config'),
+      ctx.services.getAsync('window.manager'),
+      ctx.services.getAsync('toolbar.registry'),
+      ctx.services.getAsync('network.http'),
+      ctx.services.getAsync('network.httpStream'),
+      ctx.services.getAsync('network.sse'),
+    ])
   const writeApi   = createWriteApi(http, httpStream)
   const conflictDialogFn = (conflicts) => openConflictDialog(winMgr, conflicts)
   ctx.services.register('fs-ops.conflict-dialog', conflictDialogFn, 'fs-ops')
@@ -31,7 +34,7 @@ export async function setup(ctx) {
   ctx.services.register('write.state', writeStore, 'fs-ops')
   ctx.services.register('write.api', writeApi, 'fs-ops')
 
-  const actionRegistry = ctx.services.get('action.registry')
+  const actionRegistry = await ctx.services.getAsync('action.registry')
 
   const sel       = () => explorerState.selectedEntries
   const ctxSel    = () => explorerState.ctxSel

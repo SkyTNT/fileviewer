@@ -7,16 +7,18 @@ import ja   from './locales/ja.js'
 export { manifest } from './manifest.js'
 
 export async function setup(ctx) {
-  const i18n = ctx.services.get('i18n')
+  const i18n = await ctx.services.getAsync('i18n')
   i18n.extend('open-with', 'en', en)
   i18n.extend('open-with', 'zh-CN', zhCN)
   i18n.extend('open-with', 'zh-TW', zhTW)
   i18n.extend('open-with', 'ja', ja)
 
-  const appRegistry    = ctx.services.get('app.registry')
-  const actionRegistry = ctx.services.get('action.registry')
-  const winMgr         = ctx.services.get('window.manager')
-  const explorerState  = ctx.services.get('explorer.state')
+  const [appRegistry, actionRegistry, winMgr, explorerState] = await Promise.all([
+    ctx.services.getAsync('app.registry'),
+    ctx.services.getAsync('action.registry'),
+    ctx.services.getAsync('window.manager'),
+    ctx.services.getAsync('explorer.state'),
+  ])
 
   const ctxSel = () => explorerState.ctxSel
   const sel    = () => explorerState.selectedEntries

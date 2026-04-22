@@ -3,7 +3,7 @@ import AppNotifications from './AppNotifications.vue'
 export { manifest } from './manifest.js'
 
 export async function setup(ctx) {
-  const slotHost = ctx.services.get('slot.host')
+  const slotHost = await ctx.services.getAsync('slot.host')
   slotHost.inject('notifications', markRaw(AppNotifications), 'notification')
 
   // Register notification service

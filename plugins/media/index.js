@@ -5,8 +5,10 @@ export { manifest } from './manifest.js'
 
 export async function setup(ctx) {
   ctx.services.register('media.api', createMediaApi(), 'media')
-  const winMgr   = ctx.services.get('window.manager')
-  const registry = ctx.services.get('app.registry')
+  const [winMgr, registry] = await Promise.all([
+    ctx.services.getAsync('window.manager'),
+    ctx.services.getAsync('app.registry'),
+  ])
 
   registry.register({
     key: 'media',

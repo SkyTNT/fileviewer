@@ -8,16 +8,20 @@ import { createDataframeApi } from './api.js'
 export { manifest } from './manifest.js'
 
 export async function setup(ctx) {
-  const i18n = ctx.services.get('i18n')
+  const i18n = await ctx.services.getAsync('i18n')
   i18n.extend('dataframe', 'en', en)
   i18n.extend('dataframe', 'zh-CN', zhCN)
   i18n.extend('dataframe', 'zh-TW', zhTW)
   i18n.extend('dataframe', 'ja', ja)
 
-  ctx.services.register('dataframe.api', createDataframeApi(ctx.services.get('network.http')), 'dataframe')
+  const [http, winMgr, registry] = await Promise.all([
+    ctx.services.getAsync('network.http'),
+    ctx.services.getAsync('window.manager'),
+    ctx.services.getAsync('app.registry'),
+  ])
+  ctx.services.register('dataframe.api', createDataframeApi(http), 'dataframe')
 
-  const winMgr = ctx.services.get('window.manager')
-  ctx.services.get('app.registry').register({
+  registry.register({
     key: 'dataframe',
     icon: 'mdi-table-large',
     priority: 20,

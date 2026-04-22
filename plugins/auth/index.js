@@ -8,15 +8,17 @@ import { createAuthApi } from './api.js'
 export { manifest } from './manifest.js'
 
 export async function setup(ctx) {
-  const i18n = ctx.services.get('i18n')
+  const i18n = await ctx.services.getAsync('i18n')
   i18n.extend('auth', 'en', en)
   i18n.extend('auth', 'zh-CN', zhCN)
   i18n.extend('auth', 'zh-TW', zhTW)
   i18n.extend('auth', 'ja', ja)
 
-  const http = ctx.services.get('network.http')
+  const [http, slotHost] = await Promise.all([
+    ctx.services.getAsync('network.http'),
+    ctx.services.getAsync('slot.host'),
+  ])
   const authApi = createAuthApi(http)
-  const slotHost = ctx.services.get('slot.host')
 
   const authState = reactive({
     authRequired: false,

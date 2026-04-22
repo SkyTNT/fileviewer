@@ -1,3 +1,4 @@
+import asyncio
 import importlib.util
 import logging
 import sys
@@ -10,10 +11,6 @@ from kernel.context import PluginContext, _WrappedApp
 from kernel.event_bus import EventBus
 from kernel.manifest import PluginMeta, load_manifest
 from kernel.service_registry import ServiceRegistry
-
-
-class CircularDependencyError(Exception):
-    pass
 
 
 class PluginManager:
@@ -35,66 +32,27 @@ class PluginManager:
                 if meta.enabled:
                     metas.append(meta)
 
-        ordered = self._topo_sort(metas)
+        # Load all modules first (synchronous, order-independent)
+        modules = {meta.id: self._load_module(meta) for meta in metas}
 
-        for meta in ordered:
-            module = self._load_module(meta)
-            ctx = PluginContext(
-                plugin_id=meta.id,
-                services=self._services,
-                events=self._events,
-                app=self._app,
-                logger=logging.getLogger(f"plugin.{meta.id}"),
-            )
-            await module.setup(ctx)
-            self._plugins[meta.id] = module
-            self._metas[meta.id] = meta
-            logging.getLogger("kernel").info(f"Plugin loaded: {meta.id}")
+        # Run all setup() functions concurrently.
+        # Each plugin calls ctx.services.get_async() for its dependencies, which
+        # waits until the providing plugin registers the service — no explicit
+        # ordering or plugin.toml requires declarations needed.
+        await asyncio.gather(*[self._setup_one(meta, modules[meta.id]) for meta in metas])
 
-    def _topo_sort(self, metas: list[PluginMeta]) -> list[PluginMeta]:
-        # Build service -> plugin_id map from kernel built-ins + plugin provides
-        svc_to_plugin: dict[str, str] = {}
-        for meta in metas:
-            for svc in meta.provides_services:
-                svc_to_plugin[svc] = meta.id
-
-        # Resolve service deps to plugin deps
-        id_to_meta = {m.id: m for m in metas}
-        deps: dict[str, set[str]] = {m.id: set() for m in metas}
-        for meta in metas:
-            for svc in meta.requires_services:
-                provider = svc_to_plugin.get(svc)
-                if provider and provider != meta.id:
-                    deps[meta.id].add(provider)
-            for pid in meta.requires_plugins:
-                if pid in id_to_meta:
-                    deps[meta.id].add(pid)
-
-        # Kahn's algorithm
-        in_degree = {m.id: 0 for m in metas}
-        for pid, dep_set in deps.items():
-            for dep in dep_set:
-                in_degree[pid] += 1
-
-        # Actually: in_degree[node] = number of nodes that node depends on
-        # We want nodes with no deps first
-        queue = [m.id for m in metas if in_degree[m.id] == 0]
-        result = []
-        while queue:
-            node = queue.pop(0)
-            result.append(id_to_meta[node])
-            for other in metas:
-                if node in deps[other.id]:
-                    deps[other.id].discard(node)
-                    in_degree[other.id] -= 1
-                    if in_degree[other.id] == 0:
-                        queue.append(other.id)
-
-        if len(result) != len(metas):
-            remaining = [m.id for m in metas if m.id not in {r.id for r in result}]
-            raise CircularDependencyError(f"Circular dependency detected among: {remaining}")
-
-        return result
+    async def _setup_one(self, meta: PluginMeta, module: Any) -> None:
+        ctx = PluginContext(
+            plugin_id=meta.id,
+            services=self._services,
+            events=self._events,
+            app=self._app,
+            logger=logging.getLogger(f"plugin.{meta.id}"),
+        )
+        await module.setup(ctx)
+        self._plugins[meta.id] = module
+        self._metas[meta.id] = meta
+        logging.getLogger("kernel").info(f"Plugin loaded: {meta.id}")
 
     def _load_module(self, meta: PluginMeta):
         plugin_py = meta.dir / "plugin.py"

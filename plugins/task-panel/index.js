@@ -11,7 +11,7 @@ const TASK_PANEL_WIN_ID = 'task-panel:main'
 let savedState = null
 
 export async function setup(ctx) {
-  const i18n = ctx.services.get('i18n')
+  const i18n = await ctx.services.getAsync('i18n')
   i18n.extend('task-panel', 'en', en)
   i18n.extend('task-panel', 'zh-CN', zhCN)
   i18n.extend('task-panel', 'zh-TW', zhTW)
@@ -20,7 +20,7 @@ export async function setup(ctx) {
   const taskState = createTaskState()
   ctx.services.register('task.state', taskState, 'task-panel')
 
-  const winMgr = ctx.services.get('window.manager')
+  const winMgr = await ctx.services.getAsync('window.manager')
 
   watch(() => taskState.tasks.length, (n, prev) => {
     if (n > prev && n > 0) {

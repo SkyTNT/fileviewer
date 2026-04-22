@@ -10,16 +10,18 @@ import { createTextApi } from './api.js'
 export { manifest } from './manifest.js'
 
 export async function setup(ctx) {
-  const i18n = ctx.services.get('i18n')
+  const i18n = await ctx.services.getAsync('i18n')
   i18n.extend('text', 'en', en)
   i18n.extend('text', 'zh-CN', zhCN)
   i18n.extend('text', 'zh-TW', zhTW)
   i18n.extend('text', 'ja', ja)
 
-  ctx.services.register('text.api', createTextApi(ctx.services.get('network.http')), 'text')
-
-  const winMgr   = ctx.services.get('window.manager')
-  const registry = ctx.services.get('app.registry')
+  const [http, winMgr, registry] = await Promise.all([
+    ctx.services.getAsync('network.http'),
+    ctx.services.getAsync('window.manager'),
+    ctx.services.getAsync('app.registry'),
+  ])
+  ctx.services.register('text.api', createTextApi(http), 'text')
 
   registry.register({
     key: 'json',

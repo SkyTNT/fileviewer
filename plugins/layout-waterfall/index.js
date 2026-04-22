@@ -4,7 +4,7 @@ import RootsWaterfallView from './RootsWaterfallView.vue'
 export { manifest } from './manifest.js'
 
 export async function setup(ctx) {
-  const layoutRegistry = ctx.services.get('layout.registry')
+  const layoutRegistry = await ctx.services.getAsync('layout.registry')
   layoutRegistry.register({
     key: 'waterfall',
     label: 'toolbar.viewWaterfall',

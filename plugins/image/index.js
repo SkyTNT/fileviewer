@@ -17,17 +17,19 @@ function isImage(entry) {
 }
 
 export async function setup(ctx) {
-  const i18n = ctx.services.get('i18n')
+  const i18n = await ctx.services.getAsync('i18n')
   i18n.extend('image', 'en', en)
   i18n.extend('image', 'zh-CN', zhCN)
   i18n.extend('image', 'zh-TW', zhTW)
   i18n.extend('image', 'ja', ja)
 
-  const http = ctx.services.get('network.http')
-  const winMgr    = ctx.services.get('window.manager')
+  const [http, winMgr, registry] = await Promise.all([
+    ctx.services.getAsync('network.http'),
+    ctx.services.getAsync('window.manager'),
+    ctx.services.getAsync('app.registry'),
+  ])
   const imagesApi = createImagesApi(http)
   ctx.services.register('images.api', imagesApi, 'image')
-  const registry = ctx.services.get('app.registry')
 
   registry.register({
     key: 'image',
@@ -52,8 +54,10 @@ export async function setup(ctx) {
     },
   })
 
-  const actionRegistry = ctx.services.get('action.registry')
-  const explorerState  = ctx.services.get('explorer.state')
+  const [actionRegistry, explorerState] = await Promise.all([
+    ctx.services.getAsync('action.registry'),
+    ctx.services.getAsync('explorer.state'),
+  ])
   const sel    = () => explorerState.selectedEntries
   const ctxSel = () => explorerState.ctxSel
 

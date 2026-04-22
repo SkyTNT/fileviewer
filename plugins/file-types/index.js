@@ -2,7 +2,7 @@ import { manifest } from './manifest.js'
 export { manifest }
 
 export async function setup(ctx) {
-  const ft = ctx.services.get('file.types')
+  const ft = await ctx.services.getAsync('file.types')
   ft.register('directory', 'mdi-folder',                 'primary')
   ft.register('image',     'mdi-image-outline',          'success')
   ft.register('parquet',   'mdi-table-large',            'warning')

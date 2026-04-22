@@ -8,7 +8,7 @@ export async function setup(ctx) {
   const manager = createWindowManager()
   ctx.services.register('window.manager', manager, 'window-manager')
 
-  const slotHost = ctx.services.get('slot.host')
+  const slotHost = await ctx.services.getAsync('slot.host')
   slotHost.inject('windows', markRaw(WindowManager), 'window-manager', { manager })
   slotHost.inject('taskbar', markRaw(Taskbar), 'window-manager', { manager })
 }

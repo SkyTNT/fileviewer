@@ -3,9 +3,11 @@ import LayoutToggleGroup from './LayoutToggleGroup.vue'
 export { manifest } from './manifest.js'
 
 export async function setup(ctx) {
-  const layoutRegistry = ctx.services.get('layout.registry')
-  const winMgr         = ctx.services.get('window.manager')
-  const toolbar        = ctx.services.get('toolbar.registry')
+  const [layoutRegistry, winMgr, toolbar] = await Promise.all([
+    ctx.services.getAsync('layout.registry'),
+    ctx.services.getAsync('window.manager'),
+    ctx.services.getAsync('toolbar.registry'),
+  ])
 
   toolbar.register({
     id: 'layout-switcher', plugin: 'layout-switcher',

@@ -9,22 +9,25 @@ import { createArchiveApi } from './api.js'
 export { manifest } from './manifest.js'
 
 export async function setup(ctx) {
-  const i18n = ctx.services.get('i18n')
+  const i18n = await ctx.services.getAsync('i18n')
   i18n.extend('archive', 'en', en)
   i18n.extend('archive', 'zh-CN', zhCN)
   i18n.extend('archive', 'zh-TW', zhTW)
   i18n.extend('archive', 'ja', ja)
 
-  const registry      = ctx.services.get('app.registry')
-  const explorerState = ctx.services.get('explorer.state')
-  const taskState     = ctx.services.get('task.state')
-  const appConfig     = ctx.services.get('app.config')
-  const winMgr        = ctx.services.get('window.manager')
-  const writeApi      = ctx.services.get('write.api')
-  const http          = ctx.services.get('network.http')
-  const httpStream    = ctx.services.get('network.httpStream')
-  const readSSE            = ctx.services.get('network.sse')
-  const openConflictDialog = ctx.services.get('fs-ops.conflict-dialog')
+  const [registry, explorerState, taskState, appConfig, winMgr, writeApi, http, httpStream, readSSE, openConflictDialog] =
+    await Promise.all([
+      ctx.services.getAsync('app.registry'),
+      ctx.services.getAsync('explorer.state'),
+      ctx.services.getAsync('task.state'),
+      ctx.services.getAsync('app.config'),
+      ctx.services.getAsync('window.manager'),
+      ctx.services.getAsync('write.api'),
+      ctx.services.getAsync('network.http'),
+      ctx.services.getAsync('network.httpStream'),
+      ctx.services.getAsync('network.sse'),
+      ctx.services.getAsync('fs-ops.conflict-dialog'),
+    ])
   const archiveApi         = createArchiveApi(http, httpStream)
   const archiveState       = createArchiveState(explorerState, taskState, winMgr, archiveApi, writeApi, readSSE, openConflictDialog)
   ctx.services.register('archive.state', archiveState, 'archive')
@@ -42,7 +45,7 @@ export async function setup(ctx) {
     },
   })
 
-  const actionRegistry = ctx.services.get('action.registry')
+  const actionRegistry = await ctx.services.getAsync('action.registry')
   const sel    = () => explorerState.selectedEntries
   const ctxSel = () => explorerState.ctxSel
   const writeMode = () => appConfig.writeMode

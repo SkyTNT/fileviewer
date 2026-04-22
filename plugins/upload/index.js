@@ -8,20 +8,23 @@ import { createUploadState } from './state.js'
 export { manifest } from './manifest.js'
 
 export async function setup(ctx) {
-  const i18n = ctx.services.get('i18n')
+  const i18n = await ctx.services.getAsync('i18n')
   i18n.extend('upload', 'en', en)
   i18n.extend('upload', 'zh-CN', zhCN)
   i18n.extend('upload', 'zh-TW', zhTW)
   i18n.extend('upload', 'ja', ja)
 
-  const explorerState = ctx.services.get('explorer.state')
-  const taskState     = ctx.services.get('task.state')
-  const appConfig     = ctx.services.get('app.config')
-  const winMgr        = ctx.services.get('window.manager')
-  const toolbar       = ctx.services.get('toolbar.registry')
-  const slotHost      = ctx.services.get('slot.host')
-  const writeApi           = ctx.services.get('write.api')
-  const openConflictDialog = ctx.services.get('fs-ops.conflict-dialog')
+  const [explorerState, taskState, appConfig, winMgr, toolbar, slotHost, writeApi, openConflictDialog] =
+    await Promise.all([
+      ctx.services.getAsync('explorer.state'),
+      ctx.services.getAsync('task.state'),
+      ctx.services.getAsync('app.config'),
+      ctx.services.getAsync('window.manager'),
+      ctx.services.getAsync('toolbar.registry'),
+      ctx.services.getAsync('slot.host'),
+      ctx.services.getAsync('write.api'),
+      ctx.services.getAsync('fs-ops.conflict-dialog'),
+    ])
   const uploadState        = createUploadState(explorerState, taskState, winMgr, writeApi, openConflictDialog)
   ctx.services.register('upload.state', uploadState, 'upload')
 

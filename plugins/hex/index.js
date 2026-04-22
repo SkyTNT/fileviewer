@@ -8,16 +8,20 @@ import { createHexApi } from './api.js'
 export { manifest } from './manifest.js'
 
 export async function setup(ctx) {
-  const i18n = ctx.services.get('i18n')
+  const i18n = await ctx.services.getAsync('i18n')
   i18n.extend('hex', 'en', en)
   i18n.extend('hex', 'zh-CN', zhCN)
   i18n.extend('hex', 'zh-TW', zhTW)
   i18n.extend('hex', 'ja', ja)
 
-  ctx.services.register('hex.api', createHexApi(ctx.services.get('network.http')), 'hex')
+  const [http, appRegistry, winMgr, explorerState] = await Promise.all([
+    ctx.services.getAsync('network.http'),
+    ctx.services.getAsync('app.registry'),
+    ctx.services.getAsync('window.manager'),
+    ctx.services.getAsync('explorer.state'),
+  ])
+  ctx.services.register('hex.api', createHexApi(http), 'hex')
 
-  const appRegistry = ctx.services.get('app.registry')
-  const winMgr         = ctx.services.get('window.manager')
   appRegistry.register({
     key: 'hex',
     icon: 'mdi-hexadecimal',
@@ -30,7 +34,6 @@ export async function setup(ctx) {
     },
   })
 
-  const explorerState = ctx.services.get('explorer.state')
   const sel = () => explorerState.selectedEntries
 
   ctx.events.on('keyboard:keydown', ({ key, ctrl, raw }) => {
