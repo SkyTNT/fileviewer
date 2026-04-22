@@ -6,7 +6,6 @@
     <SlotHost name="content.layout" />
     <SlotHost name="windows" />
     <SlotHost name="taskbar" />
-    <SlotHost name="task.panel" />
     <SlotHost name="notifications" />
   </v-app>
 </template>

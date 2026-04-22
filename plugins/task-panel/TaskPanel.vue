@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, inject, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, inject, nextTick, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const props = defineProps({
@@ -15,9 +15,9 @@ const collapsed = ref(false)
 
 const { startDrag, startDragTouch } = inject('winDrag', { startDrag: () => {}, startDragTouch: () => {} })
 
-const running  = computed(() => taskStore.tasks.filter(t => t.status === 'running').length)
-const errored  = computed(() => taskStore.tasks.filter(t => t.status === 'error').length)
-const hasDone  = computed(() => taskStore.tasks.some(t => t.status !== 'running'))
+const running = computed(() => taskStore.tasks.filter(t => t.status === 'running').length)
+const errored = computed(() => taskStore.tasks.filter(t => t.status === 'error').length)
+const hasDone = computed(() => taskStore.tasks.some(t => t.status !== 'running'))
 
 const headerLabel = computed(() => {
   if (running.value > 0) return t('tasks.runningN', running.value)
@@ -26,54 +26,76 @@ const headerLabel = computed(() => {
 })
 
 const COLLAPSED_H = 44
-const expandedH = ref(props.win?.h ?? 500)
+const MAX_H       = 600
+const HEADER_H    = 44
+const FOOTER_H    = 37  // clear-done row (divider + button row)
 
-// Track user-resized height (only while expanded)
-watch(() => props.win?.h, h => {
-  if (h != null && !collapsed.value) expandedH.value = h
+// Cap the task list so total content never exceeds MAX_H
+const taskListMaxH = computed(() => {
+  const footerH = hasDone.value ? FOOTER_H : 0
+  return MAX_H - HEADER_H - 1 - footerH  // 1 = divider between header and list
 })
 
-// Persist position and expanded size to memory via callback
+const expandedH = ref(props.win?.h ?? 500)
+
+function setWinH(h) {
+  if (!props.winManager || !props.winId || !props.win) return
+  const bottom = props.win.y + props.win.h
+  props.winManager.setPosition(props.winId, { x: props.win.x, y: Math.max(0, bottom - h) })
+  props.winManager.setSize(props.winId, { w: props.win.w, h })
+}
+
+// Persist to memory
 watch([() => props.win?.x, () => props.win?.y, () => props.win?.w, expandedH], () => {
   if (!props.win || !props.onSaveState) return
   props.onSaveState({ x: props.win.x, y: props.win.y, w: props.win.w, h: expandedH.value })
 })
 
-function setWinH(h) {
-  if (props.winManager && props.winId && props.win) {
-    const bottom = props.win.y + props.win.h
-    props.winManager.setPosition(props.winId, { x: props.win.x, y: Math.max(0, bottom - h) })
-    props.winManager.setSize(props.winId, { w: props.win.w, h })
-  }
-}
-
 function toggle() {
   collapsed.value = !collapsed.value
-  setWinH(collapsed.value ? COLLAPSED_H : expandedH.value)
-}
-
-// Auto-expand when a new task arrives
-watch(() => taskStore.tasks.length, (n, prev) => {
-  if (n > prev) {
-    collapsed.value = false
+  if (collapsed.value) {
+    expandedH.value = props.win?.h ?? expandedH.value
+    setWinH(COLLAPSED_H)
+  } else {
     setWinH(expandedH.value)
   }
+}
+
+const panelEl = ref(null)
+
+async function updateHeight() {
+  if (collapsed.value || !panelEl.value || !props.win) return
+  await nextTick()
+  const h = panelEl.value.offsetHeight
+  if (h > 0 && Math.abs(h - props.win.h) > 1) {
+    expandedH.value = h
+    setWinH(h)
+  }
+}
+
+// Expand/grow when tasks change
+watch(() => taskStore.tasks.length, async (n, prev) => {
+  if (n > prev && collapsed.value) {
+    collapsed.value = false
+  }
+  await updateHeight()
 })
 
-// Restore expanded height before unmount so savedStates records the right h
+// Footer appears/disappears → height changes
+watch(hasDone, updateHeight)
+
 onBeforeUnmount(() => {
   if (collapsed.value) setWinH(expandedH.value)
 })
 </script>
 
 <template>
-  <div class="task-panel-content">
+  <div ref="panelEl" class="task-panel-root">
     <!-- Header -->
     <div
       class="d-flex align-center px-3 py-2 task-header"
       @mousedown.prevent="startDrag"
       @touchstart.prevent="startDragTouch"
-      @click="toggle"
     >
       <v-progress-circular
         v-if="running > 0"
@@ -104,7 +126,7 @@ onBeforeUnmount(() => {
     <!-- Task list -->
     <template v-if="!collapsed">
       <v-divider />
-      <div class="task-list">
+      <div class="task-list" :style="{ maxHeight: taskListMaxH + 'px' }">
         <template v-for="(task, i) in taskStore.tasks" :key="task.id">
           <v-divider v-if="i > 0" />
           <component :is="task.component" :task="task" />
@@ -124,20 +146,15 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.task-panel-content {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+.task-panel-root {
+  flex-shrink: 0;  /* don't compress — offsetHeight gives true natural height */
 }
 .task-header {
   cursor: move;
   user-select: none;
   min-height: 44px;
-  flex-shrink: 0;
 }
 .task-list {
-  flex: 1;
-  min-height: 0;
   overflow-y: auto;
 }
 </style>
