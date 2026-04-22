@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, inject, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, inject, nextTick, onBeforeUnmount, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const props = defineProps({
@@ -63,8 +63,10 @@ function toggle() {
 
 const panelEl = ref(null)
 
+onMounted(updateHeight)
+
 async function updateHeight() {
-  if (collapsed.value || !panelEl.value || !props.win) return
+  if (collapsed.value || !panelEl.value || !props.win || taskStore.tasks.length === 0) return
   await nextTick()
   const h = panelEl.value.offsetHeight
   if (h > 0 && Math.abs(h - props.win.h) > 1) {
