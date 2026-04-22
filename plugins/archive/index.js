@@ -81,7 +81,7 @@ export async function setup(ctx) {
   })
 
   ctx.events.on('keyboard:keydown', ({ key, ctrl, shift, raw }) => {
-    if (winMgr?.windows.some(w => !w.minimized)) return
+    if (winMgr?.hasVisibleWindow) return
     if (!ctrl || !shift || key !== 'C') return
     if (!writeMode() || sel().length === 0) return
     raw.preventDefault()

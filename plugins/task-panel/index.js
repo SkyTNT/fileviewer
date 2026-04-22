@@ -35,6 +35,7 @@ export async function setup(ctx) {
         x: savedState?.x ?? window.innerWidth  - 360 - 16,
         y: savedState?.y ?? window.innerHeight - 500 - 16,
         noTitleBar: true,
+        background: true,
       })
     } else if (n === 0) {
       winMgr.close(TASK_PANEL_WIN_ID)

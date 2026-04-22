@@ -16,7 +16,7 @@ export async function setup(ctx) {
   })
 
   ctx.events.on('keyboard:keydown', ({ key }) => {
-    if (winMgr?.windows.some(w => !w.minimized)) return
+    if (winMgr?.hasVisibleWindow) return
     const layouts = layoutRegistry.layouts
     const idx = layouts.findIndex((_, i) => String(i + 1) === key)
     if (idx >= 0) layoutRegistry.setActive(layouts[idx].key)

@@ -38,7 +38,7 @@ export async function setup(ctx) {
   })
 
   ctx.events.on('keyboard:keydown', ({ key, ctrl, raw }) => {
-    if (winMgr?.windows.some(w => !w.minimized)) return
+    if (winMgr?.hasVisibleWindow) return
     if (!ctrl || key !== 'u') return
     if (!appConfig.writeMode || explorerState.isAtHome) return
     raw.preventDefault()

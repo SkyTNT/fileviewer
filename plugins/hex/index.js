@@ -34,7 +34,7 @@ export async function setup(ctx) {
   const sel = () => explorerState.selectedEntries
 
   ctx.events.on('keyboard:keydown', ({ key, ctrl, raw }) => {
-    if (winMgr?.windows.some(w => !w.minimized)) return
+    if (winMgr?.hasVisibleWindow) return
     if (!ctrl || key !== 'h') return
     if (sel().length !== 1 || sel()[0]?.is_dir) return
     raw.preventDefault()
