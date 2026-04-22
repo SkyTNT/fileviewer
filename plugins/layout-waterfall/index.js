@@ -1,5 +1,6 @@
 import { markRaw } from 'vue'
-import WaterfallView from './WaterfallView.vue'
+import WaterfallView      from './WaterfallView.vue'
+import RootsWaterfallView from './RootsWaterfallView.vue'
 export { manifest } from './manifest.js'
 
 export async function setup(ctx) {
@@ -9,6 +10,7 @@ export async function setup(ctx) {
     label: 'toolbar.viewWaterfall',
     icon: 'mdi-view-module-outline',
     component: markRaw(WaterfallView),
+    rootsComponent: markRaw(RootsWaterfallView),
   })
   if (!layoutRegistry.activeId) layoutRegistry.setActive('waterfall')
 }

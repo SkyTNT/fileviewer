@@ -7,8 +7,8 @@
       @dragover.prevent
       @drop.prevent="onDrop"
     >
-      <RootsView v-if="store.isAtHome" />
-      <KeepAlive v-else-if="layoutComponent">
+      <component :is="rootsComponent" v-if="store.isAtHome && rootsComponent" />
+      <KeepAlive v-else-if="!store.isAtHome && layoutComponent">
         <component :is="layoutComponent" />
       </KeepAlive>
 
@@ -40,7 +40,6 @@
 <script setup>
 import { ref, computed, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
-import RootsView  from './components/RootsView.vue'
 import FileDetail from './components/FileDetail.vue'
 
 const services = inject('services')
@@ -49,6 +48,7 @@ const layoutRegistry = services.get('layout.registry')
 const { t } = useI18n()
 
 const layoutComponent = computed(() => layoutRegistry.active?.component ?? null)
+const rootsComponent  = computed(() => layoutRegistry.active?.rootsComponent ?? null)
 
 const dragCounter  = ref(0)
 const isDragging   = ref(false)

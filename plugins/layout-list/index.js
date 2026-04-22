@@ -1,5 +1,6 @@
 import { markRaw } from 'vue'
-import ListView from './ListView.vue'
+import ListView      from './ListView.vue'
+import RootsListView from './RootsListView.vue'
 export { manifest } from './manifest.js'
 
 export async function setup(ctx) {
@@ -9,6 +10,7 @@ export async function setup(ctx) {
     label: 'toolbar.viewList',
     icon: 'mdi-view-list-outline',
     component: markRaw(ListView),
+    rootsComponent: markRaw(RootsListView),
   })
 }
 
