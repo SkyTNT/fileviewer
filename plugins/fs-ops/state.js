@@ -5,23 +5,25 @@ import DeleteTaskItem from './DeleteTaskItem.vue'
 import DialogNewItem       from './dialogs/DialogNewItem.vue'
 import DialogConfirmDelete from './dialogs/DialogConfirmDelete.vue'
 
-export function createWriteState(explorerState, taskState, winMgr, writeApi, readSSE, openConflictFn) {
+export function createWriteState(explorerState, taskState, winMgr, writeApi, readSSE, openConflictFn, i18n) {
+  const t = (key, params) => i18n.t(key, params)
+
   function openRename(file, onSuccess = null) {
     const state = reactive({ name: file?.name || '', loading: false, error: '' })
     winMgr.open({
       id: 'dialog:rename',
-      title: 'Rename',
+      title: t('dialog.renameTitle'),
       icon: 'mdi-pencil-outline',
       component: markRaw(DialogNewItem),
       width: 400,
       height: 180,
       props: {
-        title: 'Rename',
-        label: 'New name',
+        title: t('dialog.renameTitle'),
+        label: t('dialog.newName'),
         get name()    { return state.name },
         get loading() { return state.loading },
         get error()   { return state.error },
-        confirmText: 'Rename',
+        confirmText: t('dialog.rename'),
         'onUpdate:name': (v) => { state.name = v },
         onConfirm: async () => {
           const newName = state.name.trim()
@@ -48,7 +50,7 @@ export function createWriteState(explorerState, taskState, winMgr, writeApi, rea
     const targets = Array.isArray(entries) ? entries : [entries]
     winMgr.open({
       id: 'dialog:delete',
-      title: targets.length > 1 ? `Delete ${targets.length} items` : `Delete "${targets[0]?.name}"`,
+      title: targets.length > 1 ? t('dialog.deleteTitleN', { n: targets.length }) : t('dialog.deleteTitle'),
       icon: 'mdi-delete-outline',
       component: markRaw(DialogConfirmDelete),
       width: 400,
@@ -67,13 +69,13 @@ export function createWriteState(explorerState, taskState, winMgr, writeApi, rea
     const state = reactive({ name: '', loading: false, error: '' })
     winMgr.open({
       id: 'dialog:mkdir',
-      title: 'New Folder',
+      title: t('dialog.newFolder'),
       icon: 'mdi-folder-plus-outline',
       component: markRaw(DialogNewItem),
       width: 400,
       height: 180,
       props: {
-        label: 'Folder name',
+        label: t('dialog.folderName'),
         get name()    { return state.name },
         get loading() { return state.loading },
         get error()   { return state.error },
@@ -102,13 +104,13 @@ export function createWriteState(explorerState, taskState, winMgr, writeApi, rea
     const state = reactive({ name: '', loading: false, error: '' })
     winMgr.open({
       id: 'dialog:touch',
-      title: 'New File',
+      title: t('dialog.newFile'),
       icon: 'mdi-file-plus-outline',
       component: markRaw(DialogNewItem),
       width: 400,
       height: 180,
       props: {
-        label: 'File name',
+        label: t('dialog.fileName'),
         get name()    { return state.name },
         get loading() { return state.loading },
         get error()   { return state.error },

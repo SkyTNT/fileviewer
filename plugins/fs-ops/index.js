@@ -27,7 +27,7 @@ export async function setup(ctx) {
   const writeApi   = createWriteApi(http, httpStream)
   const conflictDialogFn = (conflicts) => openConflictDialog(winMgr, conflicts)
   ctx.services.register('fs-ops.conflict-dialog', conflictDialogFn, 'fs-ops')
-  const writeStore    = createWriteState(explorerState, taskState, winMgr, writeApi, readSSE, conflictDialogFn)
+  const writeStore    = createWriteState(explorerState, taskState, winMgr, writeApi, readSSE, conflictDialogFn, i18n)
   ctx.services.register('write.state', writeStore, 'fs-ops')
   ctx.services.register('write.api', writeApi, 'fs-ops')
 
