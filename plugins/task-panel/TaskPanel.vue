@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, inject, nextTick, onBeforeUnmount, onMounted } from 'vue'
+import { ref, computed, watch, inject, onBeforeUnmount, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const props = defineProps({
@@ -62,31 +62,33 @@ function toggle() {
 }
 
 const panelEl = ref(null)
+let ro = null
+let lastPanelH = 0
 
-onMounted(updateHeight)
-
-async function updateHeight() {
-  if (collapsed.value || !panelEl.value || !props.win || taskStore.tasks.length === 0) return
-  await nextTick()
-  const h = panelEl.value.offsetHeight
-  if (h > 0 && Math.abs(h - props.win.h) > 1) {
-    expandedH.value = h
-    setWinH(h)
-  }
-}
-
-// Expand/grow when tasks change
-watch(() => taskStore.tasks.length, async (n, prev) => {
-  if (n > prev && collapsed.value) {
-    collapsed.value = false
-  }
-  await updateHeight()
+onMounted(() => {
+  ro = new ResizeObserver(() => {
+    if (collapsed.value || !props.win || !panelEl.value) return
+    const h = panelEl.value.offsetHeight
+    if (h === lastPanelH) return  // only width changed, height is same — ignore
+    lastPanelH = h
+    if (h > 0 && Math.abs(h - props.win.h) > 1) {
+      expandedH.value = h
+      setWinH(h)
+    }
+  })
+  ro.observe(panelEl.value)
 })
 
-// Footer appears/disappears → height changes
-watch(hasDone, updateHeight)
+// Expand when new tasks are added while collapsed
+watch(() => taskStore.tasks.length, (n, prev) => {
+  if (n > prev && collapsed.value) {
+    collapsed.value = false
+    setWinH(expandedH.value)
+  }
+})
 
 onBeforeUnmount(() => {
+  ro?.disconnect()
   if (collapsed.value) setWinH(expandedH.value)
 })
 </script>
