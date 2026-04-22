@@ -14,9 +14,10 @@ export function createUploadState(explorerState, taskState, winMgr, writeApi, op
         const res = await writeApi.uploadStatus(fileEntry.parent, fileEntry.file.name)
         const reported = res.data.offset ?? 0
         if (reported > 0 && reported < fileEntry.file.size) {
-          offset              = reported
+          offset                 = reported
           fileEntry.resumeOffset = offset
-          fileEntry.progress  = Math.round(offset / fileEntry.file.size * 100)
+          fileEntry.sent         = offset
+          fileEntry.progress     = Math.round(offset / fileEntry.file.size * 100)
         }
       } catch { /* no partial — start fresh */ }
 
@@ -26,7 +27,7 @@ export function createUploadState(explorerState, taskState, winMgr, writeApi, op
         offset,
         fileEntry.onConflict,
         controller.signal,
-        (sent, total) => { fileEntry.progress = Math.round(sent / total * 100) },
+        (sent, total) => { fileEntry.sent = sent; fileEntry.progress = Math.round(sent / total * 100) },
       )
 
       if (!res.ok) {
@@ -64,10 +65,12 @@ export function createUploadState(explorerState, taskState, winMgr, writeApi, op
     const fileEntries = files.map(file => reactive({
       id:           _nextFileId++,
       name:         file.name,
+      size:         file.size,
       file,
       parent,
       onConflict,
       progress:     0,
+      sent:         0,
       resumeOffset: 0,
       status:       'uploading',
       error:        null,

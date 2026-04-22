@@ -4,7 +4,9 @@ import { useI18n } from 'vue-i18n'
 
 const props     = defineProps({ task: Object })
 const { t }     = useI18n()
-const taskStore = inject('services').get('task.state')
+const services  = inject('services')
+const taskStore = services.get('task.state')
+const ft        = services.get('file.types')
 
 const files     = computed(() => props.task.data.files)
 const uploading = computed(() => files.value.filter(f => f.status === 'uploading').length)
@@ -54,7 +56,7 @@ function fileColor(f) {
           {{ file.name }}
         </span>
         <span v-if="file.status === 'uploading'" class="text-caption text-medium-emphasis">
-          <span v-if="file.resumeOffset" style="opacity: .6">↑</span>{{ file.progress }}%
+          <span v-if="file.resumeOffset" style="opacity: .6">↑</span>{{ ft.formatBytes(file.sent) }} / {{ ft.formatBytes(file.size) }}
         </span>
         <v-btn icon size="x-small" variant="text" @click="task.data.removeFile(file.id)">
           <v-icon size="11">mdi-close</v-icon>
