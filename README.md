@@ -94,7 +94,7 @@ fileviewer /path/to/dir --no-browser
 
 **Backend:** Python 3.11+, FastAPI, Uvicorn, Polars, Pillow
 
-**Frontend:** Vue 3, Vuetify 3, Pinia, CodeMirror 6, Vite
+**Frontend:** Vue 3, Vuetify 3, CodeMirror 6, Vite
 
 ## Development
 
@@ -113,7 +113,7 @@ Build for production:
 
 ```bash
 cd frontend
-pnpm build      # outputs to fileviewer/static/
+pnpm build      # outputs to static/
 cd ..
 pip install .
 ```

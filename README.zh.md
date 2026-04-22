@@ -94,7 +94,7 @@ fileviewer /path/to/dir --no-browser
 
 **后端：** Python 3.11+、FastAPI、Uvicorn、Polars、Pillow
 
-**前端：** Vue 3、Vuetify 3、Pinia、CodeMirror 6、Vite
+**前端：** Vue 3、Vuetify 3、CodeMirror 6、Vite
 
 ## 开发
 
@@ -113,7 +113,7 @@ pnpm dev
 
 ```bash
 cd frontend
-pnpm build      # 输出到 fileviewer/static/
+pnpm build      # 输出到 static/
 cd ..
 pip install .
 ```
