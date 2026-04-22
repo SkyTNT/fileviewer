@@ -8,7 +8,9 @@
       @drop.prevent="onDrop"
     >
       <RootsView v-if="store.isAtHome" />
-      <component :is="layoutComponent" v-else-if="layoutComponent" />
+      <KeepAlive v-else-if="layoutComponent">
+        <component :is="layoutComponent" />
+      </KeepAlive>
 
       <Transition name="drop-fade">
         <div v-if="isDragging" class="drop-overlay" :class="{ 'drop-overlay--allowed': canWriteHere }">

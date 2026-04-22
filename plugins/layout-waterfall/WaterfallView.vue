@@ -244,6 +244,7 @@ watch(sentinelRef, (el, oldEl) => {
 })
 
 let savedScrollY = 0
+watch(() => store.currentPath, () => { savedScrollY = 0 })
 
 onMounted(() => {
   scrollObs = new IntersectionObserver(
