@@ -7,6 +7,7 @@
       variant="tonal"
       size="small"
       class="taskbar-chip"
+      :data-win-id="win.id"
       :title="win.title"
       @click="manager.minimize(win.id)"
     >

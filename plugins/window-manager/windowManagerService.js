@@ -66,6 +66,10 @@ export function createWindowManager() {
         minimized: false,
         focused:   true,
         noTitleBar,
+        closing:      false,
+        minimizingOut: false,
+        restoring:    false,
+        animateMax:   false,
       })
       state.windows.forEach(w => { w.focused = false })
       state.windows.push(win)
@@ -73,22 +77,40 @@ export function createWindowManager() {
     },
 
     close(id) {
-      const idx = state.windows.findIndex(w => w.id === id)
-      if (idx >= 0) state.windows.splice(idx, 1)
+      const win = state.windows.find(w => w.id === id)
+      if (!win || win.closing) return
+      win.closing = true
+      setTimeout(() => {
+        const idx = state.windows.findIndex(w => w.id === id)
+        if (idx >= 0) state.windows.splice(idx, 1)
+      }, 180)
     },
 
     focus(id) { _bringToFront(id) },
 
     minimize(id) {
       const win = state.windows.find(w => w.id === id)
-      if (win) win.minimized = !win.minimized
+      if (!win) return
+      if (!win.minimized) {
+        win.minimized = true
+        win.minimizingOut = true
+        // Window.vue watches minimizingOut, runs the animation, then clears the flag
+      } else {
+        win.restoring = true
+        win.minimized = false
+        _bringToFront(id)
+        // Window.vue watches restoring (pre-flush so chip is still queryable),
+        // runs the animation, then clears the flag
+      }
     },
 
     maximize(id) {
       const win = state.windows.find(w => w.id === id)
       if (win) {
+        win.animateMax = true
         win.maximized = !win.maximized
         _bringToFront(id)
+        setTimeout(() => { win.animateMax = false }, 280)
       }
     },
 

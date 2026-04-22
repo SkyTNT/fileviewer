@@ -1,10 +1,15 @@
 <template>
   <v-card
+    ref="rootEl"
     class="app-window"
     :class="{
-      'is-maximized': win.maximized,
-      'is-minimized': win.minimized,
-      'is-focused':   win.focused,
+      'is-maximized':      win.maximized,
+      'is-minimized':      win.minimized,
+      'is-focused':        win.focused,
+      'is-opening':        opening,
+      'is-closing':        win.closing,
+      'is-minimizing-out': win.minimizingOut,
+      'is-animate-max':    win.animateMax,
     }"
     :style="windowStyle"
     :elevation="win.focused ? 16 : 4"
@@ -81,7 +86,7 @@
 </template>
 
 <script setup>
-import { computed, provide } from 'vue'
+import { computed, provide, ref, onMounted, watch, nextTick } from 'vue'
 
 const props = defineProps({
   win: { type: Object, required: true },
@@ -91,16 +96,81 @@ const emit = defineEmits(['focus', 'close', 'minimize', 'maximize', 'update:posi
 const MIN_W = 20
 const MIN_H = 20
 
+const rootEl = ref(null)
+
+const opening = ref(true)
+onMounted(() => {
+  requestAnimationFrame(() => requestAnimationFrame(() => { opening.value = false }))
+})
+
 const windowStyle = computed(() => {
-  if (props.win.minimized) return { display: 'none' }
-  if (props.win.maximized) return { zIndex: props.win.z }
+  const w = props.win
+  if (w.minimized && !w.minimizingOut && !w.restoring) return { display: 'none' }
+  if (w.maximized) return { left: '0', top: '0', width: '100vw', height: '100vh', zIndex: w.z }
   return {
-    left:   props.win.x + 'px',
-    top:    props.win.y + 'px',
-    width:  props.win.w + 'px',
-    height: props.win.h + 'px',
-    zIndex: props.win.z,
+    left:   w.x + 'px',
+    top:    w.y + 'px',
+    width:  w.w + 'px',
+    height: w.h + 'px',
+    zIndex: w.z,
   }
+})
+
+function _chipRect(id) {
+  const chip = document.querySelector(`[data-win-id="${id}"]`)
+  return chip?.getBoundingClientRect() ?? { left: 0, top: window.innerHeight - 40, width: 120, height: 36 }
+}
+
+// ── Minimize animation (flush:post so chip is already in DOM) ─────────────────
+watch(() => props.win.minimizingOut, async (val) => {
+  if (!val) return
+  await nextTick()
+  const el = rootEl.value?.$el
+  if (!el) { props.win.minimizingOut = false; return }
+
+  const winRect = el.getBoundingClientRect()
+  const chip = _chipRect(props.win.id)
+  const tx = (chip.left + chip.width / 2) - (winRect.left + winRect.width / 2)
+  const ty = (chip.top  + chip.height / 2) - (winRect.top  + winRect.height / 2)
+  const scale = chip.width / winRect.width
+
+  const anim = el.animate([
+    { transform: 'translate(0,0) scale(1)', opacity: 1 },
+    { transform: `translate(${tx}px,${ty}px) scale(${scale})`, opacity: 0 },
+  ], { duration: 260, easing: 'cubic-bezier(0.4,0,1,1)' })
+
+  anim.finished.then(() => {
+    anim.cancel()
+    props.win.minimizingOut = false
+  })
+}, { flush: 'post' })
+
+// ── Restore animation (default pre-flush so chip is still in DOM to query) ────
+watch(() => props.win.restoring, async (val) => {
+  if (!val) return
+
+  // Chip still in DOM here (DOM not updated yet)
+  const chip = _chipRect(props.win.id)
+  await nextTick()
+
+  const el = rootEl.value?.$el
+  if (!el) { props.win.restoring = false; return }
+
+  const winCx = props.win.x + props.win.w / 2
+  const winCy = props.win.y + props.win.h / 2
+  const tx = (chip.left + chip.width / 2) - winCx
+  const ty = (chip.top  + chip.height / 2) - winCy
+  const scale = chip.width / props.win.w
+
+  const anim = el.animate([
+    { transform: `translate(${tx}px,${ty}px) scale(${scale})`, opacity: 0 },
+    { transform: 'translate(0,0) scale(1)', opacity: 1 },
+  ], { duration: 280, easing: 'cubic-bezier(0,0,0.2,1)', fill: 'both' })
+
+  anim.finished.then(() => {
+    anim.cancel()
+    props.win.restoring = false
+  })
 })
 
 function onFocus() { emit('focus') }
@@ -245,13 +315,33 @@ function stopResizeTouch() {
   position: fixed !important;
   display: flex;
   flex-direction: column;
-  transition: box-shadow 0.2s, left 0s, top 0s, width 0s, height 0s;
+  transition: box-shadow 0.2s,
+              transform 0.18s cubic-bezier(0.2, 0, 0, 1),
+              opacity 0.18s;
+  transform-origin: center center;
+}
+.app-window.is-animate-max {
+  transition: left   0.22s cubic-bezier(0.2, 0, 0, 1),
+              top    0.22s cubic-bezier(0.2, 0, 0, 1),
+              width  0.22s cubic-bezier(0.2, 0, 0, 1),
+              height 0.22s cubic-bezier(0.2, 0, 0, 1),
+              border-radius 0.22s,
+              box-shadow 0.22s;
 }
 .app-window.is-maximized {
-  inset: 0 !important;
-  width: 100vw !important;
-  height: 100vh !important;
   border-radius: 0 !important;
+}
+.app-window.is-opening {
+  transform: scale(0.9);
+  opacity: 0;
+}
+.app-window.is-closing {
+  transform: scale(0.9);
+  opacity: 0;
+  pointer-events: none;
+}
+.app-window.is-minimizing-out {
+  pointer-events: none;
 }
 
 .win-titlebar {
