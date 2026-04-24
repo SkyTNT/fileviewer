@@ -3,6 +3,8 @@ import { getActiveLayer, hexToRgb } from '../editorState.js'
 let _textarea = null
 let _clickX = 0, _clickY = 0
 let _toolCtx = null
+const TEXTAREA_PADDING = 2  // matches padding:2px in textarea style
+const TEXTAREA_BORDER = 1   // matches border:1px in textarea style
 
 function removeTextarea() {
   if (_textarea) {
@@ -24,7 +26,9 @@ function commitText(toolCtx) {
   ctx.save()
   ctx.font = `${style}${state.textSize}px ${state.textFont}`
   ctx.fillStyle = state.fgColor
-  ctx.fillText(text, _clickX, _clickY)
+  ctx.textBaseline = 'top'
+  const offset = (TEXTAREA_PADDING + TEXTAREA_BORDER) / state.zoom
+  ctx.fillText(text, _clickX + offset, _clickY + offset)
   ctx.restore()
   pushHistory('Text')
   state.isDirty = true
@@ -47,20 +51,20 @@ export default {
     const screenPos = viewport.canvasToScreen(e.x, e.y)
     const container = viewport.containerRef.value
     if (!container) return
-    const rect = container.getBoundingClientRect()
 
     _textarea = document.createElement('textarea')
     _textarea.style.cssText = `
-      position:absolute;
-      left:${screenPos.x - rect.left}px;
-      top:${screenPos.y - rect.top}px;
+      position:fixed;
+      left:${screenPos.x}px;
+      top:${screenPos.y}px;
       min-width:100px; min-height:28px;
       font:${(state.textBold?'bold ':'')+(state.textItalic?'italic ':'')}${state.textSize * state.zoom}px ${state.textFont};
+      line-height:1;
       color:${state.fgColor};
       background:transparent;
       border:1px dashed #888;
       outline:none; resize:both;
-      padding:2px; z-index:9999;
+      padding:2px; z-index:99999;
       overflow:hidden; white-space:pre;
     `
     _textarea.addEventListener('keydown', evt => {
@@ -68,8 +72,8 @@ export default {
       if (evt.key === 'Enter' && !evt.shiftKey) { evt.preventDefault(); commitText(toolCtx) }
       evt.stopPropagation()
     })
-    container.appendChild(_textarea)
-    _textarea.focus()
+    document.body.appendChild(_textarea)
+    setTimeout(() => _textarea?.focus(), 0)
   },
 
   onPointerMove() {},

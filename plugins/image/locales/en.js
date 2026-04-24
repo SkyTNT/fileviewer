@@ -53,6 +53,8 @@ export default {
     duplicateLayer: 'Duplicate Layer',
     mergeDown: 'Merge Down',
     flatten: 'Flatten Image',
+    fillSelection: 'Fill Selection',
+    invertSelection: 'Invert Selection',
     hideLayer: 'Hide Layer',
     showLayer: 'Show Layer',
     opacity: 'Opacity',

@@ -21,7 +21,7 @@ function resetColors() {
 <template>
   <div class="color-widget">
     <!-- BG swatch (back) -->
-    <v-menu v-model="showBg" :close-on-content-click="false" location="bottom end">
+    <v-menu v-model="showBg" :close-on-content-click="false" location="bottom end" :z-index="9999">
       <template #activator="{ props: menuProps }">
         <div class="swatch swatch-bg" :style="{ background: state.bgColor }" v-bind="menuProps" title="Background color" />
       </template>
@@ -30,7 +30,7 @@ function resetColors() {
       </v-card>
     </v-menu>
     <!-- FG swatch (front) -->
-    <v-menu v-model="showFg" :close-on-content-click="false" location="bottom end">
+    <v-menu v-model="showFg" :close-on-content-click="false" location="bottom end" :z-index="9999">
       <template #activator="{ props: menuProps }">
         <div class="swatch swatch-fg" :style="{ background: state.fgColor }" v-bind="menuProps" title="Foreground color" />
       </template>

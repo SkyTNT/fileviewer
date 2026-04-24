@@ -1,10 +1,10 @@
-import { getActiveLayer, hexToRgb, applySelectionClip } from '../editorState.js'
+import { getActiveLayer, hexToRgb } from '../editorState.js'
+import { withSelectionClip } from '../selectionUtils.js'
 
 let _drawing = false
 let _lastX = 0, _lastY = 0
 
-function drawStamp(layer, x, y, state, composite = 'source-over') {
-  const ctx = layer.canvas.getContext('2d')
+function drawStamp(ctx, x, y, state, composite = 'source-over') {
   const r = state.brushSize / 2
   const alpha = state.brushFlow * state.brushOpacity
   const { r: cr, g: cg, b: cb } = hexToRgb(state.fgColor)
@@ -26,26 +26,17 @@ function drawStamp(layer, x, y, state, composite = 'source-over') {
 function stroke(x, y, state, toolCtx, composite = 'source-over') {
   const layer = getActiveLayer(state)
   if (!layer || layer.locked) return
-  const ctx = layer.canvas.getContext('2d')
   const dx = x - _lastX, dy = y - _lastY
   const dist = Math.sqrt(dx * dx + dy * dy)
   const spacing = Math.max(1, state.brushSize * 0.2)
   if (dist < spacing) return
   const steps = Math.floor(dist / spacing)
-  ctx.save()
-  if (state.selection?.type === 'rect') {
-    const { x: sx, y: sy, w: sw, h: sh } = state.selection.bounds
-    ctx.beginPath(); ctx.rect(sx, sy, sw, sh); ctx.clip()
-  } else if (state.selection?.type === 'ellipse') {
-    const b = state.selection.bounds
-    ctx.beginPath(); ctx.ellipse(b.x + b.w/2, b.y + b.h/2, b.w/2, b.h/2, 0, 0, Math.PI*2); ctx.clip()
-  }
-  for (let i = 1; i <= steps; i++) {
-    const px = _lastX + dx * i / steps
-    const py = _lastY + dy * i / steps
-    drawStamp(layer, px, py, state, composite)
-  }
-  ctx.restore()
+  const layerCtx = layer.canvas.getContext('2d')
+  withSelectionClip(layerCtx, state.selection, state.canvasWidth, state.canvasHeight, (ctx) => {
+    for (let i = 1; i <= steps; i++) {
+      drawStamp(ctx, _lastX + dx * i / steps, _lastY + dy * i / steps, state, composite)
+    }
+  })
   _lastX = _lastX + dx * steps / steps
   _lastY = _lastY + dy * steps / steps
   toolCtx.invalidate()
@@ -61,7 +52,10 @@ export default {
     if (!layer || layer.locked) return
     _drawing = true
     _lastX = e.x; _lastY = e.y
-    drawStamp(layer, e.x, e.y, state)
+    const layerCtx = layer.canvas.getContext('2d')
+    withSelectionClip(layerCtx, state.selection, state.canvasWidth, state.canvasHeight, (ctx) => {
+      drawStamp(ctx, e.x, e.y, state)
+    })
     toolCtx.invalidate()
   },
 

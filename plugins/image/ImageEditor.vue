@@ -1,7 +1,7 @@
 <script setup>
 import { ref, provide, inject, onMounted, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { createEditorState, createLayer, getActiveLayer } from './editor/editorState.js'
+import { createEditorState, createLayer, getActiveLayer, hexToRgb as hexToRgbLocal } from './editor/editorState.js'
 import { createHistory } from './editor/useHistory.js'
 import { createEditorApi } from './editor/editorApi.js'
 import { createViewport } from './editor/canvas/useViewport.js'
@@ -10,6 +10,7 @@ import { flattenToBlob } from './editor/canvas/LayerCompositor.js'
 import { getTool } from './editor/tools/toolRegistry.js'
 import { TOOL_GROUPS, TOOL_ICONS } from './editor/tools/toolRegistry.js'
 import { runFilter } from './editor/filters/filterRunner.js'
+import { invertSelection, selectionToMask } from './editor/selectionUtils.js'
 
 import CanvasViewport from './editor/canvas/CanvasViewport.vue'
 import ToolOptionsBar from './editor/panels/ToolOptionsBar.vue'
@@ -168,6 +169,26 @@ const actions = {
   zoomOut: () => { state.zoom = Math.max(0.02, state.zoom * 0.8) },
   selectAll: () => { state.selection = { type: 'rect', bounds: { x: 0, y: 0, w: state.canvasWidth, h: state.canvasHeight }, points: null } },
   deselect: () => { state.selection = null },
+  invertSelection: () => { state.selection = invertSelection(state.selection, state.canvasWidth, state.canvasHeight) },
+  fillSelection: () => {
+    const layer = getActiveLayer(state)
+    if (!layer || layer.locked) return
+    pushHistory('Fill Selection', state)
+    const ctx = layer.canvas.getContext('2d')
+    if (state.selection) {
+      const mask = selectionToMask(state.selection, state.canvasWidth, state.canvasHeight)
+      const imgData = ctx.getImageData(0, 0, state.canvasWidth, state.canvasHeight)
+      const { r, g, b } = hexToRgbLocal(state.fgColor)
+      for (let i = 0; i < mask.length; i++) {
+        if (mask[i]) { imgData.data[i*4] = r; imgData.data[i*4+1] = g; imgData.data[i*4+2] = b; imgData.data[i*4+3] = 255 }
+      }
+      ctx.putImageData(imgData, 0, 0)
+    } else {
+      ctx.save(); ctx.fillStyle = state.fgColor; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight); ctx.restore()
+    }
+    state.isDirty = true
+    invalidateRef.value()
+  },
   invalidate: () => invalidateRef.value(),
 }
 
@@ -229,7 +250,7 @@ const cursorInfo = computed(() =>
       <span class="editor-title">{{ state.fileName }}<span v-if="state.isDirty" class="dirty-mark">•</span></span>
 
       <!-- Image menu -->
-      <v-menu open-on-hover>
+      <v-menu :z-index="9999">
         <template #activator="{ props: mp }">
           <button class="menu-btn" v-bind="mp">{{ t('editor.menu.image') }}</button>
         </template>
@@ -240,11 +261,14 @@ const cursorInfo = computed(() =>
           <v-list-item prepend-icon="mdi-rotate-right" :title="t('editor.rotateCanvas')" @click="showRotate = true" />
           <v-divider />
           <v-list-item prepend-icon="mdi-layers-minus" :title="t('editor.flatten')" @click="flattenAll" />
+          <v-divider />
+          <v-list-item prepend-icon="mdi-selection-ellipse-arrow-inside" :title="t('editor.fillSelection') + '  Shift+F5'" @click="actions.fillSelection()" />
+          <v-list-item prepend-icon="mdi-selection-inverse" :title="t('editor.invertSelection') + '  Ctrl+Shift+I'" @click="actions.invertSelection()" />
         </v-list>
       </v-menu>
 
       <!-- Filter menu -->
-      <v-menu open-on-hover>
+      <v-menu :z-index="9999">
         <template #activator="{ props: mp }">
           <button class="menu-btn" v-bind="mp">{{ t('editor.menu.filter') }}</button>
         </template>
@@ -265,7 +289,7 @@ const cursorInfo = computed(() =>
       </v-menu>
 
       <!-- View menu -->
-      <v-menu open-on-hover>
+      <v-menu :z-index="9999">
         <template #activator="{ props: mp }">
           <button class="menu-btn" v-bind="mp">{{ t('editor.menu.view') }}</button>
         </template>

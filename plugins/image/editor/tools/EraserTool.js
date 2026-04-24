@@ -1,10 +1,10 @@
 import { getActiveLayer } from '../editorState.js'
+import { withSelectionClip } from '../selectionUtils.js'
 
 let _drawing = false
 let _lastX = 0, _lastY = 0
 
-function eraseStamp(layer, x, y, state) {
-  const ctx = layer.canvas.getContext('2d')
+function eraseStamp(ctx, x, y, state) {
   const r = state.eraserSize / 2
   const hard = Math.max(0, Math.min(0.99, state.eraserHardness))
   ctx.save()
@@ -30,7 +30,10 @@ export default {
     if (!layer || layer.locked) return
     _drawing = true
     _lastX = e.x; _lastY = e.y
-    eraseStamp(layer, e.x, e.y, state)
+    const layerCtx = layer.canvas.getContext('2d')
+    withSelectionClip(layerCtx, state.selection, state.canvasWidth, state.canvasHeight, (ctx) => {
+      eraseStamp(ctx, e.x, e.y, state)
+    }, true)
     toolCtx.invalidate()
   },
 
@@ -44,9 +47,12 @@ export default {
     const spacing = Math.max(1, state.eraserSize * 0.2)
     if (dist < spacing) return
     const steps = Math.floor(dist / spacing)
-    for (let i = 1; i <= steps; i++) {
-      eraseStamp(layer, _lastX + dx * i / steps, _lastY + dy * i / steps, state)
-    }
+    const layerCtx = layer.canvas.getContext('2d')
+    withSelectionClip(layerCtx, state.selection, state.canvasWidth, state.canvasHeight, (ctx) => {
+      for (let i = 1; i <= steps; i++) {
+        eraseStamp(ctx, _lastX + dx * i / steps, _lastY + dy * i / steps, state)
+      }
+    }, true)
     _lastX = _lastX + dx * steps / steps
     _lastY = _lastY + dy * steps / steps
     toolCtx.invalidate()

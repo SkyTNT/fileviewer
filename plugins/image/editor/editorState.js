@@ -75,6 +75,9 @@ export function createEditorState() {
     showGrid: false,
     showRulers: true,
 
+    // Clipboard (internal, not system clipboard)
+    clipboard: null,  // null | { imageData: ImageData, w: number, h: number }
+
     // Status
     isDirty: false,
     filePath: '',
@@ -89,27 +92,6 @@ export function createEditorState() {
 
 export function getActiveLayer(state) {
   return state.layers.find(l => l.id === state.activeLayerId) ?? null
-}
-
-// Pixel-level selection clipping helper
-export function applySelectionClip(ctx2d, state) {
-  if (!state.selection) return false
-  const { type, bounds, mask } = state.selection
-  if (type === 'rect') {
-    ctx2d.rect(bounds.x, bounds.y, bounds.w, bounds.h)
-    ctx2d.clip()
-    return true
-  }
-  if (type === 'ellipse') {
-    ctx2d.ellipse(bounds.x + bounds.w / 2, bounds.y + bounds.h / 2, bounds.w / 2, bounds.h / 2, 0, 0, Math.PI * 2)
-    ctx2d.clip()
-    return true
-  }
-  if (type === 'lasso' && mask) {
-    // For lasso/mask selections, we use a temporary canvas to apply the mask
-    return false  // handled separately
-  }
-  return false
 }
 
 export function hexToRgb(hex) {
