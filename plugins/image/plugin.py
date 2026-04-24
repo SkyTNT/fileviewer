@@ -123,6 +123,87 @@ async def get_full_image(path: str = Query(...)):
     return FileResponse(str(file_path), media_type=mt, headers={"Cache-Control": "no-cache"})
 
 
+@router.post("/save")
+async def save_image(request: Request, path: str = Query(...)):
+    from config import require_write
+    require_write()
+    file_path = _resolve_local_path(path)
+    if file_path is None:
+        raise HTTPException(status_code=404, detail="File not found")
+    data = await request.body()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty body")
+    try:
+        with Image.open(io.BytesIO(data)) as img:
+            img.verify()
+    except Exception:
+        raise HTTPException(status_code=422, detail="Invalid image data")
+    file_path.write_bytes(data)
+    _generate_thumbnail.cache_clear()
+    return {"ok": True}
+
+
+@router.post("/save-as")
+async def save_image_as(request: Request, parent: str = Query(...), filename: str = Query(...)):
+    from config import require_write, parse_path, build_entry_path
+    require_write()
+    abs_dir, slug, root = parse_path(parent)
+    if not abs_dir.is_dir():
+        raise HTTPException(status_code=400, detail="Parent is not a directory")
+    safe_name = Path(filename).name
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    dest = abs_dir / safe_name
+    data = await request.body()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty body")
+    try:
+        with Image.open(io.BytesIO(data)) as img:
+            img.verify()
+    except Exception:
+        raise HTTPException(status_code=422, detail="Invalid image data")
+    dest.write_bytes(data)
+    return {"ok": True, "path": build_entry_path(dest, slug, root)}
+
+
+@router.post("/filter")
+async def apply_filter_ep(request: Request, filter: str = Query(...), params: str = Query("{}")):
+    import json
+    from PIL import ImageFilter
+    p = json.loads(params)
+    data = await request.body()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty body")
+    try:
+        img = Image.open(io.BytesIO(data))
+        img.load()
+    except Exception:
+        raise HTTPException(status_code=422, detail="Invalid image data")
+    try:
+        if filter == "gaussian_blur":
+            img = img.filter(ImageFilter.GaussianBlur(radius=float(p.get("radius", 2))))
+        elif filter == "unsharp_mask":
+            img = img.filter(ImageFilter.UnsharpMask(
+                radius=float(p.get("radius", 2)),
+                percent=int(p.get("percent", 150)),
+                threshold=int(p.get("threshold", 3)),
+            ))
+        elif filter == "reduce_noise":
+            img = img.filter(ImageFilter.MedianFilter(size=int(p.get("size", 3))))
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown filter: {filter!r}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    buf = io.BytesIO()
+    fmt = img.format or "PNG"
+    if img.mode in ("RGBA", "P", "LA") and fmt.upper() == "JPEG":
+        img = img.convert("RGB")
+    img.save(buf, format=fmt)
+    return Response(content=buf.getvalue(), media_type=f"image/{fmt.lower()}")
+
+
 async def setup(ctx):
     global _http_client
     import httpx

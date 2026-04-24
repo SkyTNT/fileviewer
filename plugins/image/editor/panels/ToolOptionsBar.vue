@@ -1,0 +1,135 @@
+<script setup>
+import { inject, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import CropTool from '../tools/CropTool.js'
+
+const state = inject('editorState')
+const toolCtx = inject('editorToolCtx')
+const { t } = useI18n()
+
+const tool = computed(() => state.activeTool)
+
+const BLEND_MODES = [
+  { label: 'Normal', value: 'source-over' },
+  { label: 'Multiply', value: 'multiply' },
+  { label: 'Screen', value: 'screen' },
+  { label: 'Overlay', value: 'overlay' },
+  { label: 'Darken', value: 'darken' },
+  { label: 'Lighten', value: 'lighten' },
+  { label: 'Color Dodge', value: 'color-dodge' },
+  { label: 'Color Burn', value: 'color-burn' },
+  { label: 'Hard Light', value: 'hard-light' },
+  { label: 'Soft Light', value: 'soft-light' },
+  { label: 'Difference', value: 'difference' },
+  { label: 'Exclusion', value: 'exclusion' },
+]
+
+const SELECT_MODES = [
+  { label: 'New', value: 'replace' },
+  { label: 'Add', value: 'add' },
+  { label: 'Subtract', value: 'subtract' },
+]
+
+const GRADIENT_TYPES = ['linear', 'radial']
+const SHAPE_TYPES = ['rect', 'ellipse', 'line']
+</script>
+
+<template>
+  <div class="options-bar">
+    <!-- Brush options -->
+    <template v-if="tool === 'brush' || tool === 'eraser'">
+      <span class="opt-label">{{ t('editor.size') }}</span>
+      <v-slider
+        v-model="state[tool === 'brush' ? 'brushSize' : 'eraserSize']"
+        :min="1" :max="500" :step="1" hide-details density="compact"
+        style="width:100px" class="mx-1"
+      />
+      <span class="opt-val">{{ state[tool === 'brush' ? 'brushSize' : 'eraserSize'] }}</span>
+
+      <v-divider vertical class="mx-2" />
+
+      <span class="opt-label">{{ t('editor.hardness') }}</span>
+      <v-slider
+        v-model="state[tool === 'brush' ? 'brushHardness' : 'eraserHardness']"
+        :min="0" :max="1" :step="0.01" hide-details density="compact"
+        style="width:80px" class="mx-1"
+      />
+
+      <template v-if="tool === 'brush'">
+        <v-divider vertical class="mx-2" />
+        <span class="opt-label">{{ t('editor.opacity') }}</span>
+        <v-slider v-model="state.brushOpacity" :min="0" :max="1" :step="0.01" hide-details density="compact" style="width:80px" class="mx-1" />
+        <v-divider vertical class="mx-2" />
+        <span class="opt-label">{{ t('editor.flow') }}</span>
+        <v-slider v-model="state.brushFlow" :min="0.01" :max="1" :step="0.01" hide-details density="compact" style="width:80px" class="mx-1" />
+      </template>
+    </template>
+
+    <!-- Selection mode -->
+    <template v-else-if="['rect-select','ellipse-select','lasso','magic-wand'].includes(tool)">
+      <v-btn-toggle v-model="state.selectionMode" density="compact" rounded="lg" mandatory>
+        <v-btn v-for="m in SELECT_MODES" :key="m.value" :value="m.value" size="small">{{ m.label }}</v-btn>
+      </v-btn-toggle>
+      <template v-if="tool === 'magic-wand' || tool === 'fill'">
+        <v-divider vertical class="mx-2" />
+        <span class="opt-label">{{ t('editor.tolerance') }}</span>
+        <v-slider v-model="state[tool === 'fill' ? 'fillTolerance' : 'wandTolerance']" :min="0" :max="255" :step="1" hide-details density="compact" style="width:80px" class="mx-1" />
+        <span class="opt-val">{{ state[tool === 'fill' ? 'fillTolerance' : 'wandTolerance'] }}</span>
+      </template>
+    </template>
+
+    <!-- Crop: apply button -->
+    <template v-else-if="tool === 'crop'">
+      <v-btn size="small" variant="tonal" color="primary" @click="CropTool.applyCrop(toolCtx)">
+        {{ t('editor.applyCrop') }}
+      </v-btn>
+      <v-btn size="small" variant="text" class="ml-1" @click="() => { CropTool._cropBounds = null }">
+        {{ t('editor.cancel') }}
+      </v-btn>
+    </template>
+
+    <!-- Text -->
+    <template v-else-if="tool === 'text'">
+      <v-text-field v-model="state.textFont" density="compact" variant="outlined" hide-details label="Font" style="width:120px" class="mr-2" />
+      <v-text-field v-model.number="state.textSize" density="compact" variant="outlined" hide-details label="Size" type="number" style="width:70px" class="mr-2" />
+      <v-btn :icon="state.textBold ? 'mdi-format-bold' : 'mdi-format-bold'" :variant="state.textBold ? 'tonal' : 'text'" size="small" @click="state.textBold = !state.textBold" />
+      <v-btn :icon="state.textItalic ? 'mdi-format-italic' : 'mdi-format-italic'" :variant="state.textItalic ? 'tonal' : 'text'" size="small" @click="state.textItalic = !state.textItalic" />
+    </template>
+
+    <!-- Shape -->
+    <template v-else-if="tool === 'shape'">
+      <v-btn-toggle v-model="state.shapeType" density="compact" rounded="lg" mandatory>
+        <v-btn v-for="s2 in SHAPE_TYPES" :key="s2" :value="s2" size="small">{{ s2 }}</v-btn>
+      </v-btn-toggle>
+      <v-divider vertical class="mx-2" />
+      <v-checkbox v-model="state.shapeFill" label="Fill" density="compact" hide-details class="mr-2" />
+      <v-checkbox v-model="state.shapeStroke" label="Stroke" density="compact" hide-details class="mr-2" />
+      <template v-if="state.shapeStroke">
+        <v-slider v-model="state.strokeWidth" :min="1" :max="50" :step="1" hide-details density="compact" style="width:80px" class="mx-1" />
+        <span class="opt-val">{{ state.strokeWidth }}px</span>
+      </template>
+    </template>
+
+    <!-- Gradient -->
+    <template v-else-if="tool === 'gradient'">
+      <v-btn-toggle v-model="state.gradientType" density="compact" rounded="lg" mandatory>
+        <v-btn v-for="g in GRADIENT_TYPES" :key="g" :value="g" size="small">{{ g }}</v-btn>
+      </v-btn-toggle>
+    </template>
+  </div>
+</template>
+
+<style scoped>
+.options-bar {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  height: 36px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  gap: 4px;
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+.opt-label { font-size: 11px; color: rgba(255,255,255,0.6); white-space: nowrap; flex-shrink: 0; }
+.opt-val { font-size: 11px; color: rgba(255,255,255,0.8); min-width: 28px; text-align: right; flex-shrink: 0; }
+</style>

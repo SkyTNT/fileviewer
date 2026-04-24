@@ -14,6 +14,11 @@ const fileStore  = services?.get('explorer.state')
 const eventBus   = services?.get('event.bus')
 const winMgrSvc  = services?.get('window.manager')
 const imagesApi  = services?.get('images.api')
+const appRegistry = services?.get('app.registry')
+
+function openEditor() {
+  appRegistry?.open(props.file, { app: 'image-editor' })
+}
 
 const imgUrl    = ref('')
 const imgLoaded = ref(false)
@@ -253,6 +258,13 @@ onUnmounted(() => eventBus?.off('keyboard:keydown', onKey))
       </v-btn>
       <v-btn icon size="small" variant="tonal" class="ml-1" @click.stop="zoomOut">
         <v-icon>mdi-magnify-minus-outline</v-icon>
+      </v-btn>
+      <v-btn
+        v-if="!props.file?.path?.startsWith('http')"
+        icon size="small" variant="tonal" class="ml-2"
+        @click.stop="openEditor" :title="t('action.editImage')"
+      >
+        <v-icon>mdi-image-edit-outline</v-icon>
       </v-btn>
     </div>
 
