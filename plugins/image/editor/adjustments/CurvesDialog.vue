@@ -1,21 +1,14 @@
 <script setup>
-import { ref, inject, onMounted, watch } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getActiveLayer } from '../editorState.js'
 import { apply_lut } from '../filters/clientFilters.js'
 import { applyFilterWithSelection } from '../filters/filterRunner.js'
+import { useAdjustment } from './useAdjustment.js'
 
-const state = inject('editorState')
-const { pushHistory } = inject('editorHistory')
-const { invalidate } = inject('editorInvalidateObj')
 const { t } = useI18n()
-
 const curveCanvas = ref(null)
 const CURVE_W = 256, CURVE_H = 200
-let _previewSrc = null
 let _draggingIdx = -1
-
-// Control points [[x, y]] in 0..255 range
 const points = ref([[0, 0], [128, 128], [255, 255]])
 
 function catmullRom(pts, t) {
@@ -37,9 +30,8 @@ function catmullRom(pts, t) {
 function buildLUT() {
   const sorted = [...points.value].sort((a, b) => a[0] - b[0])
   const lut = new Uint8Array(256)
-  for (let i = 0; i < 256; i++) {
+  for (let i = 0; i < 256; i++)
     lut[i] = Math.max(0, Math.min(255, Math.round(catmullRom(sorted, i / 255))))
-  }
   return lut
 }
 
@@ -48,16 +40,13 @@ function drawCurve() {
   if (!canvas) return
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   ctx.clearRect(0, 0, CURVE_W, CURVE_H)
-  // Grid
   ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1
   for (let i = 1; i < 4; i++) {
     ctx.beginPath(); ctx.moveTo(i * CURVE_W / 4, 0); ctx.lineTo(i * CURVE_W / 4, CURVE_H); ctx.stroke()
     ctx.beginPath(); ctx.moveTo(0, i * CURVE_H / 4); ctx.lineTo(CURVE_W, i * CURVE_H / 4); ctx.stroke()
   }
-  // Diagonal
   ctx.strokeStyle = 'rgba(255,255,255,0.2)'
   ctx.beginPath(); ctx.moveTo(0, CURVE_H); ctx.lineTo(CURVE_W, 0); ctx.stroke()
-  // Curve
   const lut = buildLUT()
   ctx.strokeStyle = '#a0c4ff'; ctx.lineWidth = 2
   ctx.beginPath()
@@ -66,7 +55,6 @@ function drawCurve() {
     if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
   }
   ctx.stroke()
-  // Control points
   const sorted = [...points.value].sort((a, b) => a[0] - b[0])
   for (const [px, py] of sorted) {
     const cx = px, cy = CURVE_H - py * CURVE_H / 255
@@ -76,39 +64,17 @@ function drawCurve() {
   }
 }
 
-function preview() {
-  const layer = getActiveLayer(state)
-  if (!layer) return
-  if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
-  layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  const lut = buildLUT()
-  applyFilterWithSelection((c) => apply_lut(c, lut, lut, lut), layer.canvas, state.selection)
-  invalidate()
-}
-
-function apply() {
-  const layer = getActiveLayer(state)
-  if (!layer) { reset(); return }
-  pushHistory('Curves', state)
-  if (_previewSrc) layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  const lut = buildLUT()
-  applyFilterWithSelection((c) => apply_lut(c, lut, lut, lut), layer.canvas, state.selection)
-  state.isDirty = true; invalidate(); reset()
-}
-
-function cancel() {
-  const layer = getActiveLayer(state)
-  if (layer && _previewSrc) { layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0); invalidate() }
-  reset()
-}
-function reset() { _previewSrc = null; points.value = [[0,0],[128,128],[255,255]] }
+const { preview, apply, cancel } = useAdjustment(
+  'Curves',
+  (layer, sel) => { const lut = buildLUT(); applyFilterWithSelection((c) => apply_lut(c, lut, lut, lut), layer.canvas, sel) },
+  () => { points.value = [[0,0],[128,128],[255,255]] }
+)
 
 function onMouseDown(e) {
   const rect = curveCanvas.value.getBoundingClientRect()
   const mx = (e.clientX - rect.left) * (CURVE_W / rect.width)
   const my = (e.clientY - rect.top) * (CURVE_H / rect.height)
   const px = mx, py = (CURVE_H - my) * 255 / CURVE_H
-  const sorted = [...points.value].sort((a, b) => a[0] - b[0])
   let nearIdx = -1, nearDist = 15
   for (let i = 0; i < points.value.length; i++) {
     const d = Math.sqrt((points.value[i][0] - px) ** 2 + ((CURVE_H - points.value[i][1] * CURVE_H / 255) - my) ** 2)

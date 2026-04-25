@@ -1,60 +1,19 @@
 <script setup>
-import { ref, inject } from 'vue'
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getActiveLayer } from '../editorState.js'
 import { brightness_contrast } from '../filters/clientFilters.js'
 import { applyFilterWithSelection } from '../filters/filterRunner.js'
+import { useAdjustment } from './useAdjustment.js'
 
-const state = inject('editorState')
-const { pushHistory } = inject('editorHistory')
-const { invalidate } = inject('editorInvalidateObj')
 const { t } = useI18n()
+const bv = ref(0)
+const cv = ref(0)
 
-const bv = ref(0)  // -1..1
-const cv = ref(0)  // -1..1
-let _previewSrc = null
-
-function getLayer() { return getActiveLayer(state) }
-
-function preview() {
-  const layer = getLayer()
-  if (!layer) return
-  if (!_previewSrc) {
-    _previewSrc = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
-  }
-  // Restore original, then apply preview
-  layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  applyFilterWithSelection((c) => brightness_contrast(c, { brightness: bv.value, contrast: cv.value }), layer.canvas, state.selection)
-  invalidate()
-}
-
-function apply() {
-  const layer = getLayer()
-  if (!layer) { reset(); return }
-  pushHistory('Brightness/Contrast', state)
-  // Ensure preview state is committed
-  if (_previewSrc) {
-    layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  }
-  applyFilterWithSelection((c) => brightness_contrast(c, { brightness: bv.value, contrast: cv.value }), layer.canvas, state.selection)
-  state.isDirty = true
-  invalidate()
-  reset()
-}
-
-function cancel() {
-  const layer = getLayer()
-  if (layer && _previewSrc) {
-    layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-    invalidate()
-  }
-  reset()
-}
-
-function reset() {
-  _previewSrc = null
-  bv.value = 0; cv.value = 0
-}
+const { preview, apply, cancel } = useAdjustment(
+  'Brightness/Contrast',
+  (layer, sel) => applyFilterWithSelection(brightness_contrast, layer.canvas, { brightness: bv.value, contrast: cv.value }, sel),
+  () => { bv.value = 0; cv.value = 0 }
+)
 </script>
 
 <template>

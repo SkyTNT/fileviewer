@@ -1,50 +1,27 @@
 <script setup>
-import { ref, inject } from 'vue'
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getActiveLayer } from '../editorState.js'
 import { color_balance } from '../filters/clientFilters.js'
 import { applyFilterWithSelection } from '../filters/filterRunner.js'
+import { useAdjustment } from './useAdjustment.js'
 
-const state = inject('editorState')
-const { pushHistory } = inject('editorHistory')
-const { invalidate } = inject('editorInvalidateObj')
 const { t } = useI18n()
-
 const shadows = ref([0, 0, 0])
 const midtones = ref([0, 0, 0])
 const highlights = ref([0, 0, 0])
-let _previewSrc = null
 const zone = ref('midtones')
 
-function getLayer() { return getActiveLayer(state) }
-
-function preview() {
-  const layer = getLayer()
-  if (!layer) return
-  if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
-  layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  applyFilterWithSelection(color_balance, layer.canvas, { shadows: shadows.value, midtones: midtones.value, highlights: highlights.value }, state.selection)
-  invalidate()
+function getZoneArr() {
+  return zone.value === 'shadows' ? shadows.value : zone.value === 'highlights' ? highlights.value : midtones.value
 }
 
-function apply() {
-  const layer = getLayer()
-  if (!layer) { reset(); return }
-  pushHistory('Color Balance', state)
-  if (_previewSrc) layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  applyFilterWithSelection(color_balance, layer.canvas, { shadows: shadows.value, midtones: midtones.value, highlights: highlights.value }, state.selection)
-  state.isDirty = true; invalidate(); reset()
-}
-
-function cancel() {
-  const layer = getLayer()
-  if (layer && _previewSrc) { layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0); invalidate() }
-  reset()
-}
-function reset() { _previewSrc = null; shadows.value = [0,0,0]; midtones.value = [0,0,0]; highlights.value = [0,0,0] }
+const { preview, apply, cancel } = useAdjustment(
+  'Color Balance',
+  (layer, sel) => applyFilterWithSelection(color_balance, layer.canvas, { shadows: shadows.value, midtones: midtones.value, highlights: highlights.value }, sel),
+  () => { shadows.value = [0,0,0]; midtones.value = [0,0,0]; highlights.value = [0,0,0] }
+)
 
 const channels = ['R', 'G', 'B']
-function getZoneArr() { return zone.value === 'shadows' ? shadows.value : zone.value === 'highlights' ? highlights.value : midtones.value }
 </script>
 
 <template>

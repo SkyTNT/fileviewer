@@ -1,46 +1,20 @@
 <script setup>
-import { ref, inject } from 'vue'
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getActiveLayer } from '../editorState.js'
 import { hue_saturation_lightness } from '../filters/clientFilters.js'
 import { applyFilterWithSelection } from '../filters/filterRunner.js'
+import { useAdjustment } from './useAdjustment.js'
 
-const state = inject('editorState')
-const { pushHistory } = inject('editorHistory')
-const { invalidate } = inject('editorInvalidateObj')
 const { t } = useI18n()
+const hue = ref(0)
+const sat = ref(0)
+const lit = ref(0)
 
-const hue = ref(0)         // -180..180
-const sat = ref(0)         // -1..1
-const lit = ref(0)         // -1..1
-let _previewSrc = null
-
-function getLayer() { return getActiveLayer(state) }
-
-function preview() {
-  const layer = getLayer()
-  if (!layer) return
-  if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
-  layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  applyFilterWithSelection(hue_saturation_lightness, layer.canvas, { hue: hue.value, saturation: sat.value, lightness: lit.value }, state.selection)
-  invalidate()
-}
-
-function apply() {
-  const layer = getLayer()
-  if (!layer) { reset(); return }
-  pushHistory('Hue/Saturation', state)
-  if (_previewSrc) layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  applyFilterWithSelection(hue_saturation_lightness, layer.canvas, { hue: hue.value, saturation: sat.value, lightness: lit.value }, state.selection)
-  state.isDirty = true; invalidate(); reset()
-}
-
-function cancel() {
-  const layer = getLayer()
-  if (layer && _previewSrc) { layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0); invalidate() }
-  reset()
-}
-function reset() { _previewSrc = null; hue.value = 0; sat.value = 0; lit.value = 0 }
+const { preview, apply, cancel } = useAdjustment(
+  'Hue/Saturation',
+  (layer, sel) => applyFilterWithSelection(hue_saturation_lightness, layer.canvas, { hue: hue.value, saturation: sat.value, lightness: lit.value }, sel),
+  () => { hue.value = 0; sat.value = 0; lit.value = 0 }
+)
 </script>
 
 <template>

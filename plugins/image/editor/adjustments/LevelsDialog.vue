@@ -1,28 +1,25 @@
 <script setup>
 import { ref, inject, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getActiveLayer } from '../editorState.js'
 import { apply_lut } from '../filters/clientFilters.js'
 import { applyFilterWithSelection } from '../filters/filterRunner.js'
+import { useAdjustment } from './useAdjustment.js'
+import { getActiveLayer } from '../editorState.js'
 
-const state = inject('editorState')
-const { pushHistory } = inject('editorHistory')
-const { invalidate } = inject('editorInvalidateObj')
 const { t } = useI18n()
+const state = inject('editorState')
 
 const histCanvas = ref(null)
 const black = ref(0)
 const gamma = ref(1.0)
 const white = ref(255)
-let _previewSrc = null
 const HIST_W = 256, HIST_H = 80
 
 function buildHistogram(imageData) {
   const hist = new Uint32Array(256)
   const d = imageData.data
-  for (let i = 0; i < d.length; i += 4) {
+  for (let i = 0; i < d.length; i += 4)
     hist[Math.round(d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114)]++
-  }
   return hist
 }
 
@@ -37,7 +34,6 @@ function drawHistogram(hist) {
     const h = (hist[i] / max) * HIST_H
     ctx.fillRect(i, HIST_H - h, 1, h)
   }
-  // Draw black/white point lines
   ctx.strokeStyle = '#fff'; ctx.lineWidth = 1
   ctx.beginPath(); ctx.moveTo(black.value, 0); ctx.lineTo(black.value, HIST_H); ctx.stroke()
   ctx.beginPath(); ctx.moveTo(white.value, 0); ctx.lineTo(white.value, HIST_H); ctx.stroke()
@@ -55,51 +51,26 @@ function buildLUT() {
   return lut
 }
 
-function preview() {
-  const layer = getActiveLayer(state)
-  if (!layer) return
-  if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
-  layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  const lut = buildLUT()
-  applyFilterWithSelection((c) => apply_lut(c, lut, lut, lut), layer.canvas, state.selection)
-  invalidate()
-}
+const { preview, apply, cancel, getSnap } = useAdjustment(
+  'Levels',
+  (layer, sel) => { const lut = buildLUT(); applyFilterWithSelection((c) => apply_lut(c, lut, lut, lut), layer.canvas, sel) },
+  () => { black.value = 0; gamma.value = 1; white.value = 255 }
+)
 
-function apply() {
-  const layer = getActiveLayer(state)
-  if (!layer) { reset(); return }
-  pushHistory('Levels', state)
-  if (_previewSrc) layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  const lut = buildLUT()
-  applyFilterWithSelection((c) => apply_lut(c, lut, lut, lut), layer.canvas, state.selection)
-  state.isDirty = true; invalidate(); reset()
+function getHistSrc(layer) {
+  return getSnap() ?? layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
 }
-
-function cancel() {
-  const layer = getActiveLayer(state)
-  if (layer && _previewSrc) { layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0); invalidate() }
-  reset()
-}
-
-function reset() { _previewSrc = null; black.value = 0; gamma.value = 1; white.value = 255 }
 
 onMounted(() => {
   const layer = getActiveLayer(state)
   if (!layer) return
-  const id = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
-  drawHistogram(buildHistogram(id))
+  drawHistogram(buildHistogram(getHistSrc(layer)))
 })
 
 watch([black, gamma, white], () => {
   const layer = getActiveLayer(state)
   if (!layer) return
-  if (!_previewSrc) {
-    const id = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
-    drawHistogram(buildHistogram(id))
-  } else {
-    const hist = buildHistogram(_previewSrc)
-    drawHistogram(hist)
-  }
+  drawHistogram(buildHistogram(getHistSrc(layer)))
 })
 </script>
 

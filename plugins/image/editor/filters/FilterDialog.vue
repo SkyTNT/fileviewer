@@ -1,26 +1,21 @@
 <script setup>
-import { ref, inject, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getActiveLayer } from '../editorState.js'
-import { runFilter, previewFilter } from './filterRunner.js'
+import { runFilter } from './filterRunner.js'
+import { useAdjustment } from '../adjustments/useAdjustment.js'
 
 const props = defineProps({
   modelValue: { type: [Boolean, Object], default: null },
   filterId: String,
   filterLabel: String,
   params: { type: Array, default: () => [] },
-  // params: [{ key, label, min, max, step, default }]
 })
 const emit = defineEmits(['update:modelValue'])
 
-const state = inject('editorState')
-const { pushHistory } = inject('editorHistory')
-const { invalidate } = inject('editorInvalidateObj')
-const editorApi = inject('editorApi')
 const { t } = useI18n()
+const editorApi = inject('editorApi')
 
 const values = ref({})
-let _previewSrc = null
 
 onMounted(() => {
   const v = {}
@@ -28,34 +23,25 @@ onMounted(() => {
   values.value = v
 })
 
-watch(values, async () => {
-  const layer = getActiveLayer(state)
-  if (!layer) return
-  if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
-  layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  await runFilter(props.filterId, values.value, layer, editorApi, false, state.selection)
-  invalidate()
-}, { deep: true })
+const { preview, apply: commitApply, cancel: commitCancel } = useAdjustment(
+  props.filterLabel,
+  (layer, sel) => runFilter(props.filterId, values.value, layer, editorApi, null, sel),
+  () => {
+    const v = {}
+    for (const p of props.params) v[p.key] = p.default ?? 0
+    values.value = v
+  }
+)
+
+watch(values, () => preview(), { deep: true })
 
 async function apply() {
-  const layer = getActiveLayer(state)
-  if (!layer) { close(); return }
-  pushHistory(props.filterLabel, state)
-  if (_previewSrc) layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  await runFilter(props.filterId, values.value, layer, editorApi, null, state.selection)
-  state.isDirty = true
-  invalidate()
-  close()
+  await commitApply()
+  emit('update:modelValue', false)
 }
 
 function cancel() {
-  const layer = getActiveLayer(state)
-  if (layer && _previewSrc) { layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0); invalidate() }
-  close()
-}
-
-function close() {
-  _previewSrc = null
+  commitCancel()
   emit('update:modelValue', false)
 }
 </script>

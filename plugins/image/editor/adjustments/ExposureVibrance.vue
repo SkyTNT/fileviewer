@@ -1,44 +1,22 @@
 <script setup>
-import { ref, inject } from 'vue'
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getActiveLayer } from '../editorState.js'
 import { exposure, vibrance } from '../filters/clientFilters.js'
 import { applyFilterWithSelection } from '../filters/filterRunner.js'
+import { useAdjustment } from './useAdjustment.js'
 
-const state = inject('editorState')
-const { pushHistory } = inject('editorHistory')
-const { invalidate } = inject('editorInvalidateObj')
 const { t } = useI18n()
+const exp = ref(0)
+const vib = ref(0)
 
-const exp = ref(0)    // -3..3 EV
-const vib = ref(0)    // -1..1
-let _previewSrc = null
-
-function getLayer() { return getActiveLayer(state) }
-function preview() {
-  const layer = getLayer()
-  if (!layer) return
-  if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
-  layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  applyFilterWithSelection(exposure, layer.canvas, { value: exp.value }, state.selection)
-  applyFilterWithSelection(vibrance, layer.canvas, { value: vib.value }, state.selection)
-  invalidate()
-}
-function apply() {
-  const layer = getLayer()
-  if (!layer) { reset(); return }
-  pushHistory('Exposure/Vibrance', state)
-  if (_previewSrc) layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  applyFilterWithSelection(exposure, layer.canvas, { value: exp.value }, state.selection)
-  applyFilterWithSelection(vibrance, layer.canvas, { value: vib.value }, state.selection)
-  state.isDirty = true; invalidate(); reset()
-}
-function cancel() {
-  const layer = getLayer()
-  if (layer && _previewSrc) { layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0); invalidate() }
-  reset()
-}
-function reset() { _previewSrc = null; exp.value = 0; vib.value = 0 }
+const { preview, apply, cancel } = useAdjustment(
+  'Exposure/Vibrance',
+  (layer, sel) => {
+    applyFilterWithSelection(exposure, layer.canvas, { value: exp.value }, sel)
+    applyFilterWithSelection(vibrance, layer.canvas, { value: vib.value }, sel)
+  },
+  () => { exp.value = 0; vib.value = 0 }
+)
 </script>
 
 <template>
