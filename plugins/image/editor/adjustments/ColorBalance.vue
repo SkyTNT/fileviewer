@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { color_balance } from '../filters/clientFilters.js'
 import { applyFilterWithSelection } from '../filters/filterRunner.js'
@@ -11,9 +11,9 @@ const midtones = ref([0, 0, 0])
 const highlights = ref([0, 0, 0])
 const zone = ref('midtones')
 
-function getZoneArr() {
-  return zone.value === 'shadows' ? shadows.value : zone.value === 'highlights' ? highlights.value : midtones.value
-}
+const zoneArr = computed(() =>
+  zone.value === 'shadows' ? shadows : zone.value === 'highlights' ? highlights : midtones
+)
 
 const { preview, apply, cancel } = useAdjustment(
   'Color Balance',
@@ -34,11 +34,11 @@ const channels = ['R', 'G', 'B']
     <div v-for="(ch, ci) in channels" :key="ch" class="adj-row">
       <span class="adj-label">{{ ch }}</span>
       <v-slider
-        :model-value="getZoneArr()[ci]"
-        @update:model-value="v => { getZoneArr()[ci] = v; preview() }"
+        v-model="zoneArr.value[ci]"
+        @update:model-value="preview"
         :min="-100" :max="100" :step="1" hide-details density="compact" class="flex-grow-1"
       />
-      <span class="adj-val">{{ getZoneArr()[ci] }}</span>
+      <span class="adj-val">{{ zoneArr.value[ci] }}</span>
     </div>
     <div class="adj-actions">
       <v-btn size="x-small" variant="text" @click="cancel">{{ t('editor.cancel') }}</v-btn>

@@ -108,14 +108,17 @@ export function vibrance(canvas, { value = 0 } = {}) {
 export function color_balance(canvas, { shadows = [0,0,0], midtones = [0,0,0], highlights = [0,0,0] } = {}) {
   const id = getImageData(canvas)
   const d = id.data
+  const sr = shadows[0], sg = shadows[1], sb = shadows[2]
+  const mr = midtones[0], mg = midtones[1], mb = midtones[2]
+  const hr = highlights[0], hg = highlights[1], hb = highlights[2]
   for (let i = 0; i < d.length; i += 4) {
     const lum = (d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114) / 255
-    const sf = Math.max(0, 0.5 - lum) * 2      // shadow weight
-    const hf = Math.max(0, lum - 0.5) * 2      // highlight weight
-    const mf = 1 - sf - hf                     // midtone weight
-    for (let c = 0; c < 3; c++) {
-      d[i+c] = clamp(d[i+c] + (shadows[c]*sf + midtones[c]*mf + highlights[c]*hf))
-    }
+    const sf = Math.max(0, 0.5 - lum) * 2
+    const hf = Math.max(0, lum - 0.5) * 2
+    const mf = 1 - sf - hf
+    d[i]   = clamp(d[i]   + sr * sf + mr * mf + hr * hf)
+    d[i+1] = clamp(d[i+1] + sg * sf + mg * mf + hg * hf)
+    d[i+2] = clamp(d[i+2] + sb * sf + mb * mf + hb * hf)
   }
   putImageData(canvas, id)
 }
