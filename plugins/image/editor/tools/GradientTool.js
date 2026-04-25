@@ -28,7 +28,6 @@ export default {
     if (!layer || layer.locked) return
     const { fgColor, bgColor, gradientType, canvasWidth, canvasHeight } = state
     const layerCtx = layer.canvas.getContext('2d', { willReadFrequently: true })
-    pushHistory('Gradient')
     withSelectionClip(layerCtx, state.selection, canvasWidth, canvasHeight, (ctx) => {
       let grad
       if (gradientType === 'linear') {
@@ -42,6 +41,7 @@ export default {
       ctx.fillStyle = grad
       ctx.fillRect(0, 0, canvasWidth, canvasHeight)
     })
+    pushHistory('Gradient')
     state.isDirty = true
     invalidate()
   },

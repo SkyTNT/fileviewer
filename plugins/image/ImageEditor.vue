@@ -147,7 +147,6 @@ function isFocused() {
 
 function flattenAll() {
   if (state.layers.length <= 1) return
-  pushHistory('Flatten', state)
   const flat = new OffscreenCanvas(state.canvasWidth, state.canvasHeight)
   const ctx = flat.getContext('2d', { willReadFrequently: true })
   for (const l of state.layers) {
@@ -162,6 +161,7 @@ function flattenAll() {
   bg.canvas.getContext('2d', { willReadFrequently: true }).drawImage(flat, 0, 0)
   state.layers.splice(0, state.layers.length, bg)
   state.activeLayerId = bg.id
+  pushHistory('Flatten', state)
   state.isDirty = true
   invalidate()
 }
@@ -179,7 +179,6 @@ const actions = {
   fillSelection: () => {
     const layer = getActiveLayer(state)
     if (!layer || layer.locked) return
-    pushHistory('Fill Selection', state)
     const ctx = layer.canvas.getContext('2d', { willReadFrequently: true })
     if (state.selection) {
       const mask = selectionToMask(state.selection, state.canvasWidth, state.canvasHeight)
@@ -192,6 +191,7 @@ const actions = {
     } else {
       ctx.save(); ctx.fillStyle = state.fgColor; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight); ctx.restore()
     }
+    pushHistory('Fill Selection', state)
     state.isDirty = true
     invalidate()
   },
@@ -238,8 +238,8 @@ function openFilterDialog(id) {
 async function quickFilter(id) {
   const layer = getActiveLayer(state)
   if (!layer || layer.locked) return
-  pushHistory(id, state)
   await runFilter(id, {}, layer, editorApi, null, state.selection)
+  pushHistory(id, state)
   state.isDirty = true
   invalidate()
 }

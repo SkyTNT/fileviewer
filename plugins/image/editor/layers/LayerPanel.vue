@@ -15,19 +15,19 @@ const reversed = computed(() => [...state.layers].reverse())
 function setActive(id) { state.activeLayerId = id }
 
 function addLayer() {
-  pushHistory('Add Layer', state)
   const layer = createLayer(`Layer ${state.layers.length + 1}`, state.canvasWidth, state.canvasHeight)
   state.layers.push(layer)
   state.activeLayerId = layer.id
+  pushHistory('Add Layer', state)
   state.isDirty = true
 }
 
 function deleteLayer() {
   if (state.layers.length <= 1) return
   const idx = state.layers.findIndex(l => l.id === state.activeLayerId)
-  pushHistory('Delete Layer', state)
   state.layers.splice(idx, 1)
   state.activeLayerId = state.layers[Math.min(idx, state.layers.length - 1)].id
+  pushHistory('Delete Layer', state)
   state.isDirty = true
   invalidate()
 }
@@ -35,7 +35,6 @@ function deleteLayer() {
 function duplicateLayer() {
   const src = state.layers.find(l => l.id === state.activeLayerId)
   if (!src) return
-  pushHistory('Duplicate Layer', state)
   const copy = createLayer(src.name + ' copy', src.canvas.width, src.canvas.height)
   copy.opacity = src.opacity; copy.blendMode = src.blendMode
   copy.offsetX = src.offsetX; copy.offsetY = src.offsetY
@@ -43,6 +42,7 @@ function duplicateLayer() {
   const idx = state.layers.findIndex(l => l.id === state.activeLayerId)
   state.layers.splice(idx + 1, 0, copy)
   state.activeLayerId = copy.id
+  pushHistory('Duplicate Layer', state)
   state.isDirty = true
   invalidate()
 }
@@ -52,7 +52,6 @@ function mergeDown() {
   if (idx === 0) return
   const above = state.layers[idx]
   const below = state.layers[idx - 1]
-  pushHistory('Merge Down', state)
   const ctx = below.canvas.getContext('2d', { willReadFrequently: true })
   ctx.save()
   ctx.globalAlpha = above.opacity
@@ -61,13 +60,13 @@ function mergeDown() {
   ctx.restore()
   state.layers.splice(idx, 1)
   state.activeLayerId = below.id
+  pushHistory('Merge Down', state)
   state.isDirty = true
   invalidate()
 }
 
 function flattenAll() {
   if (state.layers.length <= 1) return
-  pushHistory('Flatten', state)
   const flat = new OffscreenCanvas(state.canvasWidth, state.canvasHeight)
   const ctx = flat.getContext('2d', { willReadFrequently: true })
   for (const l of state.layers) {
@@ -82,6 +81,7 @@ function flattenAll() {
   single.canvas.getContext('2d', { willReadFrequently: true }).drawImage(flat, 0, 0)
   state.layers.splice(0, state.layers.length, single)
   state.activeLayerId = single.id
+  pushHistory('Flatten', state)
   state.isDirty = true
   invalidate()
 }

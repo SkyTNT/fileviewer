@@ -23,7 +23,6 @@ function onHChange() {
 function apply() {
   const nw = Math.max(1, Math.round(w.value))
   const nh = Math.max(1, Math.round(h.value))
-  pushHistory('Image Resize', state)
   for (const layer of state.layers) {
     const newCanvas = markRaw(new OffscreenCanvas(nw, nh))
     const ctx = newCanvas.getContext('2d', { willReadFrequently: true })
@@ -33,6 +32,7 @@ function apply() {
     layer.offsetX = 0; layer.offsetY = 0
   }
   state.canvasWidth = nw; state.canvasHeight = nh
+  pushHistory('Image Resize', state)
   state.isDirty = true; invalidate()
   emit('update:modelValue', false)
 }

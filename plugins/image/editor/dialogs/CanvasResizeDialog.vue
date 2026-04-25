@@ -22,7 +22,6 @@ const ANCHORS = [
 function apply() {
   const nw = Math.max(1, Math.round(w.value))
   const nh = Math.max(1, Math.round(h.value))
-  pushHistory('Canvas Resize', state)
   const ow = state.canvasWidth, oh = state.canvasHeight
   let ox = 0, oy = 0
   if (anchor.value.includes('e')) ox = nw - ow
@@ -37,6 +36,7 @@ function apply() {
     layer.offsetX = 0; layer.offsetY = 0
   }
   state.canvasWidth = nw; state.canvasHeight = nh
+  pushHistory('Canvas Resize', state)
   state.isDirty = true
   invalidate()
   emit('update:modelValue', false)

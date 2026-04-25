@@ -10,6 +10,7 @@ let _floatOrigX = 0, _floatOrigY = 0
 let _floatX = 0, _floatY = 0
 let _origSel = null
 let _dx = 0, _dy = 0
+let _pendingLabel = null
 
 export default {
   id: 'move',
@@ -33,12 +34,12 @@ export default {
       _floatOrigX = _floatX = extracted.x
       _floatOrigY = _floatY = extracted.y
       clearSelectionOnLayer(layer, state.selection, state.canvasWidth, state.canvasHeight)
-      toolCtx.pushHistory('Move Selection')
+      _pendingLabel = 'Move Selection'
       toolCtx.invalidate()
     } else {
       _selMode = false
       _origX = layer.offsetX; _origY = layer.offsetY
-      toolCtx.pushHistory('Move')
+      _pendingLabel = 'Move'
     }
   },
 
@@ -86,6 +87,10 @@ export default {
       _floatCanvas = null
       _selMode = false
       _origSel = null
+    }
+    if (_pendingLabel) {
+      toolCtx.pushHistory(_pendingLabel)
+      _pendingLabel = null
     }
     state.isDirty = true
   },

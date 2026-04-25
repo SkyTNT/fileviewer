@@ -46,9 +46,9 @@ export function useAdjustment(historyLabel, applyFn, resetFn) {
     _abortPreview = false
     const layer = getActiveLayer(state)
     if (!layer) { _snap = null; resetFn?.(); return }
-    pushHistory(historyLabel, state)
     if (_snap) _ctx(layer).putImageData(_snap, 0, 0)
     await applyFn(layer, state.selection)
+    pushHistory(historyLabel, state)
     state.isDirty = true
     invalidate()
     _snap = null

@@ -57,18 +57,18 @@ function applyArbitrary(deg) {
 }
 
 function apply() {
-  pushHistory('Rotate Canvas', state)
   if (angle.value !== 0) applyArbitrary(angle.value)
   if (flipH.value) applyFlip(true)
   if (flipV.value) applyFlip(false)
+  pushHistory('Rotate Canvas', state)
   state.isDirty = true; invalidate()
   emit('update:modelValue', false)
   angle.value = 0; flipH.value = false; flipV.value = false
 }
 
 function rotate90(steps) {
-  pushHistory(`Rotate ${steps * 90}°`, state)
   rotateCanvas90(steps)
+  pushHistory(`Rotate ${steps * 90}°`, state)
   state.isDirty = true; invalidate()
 }
 </script>

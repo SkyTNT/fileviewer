@@ -95,7 +95,6 @@ export default {
     const cx = Math.round(x), cy = Math.round(y)
     const cw = Math.round(w), ch = Math.round(h)
     if (cw < 1 || ch < 1) return
-    pushHistory('Crop')
     for (const layer of state.layers) {
       const newCanvas = markRaw(new OffscreenCanvas(cw, ch))
       const ctx2 = newCanvas.getContext('2d', { willReadFrequently: true })
@@ -106,6 +105,7 @@ export default {
     state.canvasWidth = cw
     state.canvasHeight = ch
     state.selection = null
+    pushHistory('Crop')
     state.isDirty = true
     _cropBounds = null
     toolCtx.invalidate()
