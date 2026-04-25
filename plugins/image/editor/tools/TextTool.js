@@ -1,60 +1,45 @@
-import { getActiveLayer, hexToRgb } from '../editorState.js'
+import { getActiveLayer } from '../editorState.js'
 import { watch } from 'vue'
 
-let _textarea = null
+let _input = null        // hidden textarea for keyboard capture
+let _text = ''
 let _clickX = 0, _clickY = 0
 let _toolCtx = null
-let _unwatchStyle = null
-const TEXTAREA_PADDING = 2  // matches padding:2px in textarea style
-const TEXTAREA_BORDER = 1   // matches border:1px in textarea style
+let _unwatch = null
 
-function updateTextareaStyle(state) {
-  if (!_textarea || !_toolCtx) return
-  const style = (state.textBold ? 'bold ' : '') + (state.textItalic ? 'italic ' : '')
-  _textarea.style.font = `${style}${state.textSize * state.zoom}px ${state.textFont}`
-  _textarea.style.color = state.fgColor
+function fontString(state, size) {
+  return `${state.textBold ? 'bold ' : ''}${state.textItalic ? 'italic ' : ''}${size}px ${state.textFont}`
 }
 
-function updateTextareaPosition(toolCtx) {
-  if (!_textarea) return
-  const { viewport, state } = toolCtx
-  const screenPos = viewport.canvasToScreen(_clickX, _clickY)
-  const container = viewport.containerRef.value
-  if (!container) return
-  const containerRect = container.getBoundingClientRect()
-  const relX = screenPos.x - containerRect.left
-  const relY = screenPos.y - containerRect.top
-  _textarea.style.left = `${relX}px`
-  _textarea.style.top = `${relY}px`
-}
-
-function removeTextarea() {
-  if (_textarea) {
-    _textarea.remove()
-    _textarea = null
+function removeInput() {
+  if (_input) {
+    _input.remove()
+    _input = null
   }
-  if (_unwatchStyle) {
-    _unwatchStyle()
-    _unwatchStyle = null
+  if (_unwatch) {
+    _unwatch()
+    _unwatch = null
   }
+  _text = ''
+  _toolCtx = null
 }
 
 function commitText(toolCtx) {
-  if (!_textarea) return
-  const text = _textarea.value.trim()
-  removeTextarea()
+  const text = _text.trim()
+  removeInput()
   if (!text) return
   const { state, pushHistory, invalidate } = toolCtx
   const layer = getActiveLayer(state)
   if (!layer || layer.locked) return
   const ctx = layer.canvas.getContext('2d', { willReadFrequently: true })
-  const style = (state.textBold ? 'bold ' : '') + (state.textItalic ? 'italic ' : '')
   ctx.save()
-  ctx.font = `${style}${state.textSize}px ${state.textFont}`
+  ctx.font = fontString(state, state.textSize)
   ctx.fillStyle = state.fgColor
   ctx.textBaseline = 'top'
-  const offset = (TEXTAREA_PADDING + TEXTAREA_BORDER) / state.zoom
-  ctx.fillText(text, _clickX + offset, _clickY + offset)
+  const lineHeight = state.textSize * 1.2
+  text.split('\n').forEach((line, i) => {
+    ctx.fillText(line, _clickX, _clickY + i * lineHeight)
+  })
   ctx.restore()
   pushHistory('Text')
   state.isDirty = true
@@ -66,58 +51,87 @@ export default {
   cursor: 'text',
 
   onPointerDown(e, toolCtx) {
-    if (_textarea) { commitText(toolCtx); return }
-    const { state } = toolCtx
+    if (_input) { commitText(toolCtx) }
+    const { state, viewport } = toolCtx
     _toolCtx = toolCtx
     _clickX = e.x
     _clickY = e.y
+    _text = ''
 
-    // Find the viewport container to position the textarea
-    const { viewport } = toolCtx
-    const screenPos = viewport.canvasToScreen(e.x, e.y)
-    const container = viewport.containerRef.value
-    if (!container) return
-
-    _textarea = document.createElement('textarea')
-    const containerRect = container.getBoundingClientRect()
-    const relX = screenPos.x - containerRect.left
-    const relY = screenPos.y - containerRect.top
-    _textarea.style.cssText = `
-      position:absolute;
-      left:${relX}px;
-      top:${relY}px;
-      min-width:100px; min-height:28px;
-      font:${(state.textBold?'bold ':'')+(state.textItalic?'italic ':'')}${state.textSize * state.zoom}px ${state.textFont};
-      line-height:1;
-      color:${state.fgColor};
-      background:transparent;
-      border:1px dashed #888;
-      outline:none; resize:both;
-      padding:2px; z-index:99999;
-      overflow:hidden; white-space:pre;
-    `
-    _textarea.addEventListener('keydown', evt => {
-      if (evt.key === 'Escape') { removeTextarea() }
-      if (evt.key === 'Enter' && !evt.shiftKey) { evt.preventDefault(); commitText(toolCtx) }
+    // Hidden textarea appended to body just to capture keyboard input
+    _input = document.createElement('textarea')
+    _input.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0;'
+    _input.addEventListener('input', () => {
+      _text = _input.value
+      state.paintTick++
+    })
+    _input.addEventListener('keydown', evt => {
+      if (evt.key === 'Escape') {
+        removeInput()
+        state.paintTick++
+      }
+      if (evt.key === 'Enter' && !evt.shiftKey) {
+        evt.preventDefault()
+        commitText(toolCtx)
+        state.paintTick++
+      }
       evt.stopPropagation()
     })
-    container.appendChild(_textarea)
-    setTimeout(() => _textarea?.focus(), 0)
+    document.body.appendChild(_input)
+    setTimeout(() => _input?.focus(), 0)
 
-    // Watch for style changes
-    _unwatchStyle = watch(
-      () => [state.textFont, state.textSize, state.textBold, state.textItalic, state.fgColor, state.zoom, state.panX, state.panY],
-      () => {
-        updateTextareaStyle(state)
-        updateTextareaPosition(toolCtx)
-      }
+    _unwatch = watch(
+      () => [state.textFont, state.textSize, state.textBold, state.textItalic, state.fgColor],
+      () => { state.paintTick++ }
     )
   },
 
   onPointerMove() {},
   onPointerUp() {},
 
-  renderOverlay() {},
+  renderOverlay(ctx, state) {
+    if (!_input) return
+    const { viewport } = _toolCtx
+    const lineHeight = state.textSize * 1.2
+    const lines = _text.split('\n')
+
+    ctx.save()
+    ctx.font = fontString(state, state.textSize)
+    ctx.fillStyle = state.fgColor
+    ctx.textBaseline = 'top'
+
+    const maxWidth = Math.max(...lines.map(l => ctx.measureText(l || ' ').width), 80)
+    const boxH = lines.length * lineHeight
+
+    ctx.strokeStyle = 'rgba(128,128,128,0.8)'
+    ctx.lineWidth = 1 / state.zoom
+    ctx.setLineDash([4 / state.zoom, 3 / state.zoom])
+    ctx.strokeRect(_clickX, _clickY, maxWidth + 4 / state.zoom, boxH + 4 / state.zoom)
+    ctx.setLineDash([])
+
+    // Draw text
+    lines.forEach((line, i) => {
+      ctx.fillText(line, _clickX, _clickY + i * lineHeight)
+    })
+
+    // Draw cursor blinking
+    const cursorLineIdx = _text.slice(0, _input?.selectionStart ?? _text.length).split('\n').length - 1
+    const cursorLineText = lines[cursorLineIdx] ?? ''
+    const charsBefore = _text.slice(0, _input?.selectionStart ?? _text.length).split('\n').pop()
+    const cx = _clickX + ctx.measureText(charsBefore).width
+    const cy = _clickY + cursorLineIdx * lineHeight
+    const now = Date.now()
+    if (Math.floor(now / 500) % 2 === 0) {
+      ctx.beginPath()
+      ctx.strokeStyle = state.fgColor
+      ctx.lineWidth = 1 / state.zoom
+      ctx.moveTo(cx, cy)
+      ctx.lineTo(cx, cy + state.textSize)
+      ctx.stroke()
+    }
+
+    ctx.restore()
+  },
 
   onDeactivate(toolCtx) {
     commitText(toolCtx)
