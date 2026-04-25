@@ -97,7 +97,7 @@ async function loadImage() {
     const bitmap = await createImageBitmap(blob)
     const w = bitmap.width, h = bitmap.height
     const layer = createLayer('Background', w, h)
-    layer.canvas.getContext('2d').drawImage(bitmap, 0, 0)
+    layer.canvas.getContext('2d', { willReadFrequently: true }).drawImage(bitmap, 0, 0)
     bitmap.close()
     state.canvasWidth = w
     state.canvasHeight = h
@@ -149,7 +149,7 @@ function flattenAll() {
   if (state.layers.length <= 1) return
   pushHistory('Flatten', state)
   const flat = new OffscreenCanvas(state.canvasWidth, state.canvasHeight)
-  const ctx = flat.getContext('2d')
+  const ctx = flat.getContext('2d', { willReadFrequently: true })
   for (const l of state.layers) {
     if (!l.visible) continue
     ctx.save()
@@ -159,7 +159,7 @@ function flattenAll() {
     ctx.restore()
   }
   const bg = createLayer('Background', state.canvasWidth, state.canvasHeight)
-  bg.canvas.getContext('2d').drawImage(flat, 0, 0)
+  bg.canvas.getContext('2d', { willReadFrequently: true }).drawImage(flat, 0, 0)
   state.layers.splice(0, state.layers.length, bg)
   state.activeLayerId = bg.id
   state.isDirty = true
@@ -180,7 +180,7 @@ const actions = {
     const layer = getActiveLayer(state)
     if (!layer || layer.locked) return
     pushHistory('Fill Selection', state)
-    const ctx = layer.canvas.getContext('2d')
+    const ctx = layer.canvas.getContext('2d', { willReadFrequently: true })
     if (state.selection) {
       const mask = selectionToMask(state.selection, state.canvasWidth, state.canvasHeight)
       const imgData = ctx.getImageData(0, 0, state.canvasWidth, state.canvasHeight)
