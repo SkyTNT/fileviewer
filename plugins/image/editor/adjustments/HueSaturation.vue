@@ -3,6 +3,7 @@ import { ref, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getActiveLayer } from '../editorState.js'
 import { hue_saturation_lightness } from '../filters/clientFilters.js'
+import { applyFilterWithSelection } from '../filters/filterRunner.js'
 
 const state = inject('editorState')
 const { pushHistory } = inject('editorHistory')
@@ -21,7 +22,7 @@ function preview() {
   if (!layer) return
   if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
   layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  hue_saturation_lightness(layer.canvas, { hue: hue.value, saturation: sat.value, lightness: lit.value })
+  applyFilterWithSelection(hue_saturation_lightness, layer.canvas, { hue: hue.value, saturation: sat.value, lightness: lit.value }, state.selection)
   invalidate()
 }
 
@@ -30,7 +31,7 @@ function apply() {
   if (!layer) { reset(); return }
   pushHistory('Hue/Saturation', state)
   if (_previewSrc) layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  hue_saturation_lightness(layer.canvas, { hue: hue.value, saturation: sat.value, lightness: lit.value })
+  applyFilterWithSelection(hue_saturation_lightness, layer.canvas, { hue: hue.value, saturation: sat.value, lightness: lit.value }, state.selection)
   state.isDirty = true; invalidate(); reset()
 }
 

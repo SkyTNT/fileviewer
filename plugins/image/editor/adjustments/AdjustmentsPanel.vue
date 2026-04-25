@@ -24,7 +24,7 @@ async function applyFilter(filterId, params) {
   const layer = getActiveLayer(state)
   if (!layer || layer.locked) return
   pushHistory(filterId, state)
-  await runFilter(filterId, params, layer, editorApi)
+  await runFilter(filterId, params, layer, editorApi, null, state.selection)
   state.isDirty = true
   invalidate()
 }

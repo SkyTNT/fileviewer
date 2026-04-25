@@ -3,6 +3,7 @@ import { ref, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getActiveLayer } from '../editorState.js'
 import { shadows_highlights } from '../filters/clientFilters.js'
+import { applyFilterWithSelection } from '../filters/filterRunner.js'
 
 const state = inject('editorState')
 const { pushHistory } = inject('editorHistory')
@@ -19,7 +20,7 @@ function preview() {
   if (!layer) return
   if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
   layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  shadows_highlights(layer.canvas, { shadows: shadows.value, highlights: highlights.value })
+  applyFilterWithSelection(shadows_highlights, layer.canvas, { shadows: shadows.value, highlights: highlights.value }, state.selection)
   invalidate()
 }
 function apply() {
@@ -27,7 +28,7 @@ function apply() {
   if (!layer) { reset(); return }
   pushHistory('Shadows/Highlights', state)
   if (_previewSrc) layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  shadows_highlights(layer.canvas, { shadows: shadows.value, highlights: highlights.value })
+  applyFilterWithSelection(shadows_highlights, layer.canvas, { shadows: shadows.value, highlights: highlights.value }, state.selection)
   state.isDirty = true; invalidate(); reset()
 }
 function cancel() {

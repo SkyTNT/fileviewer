@@ -3,6 +3,7 @@ import { ref, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getActiveLayer } from '../editorState.js'
 import { brightness_contrast } from '../filters/clientFilters.js'
+import { applyFilterWithSelection } from '../filters/filterRunner.js'
 
 const state = inject('editorState')
 const { pushHistory } = inject('editorHistory')
@@ -23,7 +24,7 @@ function preview() {
   }
   // Restore original, then apply preview
   layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  brightness_contrast(layer.canvas, { brightness: bv.value, contrast: cv.value })
+  applyFilterWithSelection((c) => brightness_contrast(c, { brightness: bv.value, contrast: cv.value }), layer.canvas, state.selection)
   invalidate()
 }
 
@@ -35,7 +36,7 @@ function apply() {
   if (_previewSrc) {
     layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
   }
-  brightness_contrast(layer.canvas, { brightness: bv.value, contrast: cv.value })
+  applyFilterWithSelection((c) => brightness_contrast(c, { brightness: bv.value, contrast: cv.value }), layer.canvas, state.selection)
   state.isDirty = true
   invalidate()
   reset()

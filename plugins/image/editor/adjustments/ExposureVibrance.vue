@@ -3,6 +3,7 @@ import { ref, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getActiveLayer } from '../editorState.js'
 import { exposure, vibrance } from '../filters/clientFilters.js'
+import { applyFilterWithSelection } from '../filters/filterRunner.js'
 
 const state = inject('editorState')
 const { pushHistory } = inject('editorHistory')
@@ -19,8 +20,8 @@ function preview() {
   if (!layer) return
   if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
   layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  exposure(layer.canvas, { value: exp.value })
-  vibrance(layer.canvas, { value: vib.value })
+  applyFilterWithSelection(exposure, layer.canvas, { value: exp.value }, state.selection)
+  applyFilterWithSelection(vibrance, layer.canvas, { value: vib.value }, state.selection)
   invalidate()
 }
 function apply() {
@@ -28,8 +29,8 @@ function apply() {
   if (!layer) { reset(); return }
   pushHistory('Exposure/Vibrance', state)
   if (_previewSrc) layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  exposure(layer.canvas, { value: exp.value })
-  vibrance(layer.canvas, { value: vib.value })
+  applyFilterWithSelection(exposure, layer.canvas, { value: exp.value }, state.selection)
+  applyFilterWithSelection(vibrance, layer.canvas, { value: vib.value }, state.selection)
   state.isDirty = true; invalidate(); reset()
 }
 function cancel() {

@@ -349,10 +349,53 @@ function convolve3x3(canvas, kernel) {
   putImageData(canvas, new ImageData(out, w, h))
 }
 
+export function chromatic_aberration(canvas, { mode = 'radial', amount = 5, centerX = 0.5, centerY = 0.5, angle = 0 } = {}) {
+  if (amount === 0) return
+  const id = getImageData(canvas)
+  const src = new Uint8ClampedArray(id.data)
+  const d = id.data
+  const w = canvas.width, h = canvas.height
+
+  function sampleChannel(x, y, ch) {
+    const xi = Math.max(0, Math.min(w - 1, Math.round(x)))
+    const yi = Math.max(0, Math.min(h - 1, Math.round(y)))
+    return src[(yi * w + xi) * 4 + ch]
+  }
+
+  if (mode === 'radial') {
+    const cx = centerX * w, cy = centerY * h
+    const maxDist = Math.sqrt(Math.max(cx, w - cx) ** 2 + Math.max(cy, h - cy) ** 2)
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4
+        const dx = x - cx, dy = y - cy
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        if (dist < 0.5) continue
+        const nx = dx / dist, ny = dy / dist
+        const shift = (dist / maxDist) * amount
+        d[i]   = sampleChannel(x + nx * shift, y + ny * shift, 0)
+        d[i+2] = sampleChannel(x - nx * shift, y - ny * shift, 2)
+      }
+    }
+  } else {
+    const rad = angle * Math.PI / 180
+    const nx = Math.cos(rad), ny = Math.sin(rad)
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4
+        d[i]   = sampleChannel(x + nx * amount, y + ny * amount, 0)
+        d[i+2] = sampleChannel(x - nx * amount, y - ny * amount, 2)
+      }
+    }
+  }
+  putImageData(canvas, id)
+}
+
 export const ALL_FILTERS = {
   brightness, contrast, brightness_contrast,
   hue_saturation_lightness, exposure, vibrance,
   color_balance, shadows_highlights, apply_lut,
   invert, grayscale, sepia, vignette, noise, pixelate,
   gaussian_blur, sharpen, emboss, edge_detect,
+  chromatic_aberration,
 }

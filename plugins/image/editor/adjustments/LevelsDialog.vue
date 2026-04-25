@@ -3,6 +3,7 @@ import { ref, inject, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getActiveLayer } from '../editorState.js'
 import { apply_lut } from '../filters/clientFilters.js'
+import { applyFilterWithSelection } from '../filters/filterRunner.js'
 
 const state = inject('editorState')
 const { pushHistory } = inject('editorHistory')
@@ -60,7 +61,7 @@ function preview() {
   if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
   layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
   const lut = buildLUT()
-  apply_lut(layer.canvas, lut, lut, lut)
+  applyFilterWithSelection((c) => apply_lut(c, lut, lut, lut), layer.canvas, state.selection)
   invalidate()
 }
 
@@ -70,7 +71,7 @@ function apply() {
   pushHistory('Levels', state)
   if (_previewSrc) layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
   const lut = buildLUT()
-  apply_lut(layer.canvas, lut, lut, lut)
+  applyFilterWithSelection((c) => apply_lut(c, lut, lut, lut), layer.canvas, state.selection)
   state.isDirty = true; invalidate(); reset()
 }
 

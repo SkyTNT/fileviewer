@@ -33,7 +33,7 @@ watch(values, async () => {
   if (!layer) return
   if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
   layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  await runFilter(props.filterId, values.value, layer, editorApi, false)
+  await runFilter(props.filterId, values.value, layer, editorApi, false, state.selection)
   invalidate()
 }, { deep: true })
 
@@ -42,7 +42,7 @@ async function apply() {
   if (!layer) { close(); return }
   pushHistory(props.filterLabel, state)
   if (_previewSrc) layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
-  await runFilter(props.filterId, values.value, layer, editorApi)
+  await runFilter(props.filterId, values.value, layer, editorApi, null, state.selection)
   state.isDirty = true
   invalidate()
   close()
@@ -65,15 +65,24 @@ function close() {
     <v-card>
       <v-card-title>{{ filterLabel }}</v-card-title>
       <v-card-text>
-        <div v-for="p in params" :key="p.key" class="filter-row">
-          <span class="filter-label">{{ p.label }}</span>
-          <v-slider
-            v-model="values[p.key]"
-            :min="p.min" :max="p.max" :step="p.step || 1"
-            hide-details density="compact" class="flex-grow-1"
-          />
-          <span class="filter-val">{{ typeof values[p.key] === 'number' ? values[p.key].toFixed(p.step < 1 ? 2 : 0) : values[p.key] }}</span>
-        </div>
+        <template v-for="p in params" :key="p.key">
+          <div v-if="!p.showWhen || values[p.showWhen.key] === p.showWhen.value" class="filter-row">
+            <span class="filter-label">{{ p.label }}</span>
+            <template v-if="p.type === 'select'">
+              <v-btn-toggle v-model="values[p.key]" density="compact" mandatory class="flex-grow-1">
+                <v-btn v-for="opt in p.options" :key="opt.value" :value="opt.value" size="small">{{ opt.label }}</v-btn>
+              </v-btn-toggle>
+            </template>
+            <template v-else>
+              <v-slider
+                v-model="values[p.key]"
+                :min="p.min" :max="p.max" :step="p.step || 1"
+                hide-details density="compact" class="flex-grow-1"
+              />
+              <span class="filter-val">{{ typeof values[p.key] === 'number' ? values[p.key].toFixed(p.step < 1 ? 2 : 0) : values[p.key] }}</span>
+            </template>
+          </div>
+        </template>
       </v-card-text>
       <v-card-actions>
         <v-spacer />

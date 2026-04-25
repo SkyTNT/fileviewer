@@ -217,6 +217,16 @@ const FILTER_DIALOGS = {
   noise: { label: 'editor.noise', params: [{ key: 'amount', label: 'Amount', min: 1, max: 100, step: 1, default: 25 }] },
   vignette: { label: 'editor.vignette', params: [{ key: 'strength', label: 'Strength', min: 0, max: 1, step: 0.05, default: 0.5 }, { key: 'radius', label: 'Radius', min: 0, max: 1, step: 0.05, default: 0.75 }] },
   pixelate: { label: 'editor.pixelate', params: [{ key: 'size', label: 'Block Size', min: 2, max: 64, step: 1, default: 10 }] },
+  chromatic_aberration: {
+    label: 'editor.chromaticAberration',
+    params: [
+      { key: 'mode', label: t('editor.caMode'), type: 'select', options: [{ value: 'radial', label: t('editor.caRadial') }, { value: 'axial', label: t('editor.caAxial') }], default: 'radial' },
+      { key: 'amount', label: t('editor.caAmount'), min: 0, max: 30, step: 0.5, default: 5 },
+      { key: 'centerX', label: t('editor.caCenterX'), min: 0, max: 1, step: 0.01, default: 0.5, showWhen: { key: 'mode', value: 'radial' } },
+      { key: 'centerY', label: t('editor.caCenterY'), min: 0, max: 1, step: 0.01, default: 0.5, showWhen: { key: 'mode', value: 'radial' } },
+      { key: 'angle', label: t('editor.caAngle'), min: 0, max: 360, step: 1, default: 0, showWhen: { key: 'mode', value: 'axial' } },
+    ],
+  },
 }
 
 function openFilterDialog(id) {
@@ -229,7 +239,7 @@ async function quickFilter(id) {
   const layer = getActiveLayer(state)
   if (!layer || layer.locked) return
   pushHistory(id, state)
-  await runFilter(id, {}, layer, editorApi)
+  await runFilter(id, {}, layer, editorApi, null, state.selection)
   state.isDirty = true
   invalidate()
 }
@@ -291,6 +301,8 @@ const cursorInfo = computed(() =>
           <v-list-item :title="t('editor.pixelate')" @click="openFilterDialog('pixelate')" />
           <v-list-item :title="t('editor.emboss')" @click="quickFilter('emboss')" />
           <v-list-item :title="t('editor.edgeDetect')" @click="quickFilter('edge_detect')" />
+          <v-divider />
+          <v-list-item :title="t('editor.chromaticAberration')" @click="openFilterDialog('chromatic_aberration')" />
         </v-list>
       </v-menu>
 
