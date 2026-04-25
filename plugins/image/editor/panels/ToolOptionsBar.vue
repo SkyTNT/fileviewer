@@ -1,11 +1,26 @@
 <script setup>
-import { inject, computed } from 'vue'
+import { inject, computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CropTool from '../tools/CropTool.js'
 
 const state = inject('editorState')
 const toolCtx = inject('editorToolCtx')
 const { t } = useI18n()
+
+const availableFonts = ref([
+  'Arial', 'Helvetica', 'Times New Roman', 'Courier New', 'Verdana', 'Georgia',
+])
+
+// Load system fonts if API is available
+if ('queryLocalFonts' in window) {
+  window.queryLocalFonts().then(fonts => {
+    const names = new Set()
+    fonts.forEach(f => names.add(f.family))
+    availableFonts.value = [...names].sort()
+  }).catch(() => {
+    // Fallback to common fonts if permission denied
+  })
+}
 
 const tool = computed(() => state.activeTool)
 const hasCrop = computed(() => { void state.paintTick; return CropTool.hasCrop() })
@@ -101,7 +116,13 @@ const SHAPE_TYPES = ['rect', 'ellipse', 'line']
 
     <!-- Text -->
     <template v-else-if="tool === 'text'">
-      <v-text-field v-model="state.textFont" density="compact" variant="outlined" hide-details label="Font" style="width:120px" class="mr-2" />
+      <v-autocomplete
+        v-model="state.textFont"
+        :items="availableFonts"
+        density="compact" variant="outlined" hide-details label="Font"
+        style="width:160px" class="mr-2"
+        auto-select-first
+      />
       <v-text-field v-model.number="state.textSize" density="compact" variant="outlined" hide-details label="Size" type="number" style="width:70px" class="mr-2" />
       <v-btn :icon="state.textBold ? 'mdi-format-bold' : 'mdi-format-bold'" :variant="state.textBold ? 'tonal' : 'text'" size="small" @click="state.textBold = !state.textBold" />
       <v-btn :icon="state.textItalic ? 'mdi-format-italic' : 'mdi-format-italic'" :variant="state.textItalic ? 'tonal' : 'text'" size="small" @click="state.textItalic = !state.textItalic" />
