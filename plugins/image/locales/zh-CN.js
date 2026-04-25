@@ -75,6 +75,7 @@ export default {
     flow: '流量',
     tolerance: '容差',
     applyCrop: '应用裁剪',
+    cropHint: '拖拽以绘制裁剪区域',
     cancel: '取消',
     apply: '应用',
     selectionNew: '新建',

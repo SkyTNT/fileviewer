@@ -82,6 +82,7 @@ export default {
     flow: 'Flow',
     tolerance: 'Tolerance',
     applyCrop: 'Apply Crop',
+    cropHint: 'Draw a crop area',
     cancel: 'Cancel',
     apply: 'Apply',
     // Selection mode

@@ -73,6 +73,19 @@ export default {
     _draggingHandle = null
     _handleStart = null
     if (_cropBounds && (_cropBounds.w < 2 || _cropBounds.h < 2)) _cropBounds = null
+    toolCtx.invalidate()
+  },
+
+  hasCrop() {
+    return !!_cropBounds
+  },
+
+  cancelCrop(toolCtx) {
+    _cropBounds = null
+    _active = false
+    _draggingHandle = null
+    _handleStart = null
+    toolCtx.invalidate()
   },
 
   applyCrop(toolCtx) {

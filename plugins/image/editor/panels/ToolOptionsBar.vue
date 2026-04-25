@@ -8,6 +8,7 @@ const toolCtx = inject('editorToolCtx')
 const { t } = useI18n()
 
 const tool = computed(() => state.activeTool)
+const hasCrop = computed(() => { void state.paintTick; return CropTool.hasCrop() })
 
 const BLEND_MODES = [
   { label: 'Normal', value: 'source-over' },
@@ -87,12 +88,15 @@ const SHAPE_TYPES = ['rect', 'ellipse', 'line']
 
     <!-- Crop: apply button -->
     <template v-else-if="tool === 'crop'">
-      <v-btn size="small" variant="tonal" color="primary" @click="CropTool.applyCrop(toolCtx)">
-        {{ t('editor.applyCrop') }}
-      </v-btn>
-      <v-btn size="small" variant="text" class="ml-1" @click="() => { CropTool._cropBounds = null }">
-        {{ t('editor.cancel') }}
-      </v-btn>
+      <template v-if="hasCrop">
+        <v-btn size="small" variant="tonal" color="primary" @click="CropTool.applyCrop(toolCtx)">
+          {{ t('editor.applyCrop') }}
+        </v-btn>
+        <v-btn size="small" variant="text" class="ml-1" @click="CropTool.cancelCrop(toolCtx)">
+          {{ t('editor.cancel') }}
+        </v-btn>
+      </template>
+      <span v-else class="opt-label">{{ t('editor.cropHint') }}</span>
     </template>
 
     <!-- Text -->

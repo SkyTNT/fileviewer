@@ -75,6 +75,7 @@ export default {
     flow: 'フロー',
     tolerance: '許容値',
     applyCrop: '切り抜きを適用',
+    cropHint: 'ドラッグして切り抜き範囲を描画',
     cancel: 'キャンセル',
     apply: '適用',
     selectionNew: '新規',
