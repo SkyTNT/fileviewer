@@ -2,6 +2,7 @@
 import { inject, computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CropTool from '../tools/CropTool.js'
+import MoveTool from '../tools/MoveTool.js'
 
 const state = inject('editorState')
 const toolCtx = inject('editorToolCtx')
@@ -24,6 +25,7 @@ if ('queryLocalFonts' in window) {
 
 const tool = computed(() => state.activeTool)
 const hasCrop = computed(() => { void state.paintTick; return CropTool.hasCrop() })
+const isTransforming = computed(() => { void state.paintTick; return MoveTool.isTransforming() })
 
 const BLEND_MODES = [
   { label: 'Normal', value: 'source-over' },
@@ -52,6 +54,30 @@ const SHAPE_TYPES = ['rect', 'ellipse', 'line']
 
 <template>
   <div class="options-bar">
+    <!-- Move tool -->
+    <template v-if="tool === 'move'">
+      <template v-if="isTransforming">
+        <v-btn size="small" variant="tonal" color="primary" @click="MoveTool.applyTransform(state, toolCtx)">
+          {{ t('editor.apply') }}
+        </v-btn>
+        <v-btn size="small" variant="text" class="ml-1" @click="MoveTool.cancelTransform(state, toolCtx)">
+          {{ t('editor.cancel') }}
+        </v-btn>
+        <v-divider vertical class="mx-2" />
+        <span class="opt-label">{{ t('editor.transformHint') }}</span>
+      </template>
+      <template v-else>
+        <v-btn
+          size="small" variant="tonal"
+          :disabled="!state.selection"
+          @click="MoveTool.startTransform(state, toolCtx)"
+        >
+          {{ t('editor.freeTransform') }}
+        </v-btn>
+        <span v-if="!state.selection" class="opt-label ml-2">{{ t('editor.transformNeedSel') }}</span>
+      </template>
+    </template>
+
     <!-- Brush options -->
     <template v-if="tool === 'brush' || tool === 'eraser'">
       <span class="opt-label">{{ t('editor.size') }}</span>

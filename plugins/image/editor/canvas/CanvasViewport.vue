@@ -170,9 +170,10 @@ watch(() => state.activeTool, (newId, oldId) => {
   getTool(newId)?.onActivate?.(toolCtx())
 })
 
-const cursorStyle = computed(() =>
-  spaceDown.value ? (_panning ? 'grabbing' : 'grab') : (activeTool.value?.cursor || 'crosshair')
-)
+const cursorStyle = computed(() => {
+  void state.paintTick  // re-evaluate when tool calls invalidate() (e.g. cursor changes on handle hover)
+  return spaceDown.value ? (_panning ? 'grabbing' : 'grab') : (activeTool.value?.cursor || 'crosshair')
+})
 </script>
 
 <template>

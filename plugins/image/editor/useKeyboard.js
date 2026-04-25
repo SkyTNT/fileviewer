@@ -1,5 +1,6 @@
 import { getActiveLayer, createLayer } from './editorState.js'
 import { getSelectionImageData, clearSelectionOnLayer, invertSelection } from './selectionUtils.js'
+import MoveTool from './tools/MoveTool.js'
 
 export function createKeyboardHandler(state, historyAPI, actions, isFocused) {
   const { undo, redo } = historyAPI
@@ -9,6 +10,18 @@ export function createKeyboardHandler(state, historyAPI, actions, isFocused) {
     const tag = document.activeElement?.tagName
     if (tag === 'INPUT' || tag === 'TEXTAREA') return
     const mod = ctrl || meta
+
+    // Transform apply / cancel (Enter / Escape when move tool is transforming)
+    if (key === 'Enter' && state.activeTool === 'move' && MoveTool.isTransforming()) {
+      raw.preventDefault()
+      MoveTool.applyTransform(state, { state, pushHistory: (l) => historyAPI.push(l, state), invalidate: actions.invalidate })
+      return
+    }
+    if (key === 'Escape' && state.activeTool === 'move' && MoveTool.isTransforming()) {
+      raw.preventDefault()
+      MoveTool.cancelTransform(state, { state, pushHistory: (l) => historyAPI.push(l, state), invalidate: actions.invalidate })
+      return
+    }
 
     if (mod && !shift && key === 'z') { raw.preventDefault(); undo(state); actions.invalidate(); return }
     if ((mod && shift && key === 'z') || (mod && !shift && key === 'y')) { raw.preventDefault(); redo(state); actions.invalidate(); return }
