@@ -52,7 +52,7 @@ export default {
     if (!layer || layer.locked) return
     const { r, g, b } = hexToRgb(state.fgColor)
     const mask = state.selection ? selectionToMask(state.selection, state.canvasWidth, state.canvasHeight) : null
-    floodFillCanvas(layer.canvas, e.x - layer.offsetX, e.y - layer.offsetY, r, g, b, state.fillTolerance, mask)
+    floodFillCanvas(layer.canvas, e.x, e.y, r, g, b, state.fillTolerance, mask)
     pushHistory('Fill')
     state.isDirty = true
     invalidate()

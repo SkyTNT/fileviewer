@@ -37,7 +37,6 @@ function duplicateLayer() {
   if (!src) return
   const copy = createLayer(src.name + ' copy', src.canvas.width, src.canvas.height)
   copy.opacity = src.opacity; copy.blendMode = src.blendMode
-  copy.offsetX = src.offsetX; copy.offsetY = src.offsetY
   copy.canvas.getContext('2d', { willReadFrequently: true }).drawImage(src.canvas, 0, 0)
   const idx = state.layers.findIndex(l => l.id === state.activeLayerId)
   state.layers.splice(idx + 1, 0, copy)
@@ -56,7 +55,7 @@ function mergeDown() {
   ctx.save()
   ctx.globalAlpha = above.opacity
   ctx.globalCompositeOperation = above.blendMode
-  ctx.drawImage(above.canvas, above.offsetX - below.offsetX, above.offsetY - below.offsetY)
+  ctx.drawImage(above.canvas, 0, 0)
   ctx.restore()
   state.layers.splice(idx, 1)
   state.activeLayerId = below.id
@@ -74,7 +73,7 @@ function flattenAll() {
     ctx.save()
     ctx.globalAlpha = l.opacity
     ctx.globalCompositeOperation = l.blendMode
-    ctx.drawImage(l.canvas, l.offsetX, l.offsetY)
+    ctx.drawImage(l.canvas, 0, 0)
     ctx.restore()
   }
   const single = createLayer('Background', state.canvasWidth, state.canvasHeight)

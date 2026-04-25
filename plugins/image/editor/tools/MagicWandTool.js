@@ -48,7 +48,7 @@ export default {
     const { canvas } = layer
     const ctx = canvas.getContext('2d', { willReadFrequently: true })
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    const mask = floodFill(imageData, e.x - layer.offsetX, e.y - layer.offsetY, state.wandTolerance)
+    const mask = floodFill(imageData, e.x, e.y, state.wandTolerance)
     const bounds = maskBounds(mask, canvas.width, canvas.height)
     const newSel = { type: 'mask', bounds, mask, points: null }
     state.selection = mergeSelection(state.selection, newSel, state.selectionMode, state.canvasWidth, state.canvasHeight)

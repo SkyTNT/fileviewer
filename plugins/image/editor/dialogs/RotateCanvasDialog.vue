@@ -22,7 +22,7 @@ function rotateCanvas90(times) {
       ctx.translate(oh / 2, ow / 2)
       ctx.rotate(Math.PI / 2)
       ctx.drawImage(layer.canvas, -ow / 2, -oh / 2)
-      layer.canvas = newCanvas; layer.offsetX = 0; layer.offsetY = 0
+      layer.canvas = newCanvas
     }
     state.canvasWidth = oh; state.canvasHeight = ow
   }
@@ -51,7 +51,7 @@ function applyArbitrary(deg) {
     ctx.translate(nw / 2, nh / 2)
     ctx.rotate(rad)
     ctx.drawImage(layer.canvas, -ow / 2, -oh / 2)
-    layer.canvas = newCanvas; layer.offsetX = 0; layer.offsetY = 0
+    layer.canvas = newCanvas
   }
   state.canvasWidth = nw; state.canvasHeight = nh
 }

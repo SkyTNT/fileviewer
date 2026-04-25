@@ -18,7 +18,7 @@ export default {
       ctx.save()
       ctx.globalAlpha = layer.opacity
       ctx.globalCompositeOperation = layer.blendMode
-      ctx.drawImage(layer.canvas, layer.offsetX - x, layer.offsetY - y)
+      ctx.drawImage(layer.canvas, -x, -y)
       ctx.restore()
     }
     const px = ctx.getImageData(0, 0, 1, 1).data

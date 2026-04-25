@@ -19,7 +19,7 @@ export function compositeLayers(ctx, layers, w, h) {
     ctx.save()
     ctx.globalAlpha = layer.opacity
     ctx.globalCompositeOperation = layer.blendMode
-    ctx.drawImage(layer.canvas, layer.offsetX, layer.offsetY)
+    ctx.drawImage(layer.canvas, 0, 0)
     ctx.restore()
   }
 }
@@ -33,7 +33,7 @@ export async function flattenToImageData(layers, w, h) {
     ctx.save()
     ctx.globalAlpha = layer.opacity
     ctx.globalCompositeOperation = layer.blendMode
-    ctx.drawImage(layer.canvas, layer.offsetX, layer.offsetY)
+    ctx.drawImage(layer.canvas, 0, 0)
     ctx.restore()
   }
   return ctx.getImageData(0, 0, w, h)
@@ -48,7 +48,7 @@ export async function flattenToBlob(layers, w, h, format = 'image/png', quality 
     ctx.save()
     ctx.globalAlpha = layer.opacity
     ctx.globalCompositeOperation = layer.blendMode
-    ctx.drawImage(layer.canvas, layer.offsetX, layer.offsetY)
+    ctx.drawImage(layer.canvas, 0, 0)
     ctx.restore()
   }
   return offscreen.convertToBlob({ type: format, quality })

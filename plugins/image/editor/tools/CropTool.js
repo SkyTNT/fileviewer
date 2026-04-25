@@ -98,9 +98,8 @@ export default {
     for (const layer of state.layers) {
       const newCanvas = markRaw(new OffscreenCanvas(cw, ch))
       const ctx2 = newCanvas.getContext('2d', { willReadFrequently: true })
-      ctx2.drawImage(layer.canvas, cx - layer.offsetX, cy - layer.offsetY, cw, ch, 0, 0, cw, ch)
+      ctx2.drawImage(layer.canvas, cx, cy, cw, ch, 0, 0, cw, ch)
       layer.canvas = newCanvas
-      layer.offsetX = 0; layer.offsetY = 0
     }
     state.canvasWidth = cw
     state.canvasHeight = ch

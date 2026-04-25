@@ -154,7 +154,7 @@ function flattenAll() {
     ctx.save()
     ctx.globalAlpha = l.opacity
     ctx.globalCompositeOperation = l.blendMode
-    ctx.drawImage(l.canvas, l.offsetX, l.offsetY)
+    ctx.drawImage(l.canvas, 0, 0)
     ctx.restore()
   }
   const bg = createLayer('Background', state.canvasWidth, state.canvasHeight)

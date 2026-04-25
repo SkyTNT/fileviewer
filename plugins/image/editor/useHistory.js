@@ -16,7 +16,7 @@ export function createHistory(maxSteps = 50) {
         : null,
       layers: layers.map(l => ({
         id: l.id, name: l.name, visible: l.visible, locked: l.locked,
-        opacity: l.opacity, blendMode: l.blendMode, offsetX: l.offsetX, offsetY: l.offsetY,
+        opacity: l.opacity, blendMode: l.blendMode,
         imageData: l.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, l.canvas.width, l.canvas.height),
       })),
     }
@@ -38,13 +38,12 @@ export function createHistory(maxSteps = 50) {
       if (!layer || layer.canvas.width !== iw || layer.canvas.height !== ih) {
         layer = {
           id: s.id, name: s.name, visible: s.visible, locked: s.locked,
-          opacity: s.opacity, blendMode: s.blendMode, offsetX: s.offsetX, offsetY: s.offsetY,
+          opacity: s.opacity, blendMode: s.blendMode,
           canvas: markRaw(new OffscreenCanvas(iw, ih)),
         }
       } else {
         layer.name = s.name; layer.visible = s.visible; layer.locked = s.locked
         layer.opacity = s.opacity; layer.blendMode = s.blendMode
-        layer.offsetX = s.offsetX; layer.offsetY = s.offsetY
       }
       layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(s.imageData, 0, 0)
       return layer

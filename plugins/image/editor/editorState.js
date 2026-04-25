@@ -17,8 +17,6 @@ export function createLayer(name, width, height, fill = null) {
     locked: false,
     opacity: 1,
     blendMode: 'source-over',
-    offsetX: 0,
-    offsetY: 0,
     canvas,
   })
 }

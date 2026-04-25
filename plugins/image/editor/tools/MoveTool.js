@@ -4,7 +4,6 @@ import { getSelectionImageData, clearSelectionOnLayer } from '../selectionUtils.
 // ── Normal move state ────────────────────────────────────────────────────────
 let _dragging = false
 let _startX = 0, _startY = 0
-let _origX = 0, _origY = 0
 let _selMode = false
 let _floatCanvas = null
 let _floatOrigX = 0, _floatOrigY = 0
@@ -12,6 +11,8 @@ let _floatX = 0, _floatY = 0
 let _origSel = null
 let _dx = 0, _dy = 0
 let _pendingLabel = null
+let _previewCanvas = null
+let _previewX = 0, _previewY = 0
 
 // ── Transform state ──────────────────────────────────────────────────────────
 let _txFloating = false
@@ -388,8 +389,13 @@ export default {
       toolCtx.invalidate()
     } else {
       _selMode = false
-      _origX = layer.offsetX; _origY = layer.offsetY
+      const { canvasWidth, canvasHeight } = state
+      _previewCanvas = new OffscreenCanvas(canvasWidth, canvasHeight)
+      _previewCanvas.getContext('2d').drawImage(layer.canvas, 0, 0)
+      layer.canvas.getContext('2d', { willReadFrequently: true }).clearRect(0, 0, canvasWidth, canvasHeight)
+      _previewX = 0; _previewY = 0
       _pendingLabel = 'Move'
+      toolCtx.invalidate()
     }
   },
 
@@ -437,10 +443,8 @@ export default {
       }
       toolCtx.invalidate()
     } else {
-      const layer = getActiveLayer(state)
-      if (!layer || layer.locked) return
-      layer.offsetX = _origX + _dx
-      layer.offsetY = _origY + _dy
+      _previewX = Math.round(_dx)
+      _previewY = Math.round(_dy)
       toolCtx.invalidate()
     }
   },
@@ -466,6 +470,13 @@ export default {
       _floatCanvas = null
       _selMode = false
       _origSel = null
+    } else if (!_selMode && _previewCanvas) {
+      const layer = getActiveLayer(state)
+      if (layer && !layer.locked) {
+        layer.canvas.getContext('2d', { willReadFrequently: true }).drawImage(_previewCanvas, _previewX, _previewY)
+        toolCtx.invalidate()
+      }
+      _previewCanvas = null
     }
     if (_pendingLabel) {
       toolCtx.pushHistory(_pendingLabel)
@@ -476,6 +487,12 @@ export default {
 
   onDeactivate(toolCtx) {
     if (_txFloating) applyTransform(toolCtx.state, toolCtx)
+    if (_previewCanvas) {
+      const layer = getActiveLayer(toolCtx.state)
+      if (layer) layer.canvas.getContext('2d', { willReadFrequently: true }).drawImage(_previewCanvas, 0, 0)
+      _previewCanvas = null
+      _dragging = false
+    }
   },
 
   renderOverlay(ctx, state) {
@@ -486,6 +503,11 @@ export default {
     if (_dragging && _selMode && _floatCanvas) {
       ctx.save()
       ctx.drawImage(_floatCanvas, _floatX, _floatY)
+      ctx.restore()
+    }
+    if (_dragging && !_selMode && _previewCanvas) {
+      ctx.save()
+      ctx.drawImage(_previewCanvas, _previewX, _previewY)
       ctx.restore()
     }
   },
