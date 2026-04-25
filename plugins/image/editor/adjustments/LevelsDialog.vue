@@ -67,7 +67,7 @@ onMounted(() => {
   drawHistogram(buildHistogram(getHistSrc(layer)))
 })
 
-watch([black, gamma, white], () => {
+watch([black, gamma, white, () => state.paintTick], () => {
   const layer = getActiveLayer(state)
   if (!layer) return
   drawHistogram(buildHistogram(getHistSrc(layer)))

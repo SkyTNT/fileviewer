@@ -12,6 +12,7 @@ export function useAdjustment(historyLabel, applyFn, resetFn) {
   let _snap = null
   let _previewPending = false
   let _previewRunning = false
+  let _abortPreview = false
 
   function _ctx(layer) {
     return layer.canvas.getContext('2d', { willReadFrequently: true })
@@ -27,6 +28,7 @@ export function useAdjustment(historyLabel, applyFn, resetFn) {
       if (!_snap) _snap = ctx.getImageData(0, 0, layer.canvas.width, layer.canvas.height)
       ctx.putImageData(_snap, 0, 0)
       await applyFn(layer, state.selection)
+      if (_abortPreview) break
       invalidate()
     }
     _previewRunning = false
@@ -38,7 +40,10 @@ export function useAdjustment(historyLabel, applyFn, resetFn) {
   }
 
   async function apply() {
+    _abortPreview = true
     _previewPending = false
+    while (_previewRunning) await new Promise(r => setTimeout(r, 0))
+    _abortPreview = false
     const layer = getActiveLayer(state)
     if (!layer) { _snap = null; resetFn?.(); return }
     pushHistory(historyLabel, state)
@@ -50,8 +55,11 @@ export function useAdjustment(historyLabel, applyFn, resetFn) {
     resetFn?.()
   }
 
-  function cancel() {
+  async function cancel() {
+    _abortPreview = true
     _previewPending = false
+    while (_previewRunning) await new Promise(r => setTimeout(r, 0))
+    _abortPreview = false
     const layer = getActiveLayer(state)
     if (layer && _snap) { _ctx(layer).putImageData(_snap, 0, 0); invalidate() }
     _snap = null
