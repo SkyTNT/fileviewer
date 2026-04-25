@@ -6,16 +6,18 @@ export function createHistory(maxSteps = 50) {
   const canUndo = () => store.currentIndex > 0
   const canRedo = () => store.currentIndex < store.steps.length - 1
 
-  function snapshotLayers(layers, activeLayerId, selection) {
+  function snapshotLayers(layers, activeLayerId, selection, canvasWidth, canvasHeight) {
     return {
       activeLayerId,
+      canvasWidth,
+      canvasHeight,
       selection: selection
         ? { type: selection.type, bounds: { ...selection.bounds }, mask: selection.mask ? new Uint8Array(selection.mask) : null }
         : null,
       layers: layers.map(l => ({
         id: l.id, name: l.name, visible: l.visible, locked: l.locked,
         opacity: l.opacity, blendMode: l.blendMode, offsetX: l.offsetX, offsetY: l.offsetY,
-        imageData: l.canvas.getContext('2d').getImageData(0, 0, l.canvas.width, l.canvas.height),
+        imageData: l.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, l.canvas.width, l.canvas.height),
       })),
     }
   }
@@ -24,7 +26,7 @@ export function createHistory(maxSteps = 50) {
     if (store.currentIndex < store.steps.length - 1)
       store.steps.splice(store.currentIndex + 1)
     if (store.steps.length >= maxSteps) store.steps.shift()
-    store.steps.push({ label, snapshot: snapshotLayers(state.layers, state.activeLayerId, state.selection) })
+    store.steps.push({ label, snapshot: snapshotLayers(state.layers, state.activeLayerId, state.selection, state.canvasWidth, state.canvasHeight) })
     store.currentIndex = store.steps.length - 1
   }
 
@@ -44,11 +46,13 @@ export function createHistory(maxSteps = 50) {
         layer.opacity = s.opacity; layer.blendMode = s.blendMode
         layer.offsetX = s.offsetX; layer.offsetY = s.offsetY
       }
-      layer.canvas.getContext('2d').putImageData(s.imageData, 0, 0)
+      layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(s.imageData, 0, 0)
       return layer
     })
     state.layers.splice(0, state.layers.length, ...newLayers)
     state.activeLayerId = snapshot.activeLayerId
+    state.canvasWidth = snapshot.canvasWidth
+    state.canvasHeight = snapshot.canvasHeight
     state.selection = snapshot.selection
       ? { type: snapshot.selection.type, bounds: { ...snapshot.selection.bounds }, mask: snapshot.selection.mask }
       : null

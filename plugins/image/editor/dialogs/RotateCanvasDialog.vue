@@ -18,7 +18,7 @@ function rotateCanvas90(times) {
     const ow = state.canvasWidth, oh = state.canvasHeight
     for (const layer of state.layers) {
       const newCanvas = markRaw(new OffscreenCanvas(oh, ow))
-      const ctx = newCanvas.getContext('2d')
+      const ctx = newCanvas.getContext('2d', { willReadFrequently: true })
       ctx.translate(oh / 2, ow / 2)
       ctx.rotate(Math.PI / 2)
       ctx.drawImage(layer.canvas, -ow / 2, -oh / 2)
@@ -31,7 +31,7 @@ function rotateCanvas90(times) {
 function applyFlip(horizontal) {
   for (const layer of state.layers) {
     const newCanvas = markRaw(new OffscreenCanvas(layer.canvas.width, layer.canvas.height))
-    const ctx = newCanvas.getContext('2d')
+    const ctx = newCanvas.getContext('2d', { willReadFrequently: true })
     if (horizontal) { ctx.translate(layer.canvas.width, 0); ctx.scale(-1, 1) }
     else { ctx.translate(0, layer.canvas.height); ctx.scale(1, -1) }
     ctx.drawImage(layer.canvas, 0, 0)
@@ -47,7 +47,7 @@ function applyArbitrary(deg) {
   const nh = Math.round(ow * sin + oh * cos)
   for (const layer of state.layers) {
     const newCanvas = markRaw(new OffscreenCanvas(nw, nh))
-    const ctx = newCanvas.getContext('2d')
+    const ctx = newCanvas.getContext('2d', { willReadFrequently: true })
     ctx.translate(nw / 2, nh / 2)
     ctx.rotate(rad)
     ctx.drawImage(layer.canvas, -ow / 2, -oh / 2)

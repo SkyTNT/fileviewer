@@ -2,7 +2,7 @@ import { getActiveLayer, hexToRgb } from '../editorState.js'
 import { selectionToMask } from '../selectionUtils.js'
 
 function floodFillCanvas(canvas, sx, sy, fillR, fillG, fillB, tolerance, mask) {
-  const ctx = canvas.getContext('2d')
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
   const w = canvas.width, h = canvas.height
   const imgData = ctx.getImageData(0, 0, w, h)
   const data = imgData.data

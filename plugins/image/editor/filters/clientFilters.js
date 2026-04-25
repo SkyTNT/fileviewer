@@ -1,10 +1,10 @@
 // All filters operate on an OffscreenCanvas in-place
 
 function getImageData(canvas) {
-  return canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height)
+  return canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, canvas.width, canvas.height)
 }
 function putImageData(canvas, id) {
-  canvas.getContext('2d').putImageData(id, 0, 0)
+  canvas.getContext('2d', { willReadFrequently: true }).putImageData(id, 0, 0)
 }
 function clamp(v) { return Math.max(0, Math.min(255, v)) }
 
@@ -302,11 +302,11 @@ function buildGaussianKernel(r) {
 export function sharpen(canvas, { amount = 0.5 } = {}) {
   // Unsharp mask via separate blur
   const blurred = new OffscreenCanvas(canvas.width, canvas.height)
-  blurred.getContext('2d').drawImage(canvas, 0, 0)
+  blurred.getContext('2d', { willReadFrequently: true }).drawImage(canvas, 0, 0)
   gaussian_blur(blurred, { radius: 2 })
 
   const orig = getImageData(canvas)
-  const blur = blurred.getContext('2d').getImageData(0, 0, canvas.width, canvas.height)
+  const blur = blurred.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, canvas.width, canvas.height)
   const d = orig.data, b = blur.data
   for (let i = 0; i < d.length; i += 4) {
     d[i]   = clamp(d[i]   + (d[i]   - b[i])   * amount * 3)

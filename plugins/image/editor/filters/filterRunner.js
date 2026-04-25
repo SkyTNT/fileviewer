@@ -11,7 +11,7 @@ export async function runFilter(filterId, params, layer, editorApi, useServer = 
     const blob = await layer.canvas.convertToBlob({ type: 'image/png' })
     const resultBlob = await editorApi.applyFilter(blob, filterId, params)
     const bitmap = await createImageBitmap(resultBlob)
-    const ctx = layer.canvas.getContext('2d')
+    const ctx = layer.canvas.getContext('2d', { willReadFrequently: true })
     ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height)
     ctx.drawImage(bitmap, 0, 0)
     bitmap.close()
@@ -25,8 +25,8 @@ export async function runFilter(filterId, params, layer, editorApi, useServer = 
 // Generate a preview ImageData without modifying the original canvas
 export async function previewFilter(filterId, params, layer) {
   const preview = new OffscreenCanvas(layer.canvas.width, layer.canvas.height)
-  preview.getContext('2d').drawImage(layer.canvas, 0, 0)
+  preview.getContext('2d', { willReadFrequently: true }).drawImage(layer.canvas, 0, 0)
   const fn = ALL_FILTERS[filterId]
   if (fn) fn(preview, params)
-  return preview.getContext('2d').getImageData(0, 0, preview.width, preview.height)
+  return preview.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, preview.width, preview.height)
 }

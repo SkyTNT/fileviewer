@@ -28,7 +28,7 @@ export default {
     const x = Math.min(_startX, _curX), y = Math.min(_startY, _curY)
     const w = Math.abs(_curX - _startX), h = Math.abs(_curY - _startY)
     if (w < 2 && h < 2) return
-    const ctx = layer.canvas.getContext('2d')
+    const ctx = layer.canvas.getContext('2d', { willReadFrequently: true })
     ctx.save()
     if (state.shapeFill) ctx.fillStyle = state.fgColor
     if (state.shapeStroke) { ctx.strokeStyle = state.fgColor; ctx.lineWidth = state.strokeWidth }

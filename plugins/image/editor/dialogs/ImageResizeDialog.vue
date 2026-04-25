@@ -26,7 +26,7 @@ function apply() {
   pushHistory('Image Resize', state)
   for (const layer of state.layers) {
     const newCanvas = markRaw(new OffscreenCanvas(nw, nh))
-    const ctx = newCanvas.getContext('2d')
+    const ctx = newCanvas.getContext('2d', { willReadFrequently: true })
     const scaleX = nw / state.canvasWidth, scaleY = nh / state.canvasHeight
     ctx.drawImage(layer.canvas, layer.offsetX * scaleX, layer.offsetY * scaleY, layer.canvas.width * scaleX, layer.canvas.height * scaleY)
     layer.canvas = newCanvas

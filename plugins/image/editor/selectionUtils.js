@@ -1,6 +1,16 @@
+let _maskCache = null  // { sel, w, h, mask }
+
 // Convert any selection type to a Uint8Array mask (0=unselected, 255=selected)
 export function selectionToMask(sel, w, h) {
   if (!sel) return null
+  if (_maskCache && _maskCache.sel === sel && _maskCache.w === w && _maskCache.h === h)
+    return _maskCache.mask
+  const mask = _computeMask(sel, w, h)
+  _maskCache = { sel, w, h, mask }
+  return mask
+}
+
+function _computeMask(sel, w, h) {
   const mask = new Uint8Array(w * h)
   if (sel.type === 'mask' && sel.mask) {
     for (let i = 0; i < mask.length; i++) mask[i] = sel.mask[i] ? 255 : 0
@@ -19,7 +29,7 @@ export function selectionToMask(sel, w, h) {
     const { x, y, w: bw, h: bh } = sel.bounds
     if (bw <= 0 || bh <= 0) return mask
     const oc = new OffscreenCanvas(w, h)
-    const octx = oc.getContext('2d')
+    const octx = oc.getContext('2d', { willReadFrequently: true })
     octx.fillStyle = '#fff'
     octx.beginPath()
     octx.ellipse(x + bw / 2, y + bh / 2, bw / 2, bh / 2, 0, 0, Math.PI * 2)
@@ -30,7 +40,7 @@ export function selectionToMask(sel, w, h) {
   }
   if (sel.type === 'lasso' && sel.points?.length >= 3) {
     const oc = new OffscreenCanvas(w, h)
-    const octx = oc.getContext('2d')
+    const octx = oc.getContext('2d', { willReadFrequently: true })
     octx.fillStyle = '#fff'
     octx.beginPath()
     octx.moveTo(sel.points[0].x, sel.points[0].y)
@@ -71,7 +81,7 @@ export function maskBounds(mask, w, h) {
 // Build an OffscreenCanvas where each pixel's alpha = mask value (for destination-in compositing)
 function buildMaskCanvas(mask, w, h) {
   const mc = new OffscreenCanvas(w, h)
-  const mctx = mc.getContext('2d')
+  const mctx = mc.getContext('2d', { willReadFrequently: true })
   const imgData = mctx.createImageData(w, h)
   for (let i = 0; i < mask.length; i++) {
     imgData.data[i * 4 + 3] = mask[i]
@@ -132,12 +142,12 @@ export function withSelectionClip(layerCtx, sel, canvasW, canvasH, drawFn, copyS
   if (copySource) {
     // For destination-out ops (eraser): draw on a copy, then blend only the masked region back
     const tmp = new OffscreenCanvas(canvasW, canvasH)
-    const tmpCtx = tmp.getContext('2d')
+    const tmpCtx = tmp.getContext('2d', { willReadFrequently: true })
     tmpCtx.drawImage(layerCtx.canvas, 0, 0)
     drawFn(tmpCtx)
     // Extract only the masked region from tmp
     const masked = new OffscreenCanvas(canvasW, canvasH)
-    const maskedCtx = masked.getContext('2d')
+    const maskedCtx = masked.getContext('2d', { willReadFrequently: true })
     maskedCtx.drawImage(tmp, 0, 0)
     maskedCtx.globalCompositeOperation = 'destination-in'
     maskedCtx.drawImage(mc, 0, 0)
@@ -151,7 +161,7 @@ export function withSelectionClip(layerCtx, sel, canvasW, canvasH, drawFn, copyS
   } else {
     // For source-over ops (brush, gradient): draw on blank tmp, mask it, composite back
     const tmp = new OffscreenCanvas(canvasW, canvasH)
-    const tmpCtx = tmp.getContext('2d')
+    const tmpCtx = tmp.getContext('2d', { willReadFrequently: true })
     drawFn(tmpCtx)
     tmpCtx.globalCompositeOperation = 'destination-in'
     tmpCtx.drawImage(mc, 0, 0)
@@ -168,7 +178,7 @@ export function mergeSelection(existing, newSel, mode, canvasW, canvasH) {
   if (mode === 'replace' || !existing) return newSel
 
   const oc = new OffscreenCanvas(canvasW, canvasH)
-  const octx = oc.getContext('2d')
+  const octx = oc.getContext('2d', { willReadFrequently: true })
 
   // Draw existing selection as white
   _drawSelectionToCtx(octx, existing, canvasW, canvasH)
@@ -226,7 +236,7 @@ export function getSelectionImageData(layer, sel, canvasW, canvasH) {
   const y1 = Math.min(canvasH, Math.round(bounds.y + bounds.h))
   const rw = x1 - x0, rh = y1 - y0
   if (rw <= 0 || rh <= 0) return null
-  const ctx = layer.canvas.getContext('2d')
+  const ctx = layer.canvas.getContext('2d', { willReadFrequently: true })
   const srcData = ctx.getImageData(x0, y0, rw, rh)
   for (let py = 0; py < rh; py++) {
     for (let px = 0; px < rw; px++) {
@@ -242,7 +252,7 @@ export function getSelectionImageData(layer, sel, canvasW, canvasH) {
 // Clear selection area on a layer canvas (set to transparent)
 export function clearSelectionOnLayer(layer, sel, canvasW, canvasH) {
   const mask = selectionToMask(sel, canvasW, canvasH)
-  const ctx = layer.canvas.getContext('2d')
+  const ctx = layer.canvas.getContext('2d', { willReadFrequently: true })
   const x0 = Math.max(0, Math.round(sel.bounds.x)), y0 = Math.max(0, Math.round(sel.bounds.y))
   const x1 = Math.min(canvasW, Math.round(sel.bounds.x + sel.bounds.w))
   const y1 = Math.min(canvasH, Math.round(sel.bounds.y + sel.bounds.h))

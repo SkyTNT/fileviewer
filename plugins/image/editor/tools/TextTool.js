@@ -21,7 +21,7 @@ function commitText(toolCtx) {
   const { state, pushHistory, invalidate } = toolCtx
   const layer = getActiveLayer(state)
   if (!layer || layer.locked) return
-  const ctx = layer.canvas.getContext('2d')
+  const ctx = layer.canvas.getContext('2d', { willReadFrequently: true })
   const style = (state.textBold ? 'bold ' : '') + (state.textItalic ? 'italic ' : '')
   ctx.save()
   ctx.font = `${style}${state.textSize}px ${state.textFont}`

@@ -24,6 +24,8 @@ export default {
       view: 'View',
     },
     // File ops
+    undo: 'Undo',
+    redo: 'Redo',
     save: 'Save',
     saveAs: 'Save As',
     export: 'Export',

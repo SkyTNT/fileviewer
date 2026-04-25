@@ -27,7 +27,7 @@ function toolCtx() {
     state,
     viewport,
     pushHistory: (label) => pushHistory(label, state),
-    invalidate: () => { compositeDirty = true },
+    invalidate: () => { compositeDirty = true; state.paintTick++ },
     editorApi,
   }
 }
@@ -57,11 +57,11 @@ const canvasGroupStyle = computed(() => ({
 function rafLoop() {
   if (displayCanvas.value && state.canvasWidth && state.canvasHeight) {
     if (compositeDirty) {
-      const ctx = displayCanvas.value.getContext('2d')
+      const ctx = displayCanvas.value.getContext('2d', { willReadFrequently: true })
       compositeLayers(ctx, state.layers, state.canvasWidth, state.canvasHeight)
       compositeDirty = false
     }
-    const octx = overlayCanvas.value?.getContext('2d')
+    const octx = overlayCanvas.value?.getContext('2d', { willReadFrequently: true })
     if (octx) {
       octx.clearRect(0, 0, state.canvasWidth, state.canvasHeight)
       drawMarchingAnts(octx, state)

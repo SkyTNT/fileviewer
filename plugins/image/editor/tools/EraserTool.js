@@ -30,7 +30,7 @@ export default {
     if (!layer || layer.locked) return
     _drawing = true
     _lastX = e.x; _lastY = e.y
-    const layerCtx = layer.canvas.getContext('2d')
+    const layerCtx = layer.canvas.getContext('2d', { willReadFrequently: true })
     withSelectionClip(layerCtx, state.selection, state.canvasWidth, state.canvasHeight, (ctx) => {
       eraseStamp(ctx, e.x, e.y, state)
     }, true)
@@ -47,7 +47,7 @@ export default {
     const spacing = Math.max(1, state.eraserSize * 0.2)
     if (dist < spacing) return
     const steps = Math.floor(dist / spacing)
-    const layerCtx = layer.canvas.getContext('2d')
+    const layerCtx = layer.canvas.getContext('2d', { willReadFrequently: true })
     withSelectionClip(layerCtx, state.selection, state.canvasWidth, state.canvasHeight, (ctx) => {
       for (let i = 1; i <= steps; i++) {
         eraseStamp(ctx, _lastX + dx * i / steps, _lastY + dy * i / steps, state)

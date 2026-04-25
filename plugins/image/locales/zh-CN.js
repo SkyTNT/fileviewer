@@ -22,6 +22,8 @@ export default {
       filter: '滤镜',
       view: '视图',
     },
+    undo: '撤销',
+    redo: '重做',
     save: '保存',
     saveAs: '另存为',
     export: '导出',

@@ -27,7 +27,7 @@ export function compositeLayers(ctx, layers, w, h) {
 // Returns a flat ImageData of all layers composited
 export async function flattenToImageData(layers, w, h) {
   const offscreen = new OffscreenCanvas(w, h)
-  const ctx = offscreen.getContext('2d')
+  const ctx = offscreen.getContext('2d', { willReadFrequently: true })
   for (const layer of layers) {
     if (!layer.visible) continue
     ctx.save()
@@ -42,7 +42,7 @@ export async function flattenToImageData(layers, w, h) {
 // Returns a Blob (PNG by default, or with format/quality)
 export async function flattenToBlob(layers, w, h, format = 'image/png', quality = 0.92) {
   const offscreen = new OffscreenCanvas(w, h)
-  const ctx = offscreen.getContext('2d')
+  const ctx = offscreen.getContext('2d', { willReadFrequently: true })
   for (const layer of layers) {
     if (!layer.visible) continue
     ctx.save()

@@ -37,7 +37,7 @@ watch(currentHex, (hex) => {
 function drawSV() {
   const canvas = svCanvas.value
   if (!canvas) return
-  const ctx = canvas.getContext('2d')
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
   const w = canvas.width, ht = canvas.height
   const hueColor = `hsl(${h.value}, 100%, 50%)`
   const whiteGrad = ctx.createLinearGradient(0, 0, w, 0)
@@ -57,7 +57,7 @@ function drawSV() {
 function drawHue() {
   const canvas = hueCanvas.value
   if (!canvas) return
-  const ctx = canvas.getContext('2d')
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
   const ht = canvas.height
   const grad = ctx.createLinearGradient(0, 0, 0, ht)
   for (let i = 0; i <= 6; i++) grad.addColorStop(i / 6, `hsl(${i * 60}, 100%, 50%)`)

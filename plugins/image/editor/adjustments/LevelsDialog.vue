@@ -28,7 +28,7 @@ function buildHistogram(imageData) {
 function drawHistogram(hist) {
   const canvas = histCanvas.value
   if (!canvas) return
-  const ctx = canvas.getContext('2d')
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
   ctx.clearRect(0, 0, HIST_W, HIST_H)
   const max = Math.max(...hist) || 1
   ctx.fillStyle = 'rgba(100,100,200,0.7)'
@@ -57,8 +57,8 @@ function buildLUT() {
 function preview() {
   const layer = getActiveLayer(state)
   if (!layer) return
-  if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d').getImageData(0, 0, layer.canvas.width, layer.canvas.height)
-  layer.canvas.getContext('2d').putImageData(_previewSrc, 0, 0)
+  if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
+  layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
   const lut = buildLUT()
   apply_lut(layer.canvas, lut, lut, lut)
   invalidate()
@@ -68,7 +68,7 @@ function apply() {
   const layer = getActiveLayer(state)
   if (!layer) { reset(); return }
   pushHistory('Levels', state)
-  if (_previewSrc) layer.canvas.getContext('2d').putImageData(_previewSrc, 0, 0)
+  if (_previewSrc) layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
   const lut = buildLUT()
   apply_lut(layer.canvas, lut, lut, lut)
   state.isDirty = true; invalidate(); reset()
@@ -76,7 +76,7 @@ function apply() {
 
 function cancel() {
   const layer = getActiveLayer(state)
-  if (layer && _previewSrc) { layer.canvas.getContext('2d').putImageData(_previewSrc, 0, 0); invalidate() }
+  if (layer && _previewSrc) { layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0); invalidate() }
   reset()
 }
 
@@ -85,7 +85,7 @@ function reset() { _previewSrc = null; black.value = 0; gamma.value = 1; white.v
 onMounted(() => {
   const layer = getActiveLayer(state)
   if (!layer) return
-  const id = layer.canvas.getContext('2d').getImageData(0, 0, layer.canvas.width, layer.canvas.height)
+  const id = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
   drawHistogram(buildHistogram(id))
 })
 
@@ -93,7 +93,7 @@ watch([black, gamma, white], () => {
   const layer = getActiveLayer(state)
   if (!layer) return
   if (!_previewSrc) {
-    const id = layer.canvas.getContext('2d').getImageData(0, 0, layer.canvas.width, layer.canvas.height)
+    const id = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
     drawHistogram(buildHistogram(id))
   } else {
     const hist = buildHistogram(_previewSrc)

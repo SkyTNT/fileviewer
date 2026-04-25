@@ -70,12 +70,19 @@ const SHAPE_TYPES = ['rect', 'ellipse', 'line']
       <v-btn-toggle v-model="state.selectionMode" density="compact" rounded="lg" mandatory>
         <v-btn v-for="m in SELECT_MODES" :key="m.value" :value="m.value" size="small">{{ m.label }}</v-btn>
       </v-btn-toggle>
-      <template v-if="tool === 'magic-wand' || tool === 'fill'">
+      <template v-if="tool === 'magic-wand'">
         <v-divider vertical class="mx-2" />
         <span class="opt-label">{{ t('editor.tolerance') }}</span>
-        <v-slider v-model="state[tool === 'fill' ? 'fillTolerance' : 'wandTolerance']" :min="0" :max="255" :step="1" hide-details density="compact" style="width:80px" class="mx-1" />
-        <span class="opt-val">{{ state[tool === 'fill' ? 'fillTolerance' : 'wandTolerance'] }}</span>
+        <v-slider v-model="state.wandTolerance" :min="0" :max="255" :step="1" hide-details density="compact" style="width:80px" class="mx-1" />
+        <span class="opt-val">{{ state.wandTolerance }}</span>
       </template>
+    </template>
+
+    <!-- Fill options -->
+    <template v-else-if="tool === 'fill'">
+      <span class="opt-label">{{ t('editor.tolerance') }}</span>
+      <v-slider v-model="state.fillTolerance" :min="0" :max="255" :step="1" hide-details density="compact" style="width:80px" class="mx-1" />
+      <span class="opt-val">{{ state.fillTolerance }}</span>
     </template>
 
     <!-- Crop: apply button -->
@@ -123,11 +130,11 @@ const SHAPE_TYPES = ['rect', 'ellipse', 'line']
 .options-bar {
   display: flex;
   align-items: center;
-  padding: 0 8px;
-  height: 36px;
+  flex-wrap: wrap;
+  padding: 2px 8px;
+  min-height: 36px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
   gap: 4px;
-  overflow-x: auto;
   flex-shrink: 0;
 }
 .opt-label { font-size: 11px; color: rgba(255,255,255,0.6); white-space: nowrap; flex-shrink: 0; }

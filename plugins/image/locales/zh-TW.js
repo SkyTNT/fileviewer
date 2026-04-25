@@ -22,6 +22,8 @@ export default {
       filter: '濾鏡',
       view: '檢視',
     },
+    undo: '復原',
+    redo: '重做',
     save: '儲存',
     saveAs: '另存新檔',
     export: '匯出',

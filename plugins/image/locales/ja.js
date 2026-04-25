@@ -22,6 +22,8 @@ export default {
       filter: 'フィルター',
       view: '表示',
     },
+    undo: '元に戻す',
+    redo: 'やり直し',
     save: '保存',
     saveAs: '名前を付けて保存',
     export: 'エクスポート',

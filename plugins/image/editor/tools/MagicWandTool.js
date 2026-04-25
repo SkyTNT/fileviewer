@@ -46,7 +46,7 @@ export default {
     const layer = getActiveLayer(state)
     if (!layer) return
     const { canvas } = layer
-    const ctx = canvas.getContext('2d')
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
     const mask = floodFill(imageData, e.x - layer.offsetX, e.y - layer.offsetY, state.wandTolerance)
     const bounds = maskBounds(mask, canvas.width, canvas.height)

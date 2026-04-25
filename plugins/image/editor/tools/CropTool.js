@@ -85,7 +85,7 @@ export default {
     pushHistory('Crop')
     for (const layer of state.layers) {
       const newCanvas = markRaw(new OffscreenCanvas(cw, ch))
-      const ctx2 = newCanvas.getContext('2d')
+      const ctx2 = newCanvas.getContext('2d', { willReadFrequently: true })
       ctx2.drawImage(layer.canvas, cx - layer.offsetX, cy - layer.offsetY, cw, ch, 0, 0, cw, ch)
       layer.canvas = newCanvas
       layer.offsetX = 0; layer.offsetY = 0

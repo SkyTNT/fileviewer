@@ -29,7 +29,7 @@ export default {
       const extracted = getSelectionImageData(layer, state.selection, state.canvasWidth, state.canvasHeight)
       if (!extracted) { _selMode = false; return }
       _floatCanvas = new OffscreenCanvas(extracted.w, extracted.h)
-      _floatCanvas.getContext('2d').putImageData(extracted.imageData, 0, 0)
+      _floatCanvas.getContext('2d', { willReadFrequently: true }).putImageData(extracted.imageData, 0, 0)
       _floatOrigX = _floatX = extracted.x
       _floatOrigY = _floatY = extracted.y
       clearSelectionOnLayer(layer, state.selection, state.canvasWidth, state.canvasHeight)
@@ -76,7 +76,7 @@ export default {
       // Commit float to layer
       const layer = getActiveLayer(state)
       if (layer && !layer.locked) {
-        layer.canvas.getContext('2d').drawImage(_floatCanvas, _floatX, _floatY)
+        layer.canvas.getContext('2d', { willReadFrequently: true }).drawImage(_floatCanvas, _floatX, _floatY)
         toolCtx.invalidate()
       }
       // Update selection position now (once, on release)

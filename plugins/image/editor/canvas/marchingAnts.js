@@ -47,7 +47,7 @@ function _drawMaskAnts(ctx, mask, w, h, offset, dash, maskOffset) {
   if (!_edgeCache || _edgeCache.mask !== mask || _edgeCache.w !== w || _edgeCache.h !== h) {
     const edgeCanvas = _buildEdgeCanvas(mask, w, h)
     const whiteCanvas = new OffscreenCanvas(w, h)
-    const wctx = whiteCanvas.getContext('2d')
+    const wctx = whiteCanvas.getContext('2d', { willReadFrequently: true })
     wctx.fillStyle = '#ffffff'
     wctx.fillRect(0, 0, w, h)
     wctx.globalCompositeOperation = 'destination-in'
@@ -67,13 +67,13 @@ function _drawMaskAnts(ctx, mask, w, h, offset, dash, maskOffset) {
   const stripeW = Math.max(1, Math.round(dash))
   const patSize = stripeW * 2
   const pat = new OffscreenCanvas(patSize, patSize)
-  const pctx = pat.getContext('2d')
+  const pctx = pat.getContext('2d', { willReadFrequently: true })
   pctx.fillStyle = '#000000'
   pctx.fillRect(0, 0, stripeW, stripeW)
   pctx.fillRect(stripeW, stripeW, stripeW, stripeW)
 
   const bt = new OffscreenCanvas(w, h)
-  const btx = bt.getContext('2d')
+  const btx = bt.getContext('2d', { willReadFrequently: true })
   const pattern = btx.createPattern(pat, 'repeat')
   const off = Math.round(offset) % patSize
   pattern.setTransform(new DOMMatrix().translateSelf(off, off))
@@ -93,10 +93,10 @@ function _buildEdgeCanvas(mask, w, h) {
   for (let i = 0; i < mask.length; i++) imgData.data[i * 4 + 3] = mask[i]
 
   const full = new OffscreenCanvas(w, h)
-  full.getContext('2d').putImageData(imgData, 0, 0)
+  full.getContext('2d', { willReadFrequently: true }).putImageData(imgData, 0, 0)
 
   const eroded = new OffscreenCanvas(w, h)
-  const ectx = eroded.getContext('2d')
+  const ectx = eroded.getContext('2d', { willReadFrequently: true })
   ectx.drawImage(full, 0, 0)
   ectx.globalCompositeOperation = 'destination-in'
   ectx.drawImage(full, 1, 0)
@@ -105,7 +105,7 @@ function _buildEdgeCanvas(mask, w, h) {
   ectx.drawImage(full, 0, -1)
 
   const edge = new OffscreenCanvas(w, h)
-  const edgectx = edge.getContext('2d')
+  const edgectx = edge.getContext('2d', { willReadFrequently: true })
   edgectx.drawImage(full, 0, 0)
   edgectx.globalCompositeOperation = 'destination-out'
   edgectx.drawImage(eroded, 0, 0)

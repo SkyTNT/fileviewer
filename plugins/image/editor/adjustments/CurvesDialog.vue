@@ -45,7 +45,7 @@ function buildLUT() {
 function drawCurve() {
   const canvas = curveCanvas.value
   if (!canvas) return
-  const ctx = canvas.getContext('2d')
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
   ctx.clearRect(0, 0, CURVE_W, CURVE_H)
   // Grid
   ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1
@@ -78,8 +78,8 @@ function drawCurve() {
 function preview() {
   const layer = getActiveLayer(state)
   if (!layer) return
-  if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d').getImageData(0, 0, layer.canvas.width, layer.canvas.height)
-  layer.canvas.getContext('2d').putImageData(_previewSrc, 0, 0)
+  if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
+  layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
   const lut = buildLUT()
   apply_lut(layer.canvas, lut, lut, lut)
   invalidate()
@@ -89,7 +89,7 @@ function apply() {
   const layer = getActiveLayer(state)
   if (!layer) { reset(); return }
   pushHistory('Curves', state)
-  if (_previewSrc) layer.canvas.getContext('2d').putImageData(_previewSrc, 0, 0)
+  if (_previewSrc) layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
   const lut = buildLUT()
   apply_lut(layer.canvas, lut, lut, lut)
   state.isDirty = true; invalidate(); reset()
@@ -97,7 +97,7 @@ function apply() {
 
 function cancel() {
   const layer = getActiveLayer(state)
-  if (layer && _previewSrc) { layer.canvas.getContext('2d').putImageData(_previewSrc, 0, 0); invalidate() }
+  if (layer && _previewSrc) { layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0); invalidate() }
   reset()
 }
 function reset() { _previewSrc = null; points.value = [[0,0],[128,128],[255,255]] }

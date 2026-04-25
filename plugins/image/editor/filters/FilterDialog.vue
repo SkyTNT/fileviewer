@@ -31,8 +31,8 @@ onMounted(() => {
 watch(values, async () => {
   const layer = getActiveLayer(state)
   if (!layer) return
-  if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d').getImageData(0, 0, layer.canvas.width, layer.canvas.height)
-  layer.canvas.getContext('2d').putImageData(_previewSrc, 0, 0)
+  if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
+  layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
   await runFilter(props.filterId, values.value, layer, editorApi, false)
   invalidate()
 }, { deep: true })
@@ -41,7 +41,7 @@ async function apply() {
   const layer = getActiveLayer(state)
   if (!layer) { close(); return }
   pushHistory(props.filterLabel, state)
-  if (_previewSrc) layer.canvas.getContext('2d').putImageData(_previewSrc, 0, 0)
+  if (_previewSrc) layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
   await runFilter(props.filterId, values.value, layer, editorApi)
   state.isDirty = true
   invalidate()
@@ -50,7 +50,7 @@ async function apply() {
 
 function cancel() {
   const layer = getActiveLayer(state)
-  if (layer && _previewSrc) { layer.canvas.getContext('2d').putImageData(_previewSrc, 0, 0); invalidate() }
+  if (layer && _previewSrc) { layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0); invalidate() }
   close()
 }
 

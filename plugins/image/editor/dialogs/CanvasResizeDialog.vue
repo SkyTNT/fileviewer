@@ -32,7 +32,7 @@ function apply() {
 
   for (const layer of state.layers) {
     const newCanvas = markRaw(new OffscreenCanvas(nw, nh))
-    newCanvas.getContext('2d').drawImage(layer.canvas, layer.offsetX + ox, layer.offsetY + oy)
+    newCanvas.getContext('2d', { willReadFrequently: true }).drawImage(layer.canvas, layer.offsetX + ox, layer.offsetY + oy)
     layer.canvas = newCanvas
     layer.offsetX = 0; layer.offsetY = 0
   }

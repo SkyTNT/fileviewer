@@ -1,14 +1,15 @@
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, inject, onMounted } from 'vue'
 
 const props = defineProps({ layer: { type: Object, required: true } })
+const state = inject('editorState')
 const thumbCanvas = ref(null)
 let debounceTimer = null
 
 function draw() {
   const canvas = thumbCanvas.value
   if (!canvas || !props.layer?.canvas) return
-  const ctx = canvas.getContext('2d')
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
   ctx.clearRect(0, 0, 40, 40)
   // Checkerboard
   for (let y = 0; y < 40; y += 8) {
@@ -30,7 +31,7 @@ function scheduleDraw() {
   debounceTimer = setTimeout(draw, 150)
 }
 
-watch(() => props.layer, scheduleDraw, { deep: false })
+watch(() => state.paintTick, scheduleDraw)
 watch(() => props.layer?.canvas, draw)
 onMounted(draw)
 defineExpose({ refresh: draw })

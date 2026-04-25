@@ -10,8 +10,8 @@ export function createKeyboardHandler(state, historyAPI, actions, isFocused) {
     if (tag === 'INPUT' || tag === 'TEXTAREA') return
     const mod = ctrl || meta
 
-    if (mod && !shift && key === 'z') { raw.preventDefault(); undo(state); return }
-    if ((mod && shift && key === 'z') || (mod && !shift && key === 'y')) { raw.preventDefault(); redo(state); return }
+    if (mod && !shift && key === 'z') { raw.preventDefault(); undo(state); actions.invalidate(); return }
+    if ((mod && shift && key === 'z') || (mod && !shift && key === 'y')) { raw.preventDefault(); redo(state); actions.invalidate(); return }
     if (mod && !shift && key === 's') { raw.preventDefault(); actions.save(); return }
     if (mod && shift && key === 's') { raw.preventDefault(); actions.saveAs(); return }
     if (mod && key === 'e') { raw.preventDefault(); actions.exportDialog(); return }
@@ -34,7 +34,7 @@ export function createKeyboardHandler(state, historyAPI, actions, isFocused) {
         const extracted = getSelectionImageData(layer, state.selection, state.canvasWidth, state.canvasHeight)
         if (extracted) state.clipboard = { imageData: extracted.imageData, w: extracted.w, h: extracted.h, x: extracted.x, y: extracted.y }
       } else {
-        const ctx = layer.canvas.getContext('2d')
+        const ctx = layer.canvas.getContext('2d', { willReadFrequently: true })
         const imgData = ctx.getImageData(0, 0, layer.canvas.width, layer.canvas.height)
         state.clipboard = { imageData: imgData, w: layer.canvas.width, h: layer.canvas.height, x: 0, y: 0 }
       }
@@ -56,7 +56,7 @@ export function createKeyboardHandler(state, historyAPI, actions, isFocused) {
           actions.invalidate()
         }
       } else {
-        const ctx = layer.canvas.getContext('2d')
+        const ctx = layer.canvas.getContext('2d', { willReadFrequently: true })
         const imgData = ctx.getImageData(0, 0, layer.canvas.width, layer.canvas.height)
         state.clipboard = { imageData: imgData, w: layer.canvas.width, h: layer.canvas.height, x: 0, y: 0 }
         historyAPI.push('Cut', state)
@@ -74,7 +74,7 @@ export function createKeyboardHandler(state, historyAPI, actions, isFocused) {
       const { imageData, w, h, x, y } = state.clipboard
       historyAPI.push('Paste', state)
       const newLayer = createLayer('Pasted', state.canvasWidth, state.canvasHeight)
-      const ctx = newLayer.canvas.getContext('2d')
+      const ctx = newLayer.canvas.getContext('2d', { willReadFrequently: true })
       // Center on canvas if pasting from a different size, otherwise use original position
       const px = x ?? Math.round((state.canvasWidth - w) / 2)
       const py = y ?? Math.round((state.canvasHeight - h) / 2)

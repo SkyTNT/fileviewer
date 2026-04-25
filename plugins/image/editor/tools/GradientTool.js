@@ -26,9 +26,10 @@ export default {
     const { state, pushHistory, invalidate } = toolCtx
     const layer = getActiveLayer(state)
     if (!layer || layer.locked) return
-    const { fgColor, bgColor, gradientType } = state
-    const layerCtx = layer.canvas.getContext('2d')
-    withSelectionClip(layerCtx, state.selection, state.canvasWidth, state.canvasHeight, (ctx) => {
+    const { fgColor, bgColor, gradientType, canvasWidth, canvasHeight } = state
+    const layerCtx = layer.canvas.getContext('2d', { willReadFrequently: true })
+    pushHistory('Gradient')
+    withSelectionClip(layerCtx, state.selection, canvasWidth, canvasHeight, (ctx) => {
       let grad
       if (gradientType === 'linear') {
         grad = ctx.createLinearGradient(_startX, _startY, _curX, _curY)
@@ -39,9 +40,8 @@ export default {
       grad.addColorStop(0, fgColor)
       grad.addColorStop(1, bgColor)
       ctx.fillStyle = grad
-      ctx.fillRect(0, 0, layer.canvas.width, layer.canvas.height)
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight)
     })
-    pushHistory('Gradient')
     state.isDirty = true
     invalidate()
   },

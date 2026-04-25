@@ -19,10 +19,10 @@ function preview() {
   const layer = getLayer()
   if (!layer) return
   if (!_previewSrc) {
-    _previewSrc = layer.canvas.getContext('2d').getImageData(0, 0, layer.canvas.width, layer.canvas.height)
+    _previewSrc = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
   }
   // Restore original, then apply preview
-  layer.canvas.getContext('2d').putImageData(_previewSrc, 0, 0)
+  layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
   brightness_contrast(layer.canvas, { brightness: bv.value, contrast: cv.value })
   invalidate()
 }
@@ -33,7 +33,7 @@ function apply() {
   pushHistory('Brightness/Contrast', state)
   // Ensure preview state is committed
   if (_previewSrc) {
-    layer.canvas.getContext('2d').putImageData(_previewSrc, 0, 0)
+    layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
   }
   brightness_contrast(layer.canvas, { brightness: bv.value, contrast: cv.value })
   state.isDirty = true
@@ -44,7 +44,7 @@ function apply() {
 function cancel() {
   const layer = getLayer()
   if (layer && _previewSrc) {
-    layer.canvas.getContext('2d').putImageData(_previewSrc, 0, 0)
+    layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
     invalidate()
   }
   reset()

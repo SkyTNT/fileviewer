@@ -40,22 +40,28 @@ const imagesApi = services?.get('images.api')
 // ── Core state ─────────────────────────────────────────────────────────────────
 const state = createEditorState()
 const historyAPI = createHistory(50)
-const { history, push: pushHistory, undo, redo } = historyAPI
+const { store: history, push: pushHistory, undo, redo } = historyAPI
+const canUndo = computed(() => history.currentIndex > 0)
+const canRedo = computed(() => history.currentIndex < history.steps.length - 1)
+
+function doUndo() { undo(state); invalidate() }
+function doRedo() { redo(state); invalidate() }
 const editorApi = createEditorApi()
 const viewport = createViewport(state)
 
 // ── Invalidate callback (set by CanvasViewport on mount) ────────────────────────
 const invalidateRef = ref(() => {})
-const invalidateObj = { invalidate: () => invalidateRef.value() }
+function invalidate() { invalidateRef.value(); state.paintTick++ }
+const invalidateObj = { invalidate }
 
 // ── Provide to children ────────────────────────────────────────────────────────
 provide('editorState', state)
 provide('editorHistory', {
   history,
   pushHistory: (label, s) => pushHistory(label, s ?? state),
-  undo: (s) => undo(s ?? state),
-  redo: (s) => redo(s ?? state),
-  jumpTo: (idx, s) => historyAPI.jumpTo(idx, s ?? state),
+  undo: (s) => { undo(s ?? state); invalidate() },
+  redo: (s) => { redo(s ?? state); invalidate() },
+  jumpTo: (idx, s) => { historyAPI.jumpTo(idx, s ?? state); invalidate() },
 })
 provide('editorInvalidate', invalidateRef)
 provide('editorInvalidateObj', invalidateObj)
@@ -66,7 +72,7 @@ provide('editorToolCtx', computed(() => ({
   history,
   viewport,
   pushHistory: (label) => pushHistory(label, state),
-  invalidate: () => invalidateRef.value(),
+  invalidate,
   editorApi,
 })))
 
@@ -157,7 +163,7 @@ function flattenAll() {
   state.layers.splice(0, state.layers.length, bg)
   state.activeLayerId = bg.id
   state.isDirty = true
-  invalidateRef.value()
+  invalidate()
 }
 
 const actions = {
@@ -187,9 +193,9 @@ const actions = {
       ctx.save(); ctx.fillStyle = state.fgColor; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight); ctx.restore()
     }
     state.isDirty = true
-    invalidateRef.value()
+    invalidate()
   },
-  invalidate: () => invalidateRef.value(),
+  invalidate: () => invalidate(),
 }
 
 const handleKey = createKeyboardHandler(state, historyAPI, actions, isFocused)
@@ -225,7 +231,7 @@ async function quickFilter(id) {
   pushHistory(id, state)
   await runFilter(id, {}, layer, editorApi)
   state.isDirty = true
-  invalidateRef.value()
+  invalidate()
 }
 
 // ── Tool selection ─────────────────────────────────────────────────────────────
@@ -303,6 +309,14 @@ const cursorInfo = computed(() =>
           </v-list-item>
         </v-list>
       </v-menu>
+
+      <v-divider vertical class="mx-1" style="height:20px;align-self:center" />
+      <v-btn icon size="small" variant="text" :disabled="!canUndo" :title="t('editor.undo') + '  Ctrl+Z'" @click="doUndo">
+        <v-icon size="18">mdi-undo</v-icon>
+      </v-btn>
+      <v-btn icon size="small" variant="text" :disabled="!canRedo" :title="t('editor.redo') + '  Ctrl+Y'" @click="doRedo">
+        <v-icon size="18">mdi-redo</v-icon>
+      </v-btn>
 
       <div class="menu-spacer" />
 

@@ -19,8 +19,8 @@ function getLayer() { return getActiveLayer(state) }
 function preview() {
   const layer = getLayer()
   if (!layer) return
-  if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d').getImageData(0, 0, layer.canvas.width, layer.canvas.height)
-  layer.canvas.getContext('2d').putImageData(_previewSrc, 0, 0)
+  if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
+  layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
   hue_saturation_lightness(layer.canvas, { hue: hue.value, saturation: sat.value, lightness: lit.value })
   invalidate()
 }
@@ -29,14 +29,14 @@ function apply() {
   const layer = getLayer()
   if (!layer) { reset(); return }
   pushHistory('Hue/Saturation', state)
-  if (_previewSrc) layer.canvas.getContext('2d').putImageData(_previewSrc, 0, 0)
+  if (_previewSrc) layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
   hue_saturation_lightness(layer.canvas, { hue: hue.value, saturation: sat.value, lightness: lit.value })
   state.isDirty = true; invalidate(); reset()
 }
 
 function cancel() {
   const layer = getLayer()
-  if (layer && _previewSrc) { layer.canvas.getContext('2d').putImageData(_previewSrc, 0, 0); invalidate() }
+  if (layer && _previewSrc) { layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0); invalidate() }
   reset()
 }
 function reset() { _previewSrc = null; hue.value = 0; sat.value = 0; lit.value = 0 }

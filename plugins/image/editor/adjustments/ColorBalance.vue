@@ -20,8 +20,8 @@ function getLayer() { return getActiveLayer(state) }
 function preview() {
   const layer = getLayer()
   if (!layer) return
-  if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d').getImageData(0, 0, layer.canvas.width, layer.canvas.height)
-  layer.canvas.getContext('2d').putImageData(_previewSrc, 0, 0)
+  if (!_previewSrc) _previewSrc = layer.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, layer.canvas.width, layer.canvas.height)
+  layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
   color_balance(layer.canvas, { shadows: shadows.value, midtones: midtones.value, highlights: highlights.value })
   invalidate()
 }
@@ -30,14 +30,14 @@ function apply() {
   const layer = getLayer()
   if (!layer) { reset(); return }
   pushHistory('Color Balance', state)
-  if (_previewSrc) layer.canvas.getContext('2d').putImageData(_previewSrc, 0, 0)
+  if (_previewSrc) layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0)
   color_balance(layer.canvas, { shadows: shadows.value, midtones: midtones.value, highlights: highlights.value })
   state.isDirty = true; invalidate(); reset()
 }
 
 function cancel() {
   const layer = getLayer()
-  if (layer && _previewSrc) { layer.canvas.getContext('2d').putImageData(_previewSrc, 0, 0); invalidate() }
+  if (layer && _previewSrc) { layer.canvas.getContext('2d', { willReadFrequently: true }).putImageData(_previewSrc, 0, 0); invalidate() }
   reset()
 }
 function reset() { _previewSrc = null; shadows.value = [0,0,0]; midtones.value = [0,0,0]; highlights.value = [0,0,0] }

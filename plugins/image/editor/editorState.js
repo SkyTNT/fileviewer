@@ -6,7 +6,7 @@ export function newLayerId() { return `layer_${++_layerCounter}_${Date.now()}` }
 export function createLayer(name, width, height, fill = null) {
   const canvas = markRaw(new OffscreenCanvas(width || 1, height || 1))
   if (fill) {
-    const ctx = canvas.getContext('2d')
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
     ctx.fillStyle = fill
     ctx.fillRect(0, 0, width, height)
   }
@@ -82,6 +82,7 @@ export function createEditorState() {
     isDirty: false,
     filePath: '',
     fileName: '',
+    paintTick: 0,
 
     // Cursor in canvas coords (updated by CanvasViewport)
     cursorX: 0,
