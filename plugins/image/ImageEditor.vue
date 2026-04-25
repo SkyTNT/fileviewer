@@ -458,6 +458,7 @@ const cursorInfo = computed(() =>
   padding: 0 8px;
   gap: 2px;
   flex-shrink: 0;
+  overflow: hidden;
 }
 .editor-title {
   font-size: 13px;
@@ -501,8 +502,11 @@ const cursorInfo = computed(() =>
   border-right: 1px solid rgba(255,255,255,0.08);
   padding: 6px 0;
   overflow-y: auto;
+  overflow-x: hidden;
   flex-shrink: 0;
+  scrollbar-width: none;
 }
+.tools-bar::-webkit-scrollbar { display: none; }
 .tool-btn { margin: 1px 0; }
 
 /* Center */
