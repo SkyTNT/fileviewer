@@ -6,6 +6,9 @@ let _text = ''
 let _clickX = 0, _clickY = 0
 let _toolCtx = null
 let _unwatch = null
+let _dragging = false
+let _dragOffX = 0, _dragOffY = 0
+let _dragPending = false  // mousedown inside box, not yet confirmed as drag
 
 function fontString(state, size) {
   return `${state.textBold ? 'bold ' : ''}${state.textItalic ? 'italic ' : ''}${size}px ${state.textFont}`
@@ -46,12 +49,56 @@ function commitText(toolCtx) {
   invalidate()
 }
 
+function updateInputPos() {
+  if (!_input || !_toolCtx) return
+  const { state, viewport } = _toolCtx
+  const lineHeight = state.textSize * 1.2
+  const lines = _text.split('\n')
+  const sel = _input.selectionStart ?? _text.length
+  const lineIdx = _text.slice(0, sel).split('\n').length - 1
+  const charsBefore = _text.slice(0, sel).split('\n').pop()
+  const mc = document.createElement('canvas').getContext('2d')
+  mc.font = fontString(state, state.textSize)
+  const cx = _clickX + mc.measureText(charsBefore).width
+  const cy = _clickY + lineIdx * lineHeight
+  const sp = viewport.canvasToScreen(cx, cy)
+  _input.style.left = `${sp.x}px`
+  _input.style.top = `${sp.y}px`
+  _input.style.height = `${state.textSize * state.zoom}px`
+}
+
 export default {
   id: 'text',
   cursor: 'text',
 
   onPointerDown(e, toolCtx) {
-    if (_input) { commitText(toolCtx) }
+    if (_input) {
+      const { state } = toolCtx
+      const lineHeight = state.textSize * 1.2
+      const lines = _text.split('\n')
+      const _mc = document.createElement('canvas').getContext('2d')
+      _mc.font = fontString(state, state.textSize)
+      const maxWidth = Math.max(...lines.map(l => _mc.measureText(l || ' ').width), 80)
+      const boxW = maxWidth + 4 / state.zoom
+      const boxH = lines.length * lineHeight + 4 / state.zoom
+      if (e.x >= _clickX && e.x <= _clickX + boxW && e.y >= _clickY && e.y <= _clickY + boxH) {
+        _dragPending = true
+        _dragOffX = e.x - _clickX
+        _dragOffY = e.y - _clickY
+        // compute caret position from click coords
+        const lineIdx = Math.min(Math.floor((e.y - _clickY) / lineHeight), lines.length - 1)
+        const line = lines[Math.max(0, lineIdx)]
+        const relX = e.x - _clickX
+        let charIdx = line.length
+        for (let i = 0; i <= line.length; i++) {
+          if (_mc.measureText(line.slice(0, i)).width >= relX) { charIdx = i; break }
+        }
+        const offset = lines.slice(0, Math.max(0, lineIdx)).reduce((s, l) => s + l.length + 1, 0) + charIdx
+        setTimeout(() => { _input?.focus(); _input?.setSelectionRange(offset, offset) }, 0)
+        return
+      }
+      commitText(toolCtx)
+    }
     const { state, viewport } = toolCtx
     _toolCtx = toolCtx
     _clickX = e.x
@@ -60,22 +107,25 @@ export default {
 
     // Hidden textarea appended to body just to capture keyboard input
     _input = document.createElement('textarea')
-    _input.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0;'
+    const sp = viewport.canvasToScreen(_clickX, _clickY)
+    _input.style.cssText = `position:fixed;left:${sp.x}px;top:${sp.y}px;width:1px;height:${state.textSize * state.zoom}px;opacity:0;padding:0;border:0;outline:0;resize:none;overflow:hidden;`
     _input.addEventListener('input', () => {
       _text = _input.value
       state.paintTick++
+      setTimeout(updateInputPos, 0)
     })
     _input.addEventListener('keydown', evt => {
       if (evt.key === 'Escape') {
         removeInput()
         state.paintTick++
       }
-      if (evt.key === 'Enter' && !evt.shiftKey) {
+      if (evt.key === 'Enter' && (evt.shiftKey || evt.ctrlKey)) {
         evt.preventDefault()
         commitText(toolCtx)
         state.paintTick++
       }
       evt.stopPropagation()
+      setTimeout(updateInputPos, 0)
     })
     document.body.appendChild(_input)
     setTimeout(() => _input?.focus(), 0)
@@ -86,8 +136,23 @@ export default {
     )
   },
 
-  onPointerMove() {},
-  onPointerUp() {},
+  onPointerMove(e, toolCtx) {
+    if (_dragPending) {
+      const dx = e.x - (_clickX + _dragOffX), dy = e.y - (_clickY + _dragOffY)
+      if (Math.hypot(dx, dy) > 3 / toolCtx.state.zoom) _dragging = true
+    }
+    if (_dragging) {
+      _clickX = e.x - _dragOffX
+      _clickY = e.y - _dragOffY
+      if (_input) {
+        const sp = toolCtx.viewport.canvasToScreen(_clickX, _clickY)
+        _input.style.left = `${sp.x}px`
+        _input.style.top = `${sp.y}px`
+      }
+      toolCtx.state.paintTick++
+    }
+  },
+  onPointerUp() { _dragging = false; _dragPending = false },
 
   renderOverlay(ctx, state) {
     if (!_input) return
