@@ -1,5 +1,7 @@
 // All filters operate on an OffscreenCanvas in-place
 
+import { applyWebGL } from './webglFilters.js'
+
 function getImageData(canvas) {
   return canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, canvas.width, canvas.height)
 }
@@ -11,6 +13,7 @@ function clamp(v) { return Math.max(0, Math.min(255, v)) }
 // ── Pixel-level adjustments ────────────────────────────────────────────────────
 
 export function brightness(canvas, { value = 0 } = {}) {
+  if (applyWebGL(canvas, 'brightness', { value })) return
   const id = getImageData(canvas)
   const d = id.data, v = value * 255
   for (let i = 0; i < d.length; i += 4) {
@@ -20,6 +23,7 @@ export function brightness(canvas, { value = 0 } = {}) {
 }
 
 export function contrast(canvas, { value = 0 } = {}) {
+  if (applyWebGL(canvas, 'contrast', { value })) return
   const id = getImageData(canvas)
   const d = id.data
   const factor = (259 * (value * 255 + 255)) / (255 * (259 - value * 255))
@@ -32,6 +36,7 @@ export function contrast(canvas, { value = 0 } = {}) {
 }
 
 export function brightness_contrast(canvas, { brightness: bv = 0, contrast: cv = 0 } = {}) {
+  if (applyWebGL(canvas, 'brightness_contrast', { brightness: bv, contrast: cv })) return
   const id = getImageData(canvas)
   const d = id.data
   const bAdd = bv * 255
@@ -45,6 +50,7 @@ export function brightness_contrast(canvas, { brightness: bv = 0, contrast: cv =
 }
 
 export function hue_saturation_lightness(canvas, { hue = 0, saturation = 0, lightness = 0 } = {}) {
+  if (applyWebGL(canvas, 'hue_saturation_lightness', { hue, saturation, lightness })) return
   const id = getImageData(canvas)
   const d = id.data
   for (let i = 0; i < d.length; i += 4) {
@@ -82,6 +88,7 @@ export function hue_saturation_lightness(canvas, { hue = 0, saturation = 0, ligh
 }
 
 export function exposure(canvas, { value = 0 } = {}) {
+  if (applyWebGL(canvas, 'exposure', { value })) return
   const id = getImageData(canvas)
   const d = id.data
   const factor = Math.pow(2, value)
@@ -92,6 +99,7 @@ export function exposure(canvas, { value = 0 } = {}) {
 }
 
 export function vibrance(canvas, { value = 0 } = {}) {
+  if (applyWebGL(canvas, 'vibrance', { value })) return
   const id = getImageData(canvas)
   const d = id.data
   for (let i = 0; i < d.length; i += 4) {
@@ -106,6 +114,7 @@ export function vibrance(canvas, { value = 0 } = {}) {
 }
 
 export function color_balance(canvas, { shadows = [0,0,0], midtones = [0,0,0], highlights = [0,0,0] } = {}) {
+  if (applyWebGL(canvas, 'color_balance', { shadows, midtones, highlights })) return
   const id = getImageData(canvas)
   const d = id.data
   const sr = shadows[0], sg = shadows[1], sb = shadows[2]
@@ -124,6 +133,7 @@ export function color_balance(canvas, { shadows = [0,0,0], midtones = [0,0,0], h
 }
 
 export function shadows_highlights(canvas, { shadows = 0, highlights = 0 } = {}) {
+  if (applyWebGL(canvas, 'shadows_highlights', { shadows, highlights })) return
   const id = getImageData(canvas)
   const d = id.data
   for (let i = 0; i < d.length; i += 4) {
@@ -140,6 +150,7 @@ export function shadows_highlights(canvas, { shadows = 0, highlights = 0 } = {})
 
 // Apply a 256-entry LUT per channel
 export function apply_lut(canvas, lutR, lutG, lutB) {
+  if (applyWebGL(canvas, 'apply_lut', { lutR, lutG, lutB })) return
   const id = getImageData(canvas)
   const d = id.data
   for (let i = 0; i < d.length; i += 4) {
@@ -151,6 +162,7 @@ export function apply_lut(canvas, lutR, lutG, lutB) {
 // ── Simple filters ─────────────────────────────────────────────────────────────
 
 export function invert(canvas) {
+  if (applyWebGL(canvas, 'invert', {})) return
   const id = getImageData(canvas)
   const d = id.data
   for (let i = 0; i < d.length; i += 4) {
@@ -160,6 +172,7 @@ export function invert(canvas) {
 }
 
 export function grayscale(canvas) {
+  if (applyWebGL(canvas, 'grayscale', {})) return
   const id = getImageData(canvas)
   const d = id.data
   for (let i = 0; i < d.length; i += 4) {
@@ -170,6 +183,7 @@ export function grayscale(canvas) {
 }
 
 export function sepia(canvas) {
+  if (applyWebGL(canvas, 'sepia', {})) return
   const id = getImageData(canvas)
   const d = id.data
   for (let i = 0; i < d.length; i += 4) {
@@ -182,6 +196,7 @@ export function sepia(canvas) {
 }
 
 export function vignette(canvas, { strength = 0.5, radius = 0.75 } = {}) {
+  if (applyWebGL(canvas, 'vignette', { strength, radius })) return
   const id = getImageData(canvas)
   const d = id.data
   const w = canvas.width, h = canvas.height
@@ -217,6 +232,7 @@ export function noise(canvas, { amount = 25, monochrome = false } = {}) {
 }
 
 export function pixelate(canvas, { size = 10 } = {}) {
+  if (applyWebGL(canvas, 'pixelate', { size })) return
   const id = getImageData(canvas)
   const d = id.data
   const w = canvas.width, h = canvas.height
@@ -244,6 +260,7 @@ export function pixelate(canvas, { size = 10 } = {}) {
 
 // Gaussian blur via separable kernel
 export function gaussian_blur(canvas, { radius = 3 } = {}) {
+  if (applyWebGL(canvas, 'gaussian_blur', { radius })) return
   const r = Math.max(1, Math.round(radius))
   const id = getImageData(canvas)
   const w = canvas.width, h = canvas.height
@@ -303,6 +320,7 @@ function buildGaussianKernel(r) {
 }
 
 export function sharpen(canvas, { amount = 0.5 } = {}) {
+  if (applyWebGL(canvas, 'sharpen', { amount })) return
   const blurred = new OffscreenCanvas(canvas.width, canvas.height)
   blurred.getContext('2d', { willReadFrequently: true }).drawImage(canvas, 0, 0)
   gaussian_blur(blurred, { radius: 2 })
@@ -319,6 +337,7 @@ export function sharpen(canvas, { amount = 0.5 } = {}) {
 }
 
 export function unsharp_mask(canvas, { radius = 2, percent = 150, threshold = 3 } = {}) {
+  if (applyWebGL(canvas, 'unsharp_mask', { radius, percent, threshold })) return
   const blurred = new OffscreenCanvas(canvas.width, canvas.height)
   blurred.getContext('2d', { willReadFrequently: true }).drawImage(canvas, 0, 0)
   gaussian_blur(blurred, { radius })
@@ -363,11 +382,13 @@ export function reduce_noise(canvas, { size = 3 } = {}) {
 }
 
 export function emboss(canvas) {
+  if (applyWebGL(canvas, 'emboss', {})) return
   const kernel = [-2,-1,0,-1,1,1,0,1,2]
   convolve3x3(canvas, kernel)
 }
 
 export function edge_detect(canvas) {
+  if (applyWebGL(canvas, 'edge_detect', {})) return
   const kernel = [-1,-1,-1,-1,8,-1,-1,-1,-1]
   convolve3x3(canvas, kernel)
 }
@@ -397,6 +418,7 @@ function convolve3x3(canvas, kernel) {
 
 export function chromatic_aberration(canvas, { mode = 'radial', amount = 5, centerX = 0.5, centerY = 0.5, angle = 0 } = {}) {
   if (amount === 0) return
+  if (applyWebGL(canvas, 'chromatic_aberration', { mode, amount, centerX, centerY, angle })) return
   const id = getImageData(canvas)
   const src = new Uint8ClampedArray(id.data)
   const d = id.data
