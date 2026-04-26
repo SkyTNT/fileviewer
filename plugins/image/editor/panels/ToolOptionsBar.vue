@@ -182,7 +182,16 @@ const SHAPE_TYPES = ['rect', 'ellipse', 'line']
         density="compact" variant="outlined" hide-details label="Font"
         style="width:160px" class="mr-2"
         auto-select-first
-      />
+      >
+        <template #item="{ item, props }">
+          <v-list-item v-bind="props" :title="undefined">
+            <span :style="{ fontFamily: item.title }">{{ item.title }}</span>
+          </v-list-item>
+        </template>
+        <template #selection="{ item }">
+          <span :style="{ fontFamily: item.title }">{{ item.title }}</span>
+        </template>
+      </v-autocomplete>
       <v-text-field v-model.number="state.textSize" density="compact" variant="outlined" hide-details label="Size" type="number" style="width:70px" class="mr-2" />
       <v-btn :icon="state.textBold ? 'mdi-format-bold' : 'mdi-format-bold'" :variant="state.textBold ? 'tonal' : 'text'" size="small" @click="state.textBold = !state.textBold" />
       <v-btn :icon="state.textItalic ? 'mdi-format-italic' : 'mdi-format-italic'" :variant="state.textItalic ? 'tonal' : 'text'" size="small" @click="state.textItalic = !state.textItalic" />

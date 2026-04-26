@@ -102,6 +102,21 @@ function cornersFromHandle(handle, mx, my, sc, lock, lockW, lockH) {
   }
 }
 
+function transformPivotWithScale(pivot, oldCorners, newCorners) {
+  const [oTL, oTR, , oBL] = oldCorners
+  const { ux, uy } = boxAxes(oldCorners)
+  const oW = Math.hypot(oTR[0]-oTL[0], oTR[1]-oTL[1])
+  const oH = Math.hypot(oBL[0]-oTL[0], oBL[1]-oTL[1])
+  if (oW < 1 || oH < 1) return pivot
+  const lx = dot(sub(pivot, oTL), ux) / oW
+  const ly = dot(sub(pivot, oTL), uy) / oH
+  const [nTL, nTR, , nBL] = newCorners
+  const { ux: nux, uy: nuy } = boxAxes(newCorners)
+  const nW = Math.hypot(nTR[0]-nTL[0], nTR[1]-nTL[1])
+  const nH = Math.hypot(nBL[0]-nTL[0], nBL[1]-nTL[1])
+  return add(add(nTL, scl(nux, lx * nW)), scl(nuy, ly * nH))
+}
+
 function rotateCorners(mx, my, { pivot, mouse: sm, corners }) {
   const dA = Math.atan2(my-pivot[1], mx-pivot[0]) - Math.atan2(sm[1]-pivot[1], sm[0]-pivot[0])
   const cos = Math.cos(dA), sin = Math.sin(dA)
@@ -115,7 +130,7 @@ function rotateCorners(mx, my, { pivot, mouse: sm, corners }) {
 
 class TransformSession {
   constructor() {
-    this._lockAspect = false   // persists across transforms (user preference)
+    this._lockAspect = true   // persists across transforms (user preference)
     this._reset()
   }
 
@@ -297,9 +312,9 @@ class TransformSession {
         lw = Math.hypot(sTR[0]-sTL[0], sTR[1]-sTL[1])
         lh = Math.hypot(sBL[0]-sTL[0], sBL[1]-sTL[1])
       }
+      const oldCorners = corners
       this.corners = cornersFromHandle(this._handle, e.x, e.y, corners, this._lockAspect || e.shiftKey, lw, lh)
-      const [nTL, nTR, nBR, nBL] = this.corners
-      this.pivot = mid(mid(nTL, nBR), mid(nTR, nBL))
+      this.pivot = transformPivotWithScale(pivot, oldCorners, this.corners)
     }
   }
 
