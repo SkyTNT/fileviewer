@@ -362,20 +362,44 @@ export function reduce_noise(canvas, { size = 3 } = {}) {
   const { data: src, width: w, height: h } = id
   const out = new Uint8ClampedArray(src.length)
   const half = Math.floor(size / 2)
-  const buf = new Uint8Array(size * size)
+  const n = size * size
+  const need = (n >> 1) + 1   // 1-indexed median position
+  const coarse = new Int32Array(16)
+  const fine   = new Int32Array(16)
 
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const oi = (y * w + x) * 4
       for (let c = 0; c < 3; c++) {
-        let n = 0
+        // Pass 1: coarse histogram (16 bins of 16 values each)
+        coarse.fill(0)
         for (let ky = -half; ky <= half; ky++) {
           for (let kx = -half; kx <= half; kx++) {
-            buf[n++] = src[(Math.max(0, Math.min(h-1, y+ky)) * w + Math.max(0, Math.min(w-1, x+kx))) * 4 + c]
+            const v = src[(Math.max(0, Math.min(h-1, y+ky)) * w + Math.max(0, Math.min(w-1, x+kx))) * 4 + c]
+            coarse[v >> 4]++
           }
         }
-        buf.subarray(0, n).sort()
-        out[oi+c] = buf[n >> 1]
+        // Find target coarse bin
+        let rb = 0, rem = need
+        for (let i = 0; i < 16; i++) {
+          if (rem <= coarse[i]) { rb = i; break }
+          rem -= coarse[i]
+        }
+        // Pass 2: fine histogram within target coarse bin
+        fine.fill(0)
+        for (let ky = -half; ky <= half; ky++) {
+          for (let kx = -half; kx <= half; kx++) {
+            const v = src[(Math.max(0, Math.min(h-1, y+ky)) * w + Math.max(0, Math.min(w-1, x+kx))) * 4 + c]
+            if ((v >> 4) === rb) fine[v & 0xF]++
+          }
+        }
+        // Find exact value within fine bin
+        let med = rb * 16
+        for (let i = 0; i < 16; i++) {
+          if (rem <= fine[i]) { med += i; break }
+          rem -= fine[i]
+        }
+        out[oi+c] = med
       }
       out[oi+3] = src[oi+3]
     }

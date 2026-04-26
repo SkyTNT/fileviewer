@@ -306,34 +306,64 @@ void main(){
   }
 }`,
 
-// Median filter: insertion-sort per channel, max kernel 7×7 (49 samples).
-// Returns false for size>7 so CPU handles larger kernels.
+// Median filter via two-level histogram (16-bin coarse + 16-bin fine).
+// Registers: int[16]×3 = 192 B, independent of kernel size.
+// Supports up to 15×15; size>15 falls back to CPU.
+//
+// Algorithm per channel:
+//   Pass 1 – 16-bin coarse histogram (bin = value>>4).
+//             Walk to find which coarse bin rb holds the median and
+//             how far into that bin we need (r_rem, 1-indexed).
+//   Pass 2 – 16-bin fine histogram counting only pixels in coarse bin rb
+//             (fine bin = value & 0xF).
+//             Walk to get exact 0-255 value = rb*16 + fine_bin.
 reduce_noise: `#version 300 es
 precision highp float;
+precision highp int;
 in vec2 v_uv; uniform sampler2D u_img;
 uniform int u_half; uniform int u_n;
 out vec4 o;
 
-void isort(inout float a[49], int n){
-  for(int i=1;i<49;i++){
-    if(i>=n) break;
-    float key=a[i]; int j=i-1;
-    while(j>=0 && a[j]>key){ a[j+1]=a[j]; j--; }
-    a[j+1]=key;
-  }
-}
 void main(){
   vec2 t=1.0/vec2(textureSize(u_img,0));
-  float r[49],g[49],b[49]; int idx=0;
+  int need=u_n/2+1;          // 1-indexed position of median
+
+  int rh[16],gh[16],bh[16];
+  for(int i=0;i<16;i++){ rh[i]=0; gh[i]=0; bh[i]=0; }
+
+  // ── Pass 1: coarse histogram ─────────────────────────────────────────────────
   for(int dy=-u_half;dy<=u_half;dy++){
     for(int dx=-u_half;dx<=u_half;dx++){
-      vec4 c=texture(u_img,clamp(v_uv+vec2(float(dx),float(dy))*t,0.,1.));
-      r[idx]=c.r; g[idx]=c.g; b[idx]=c.b; idx++;
+      ivec3 px=ivec3(texture(u_img,clamp(v_uv+vec2(float(dx),float(dy))*t,0.,1.)).rgb*255.+.5);
+      rh[px.r>>4]++; gh[px.g>>4]++; bh[px.b>>4]++;
     }
   }
-  isort(r,u_n); isort(g,u_n); isort(b,u_n);
-  int med=u_n/2;
-  o=vec4(r[med],g[med],b[med],texture(u_img,v_uv).a);
+
+  // ── Find target coarse bin and remaining 1-indexed offset within it ──────────
+  int rb=0; int r_rem=need;
+  for(int i=0;i<16;i++){ if(r_rem<=rh[i]){ rb=i; break; } r_rem-=rh[i]; }
+  int gb=0; int g_rem=need;
+  for(int i=0;i<16;i++){ if(g_rem<=gh[i]){ gb=i; break; } g_rem-=gh[i]; }
+  int bb=0; int b_rem=need;
+  for(int i=0;i<16;i++){ if(b_rem<=bh[i]){ bb=i; break; } b_rem-=bh[i]; }
+
+  // ── Pass 2: fine histogram (only pixels inside target coarse bin) ────────────
+  for(int i=0;i<16;i++){ rh[i]=0; gh[i]=0; bh[i]=0; }
+  for(int dy=-u_half;dy<=u_half;dy++){
+    for(int dx=-u_half;dx<=u_half;dx++){
+      ivec3 px=ivec3(texture(u_img,clamp(v_uv+vec2(float(dx),float(dy))*t,0.,1.)).rgb*255.+.5);
+      if((px.r>>4)==rb) rh[px.r&0xF]++;
+      if((px.g>>4)==gb) gh[px.g&0xF]++;
+      if((px.b>>4)==bb) bh[px.b&0xF]++;
+    }
+  }
+
+  // ── Find exact value within fine bin ────────────────────────────────────────
+  int rmed=rb*16; for(int i=0;i<16;i++){ if(r_rem<=rh[i]){ rmed+=i; break; } r_rem-=rh[i]; }
+  int gmed=gb*16; for(int i=0;i<16;i++){ if(g_rem<=gh[i]){ gmed+=i; break; } g_rem-=gh[i]; }
+  int bmed=bb*16; for(int i=0;i<16;i++){ if(b_rem<=bh[i]){ bmed+=i; break; } b_rem-=bh[i]; }
+
+  o=vec4(float(rmed)/255.,float(gmed)/255.,float(bmed)/255.,texture(u_img,v_uv).a);
 }`,
 
 }
@@ -710,7 +740,7 @@ class WebGLFilterEngine {
 
       case 'reduce_noise': {
         const size = Math.max(1, Math.round(params.size ?? 3))
-        if (size > 7) return false   // >7×7 = 49+ samples; let CPU handle it
+        if (size > 15) return false   // >15×15; let CPU handle it
         const half = Math.floor(size / 2)
         const n    = size * size
         this._onePass(canvas, 'reduce_noise', (l) => {
