@@ -38,7 +38,11 @@ export async function setup(ctx) {
   const filePickerService = {
     pick({ filter = null } = {}) {
       if (_pending) _pending.resolve(null)
-      return new Promise((resolve) => { _pending = { filter, resolve } })
+      const prevSel = [...explorerState.selectedEntries]
+      explorerState.clearSelection()
+      return new Promise((resolve) => {
+        _pending = { filter, resolve: (entry) => { explorerState.setSelection(prevSel); resolve(entry) } }
+      })
     },
     cancel() {
       if (_pending) { _pending.resolve(null); _pending = null }

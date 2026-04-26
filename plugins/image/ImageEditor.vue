@@ -175,17 +175,9 @@ async function importImageAsLayer() {
   const picker = services?.get('file.picker')
   if (!picker) return
 
-  // minimize editor, clear explorer selection before pick
   winMgrSvc?.minimize(props.winId)
-  const explorerState = services?.get('explorer.state')
-  const prevSel = explorerState ? [...explorerState.selectedEntries] : []
-  explorerState?.clearSelection()
-
   const entry = await picker.pick({ filter: 'image' })
-
-  // restore editor window
-  winMgrSvc?.minimize(props.winId)  // toggle back (minimize is a toggle)
-  explorerState?.setSelection(prevSel)
+  winMgrSvc?.minimize(props.winId)
 
   if (!entry) return
 
