@@ -158,6 +158,9 @@ function onWheel(e) {
   e.preventDefault()
   if (e.ctrlKey || e.metaKey) {
     viewport.zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.12 : 0.89)
+  } else if (e.shiftKey) {
+    state.panX -= e.deltaY
+    state.panX -= e.deltaX
   } else {
     state.panX -= e.deltaX
     state.panY -= e.deltaY
