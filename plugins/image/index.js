@@ -9,7 +9,7 @@ import ImageEditor from './ImageEditor.vue'
 import { createImagesApi } from './api.js'
 export { manifest } from './manifest.js'
 
-const IMAGE_EXTS = new Set(['jpg','jpeg','png','gif','webp','bmp','svg','ico','tiff','tif','avif'])
+const IMAGE_EXTS = new Set(['jpg','jpeg','png','gif','webp','bmp','svg','ico','tiff','tif','avif','psd'])
 
 function isImage(entry) {
   if (!entry?.name) return false

@@ -89,30 +89,82 @@ const activeFilterDialog = ref(null)
 const rightTab = ref('layers')
 
 // ── Load image ─────────────────────────────────────────────────────────────────
+const loading = ref(false)
+
 async function loadImage() {
+  loading.value = true
   try {
-    const url = imagesApi?.fullUrl(props.file.path) || `/api/images/full?path=${encodeURIComponent(props.file.path)}`
-    const res = await fetch(url, { credentials: 'include' })
-    const blob = await res.blob()
-    const bitmap = await createImageBitmap(blob)
-    const w = bitmap.width, h = bitmap.height
-    const layer = createLayer('Background', w, h)
-    layer.canvas.getContext('2d', { willReadFrequently: true }).drawImage(bitmap, 0, 0)
-    bitmap.close()
-    state.canvasWidth = w
-    state.canvasHeight = h
-    state.layers = [layer]
-    state.activeLayerId = layer.id
-    state.filePath = props.file.path
-    state.fileName = props.file.name
-    state.isDirty = false
-    // Fit to window after a tick
-    setTimeout(() => viewport.fitToWindow(), 50)
-    // Push initial history state
-    pushHistory('Open', state)
+    if (props.file.name?.toLowerCase().endsWith('.psd')) {
+      await loadPsdLayers()
+    } else {
+      await loadRasterImage()
+    }
   } catch (e) {
     console.error('Failed to load image for editing:', e)
+  } finally {
+    loading.value = false
   }
+}
+
+async function loadRasterImage() {
+  const url = imagesApi?.fullUrl(props.file.path) || `/api/images/full?path=${encodeURIComponent(props.file.path)}`
+  const res = await fetch(url, { credentials: 'include' })
+  const blob = await res.blob()
+  const bitmap = await createImageBitmap(blob)
+  const w = bitmap.width, h = bitmap.height
+  const layer = createLayer('Background', w, h)
+  layer.canvas.getContext('2d', { willReadFrequently: true }).drawImage(bitmap, 0, 0)
+  bitmap.close()
+  state.canvasWidth = w
+  state.canvasHeight = h
+  state.layers = [layer]
+  state.activeLayerId = layer.id
+  state.filePath = props.file.path
+  state.fileName = props.file.name
+  state.isDirty = false
+  setTimeout(() => viewport.fitToWindow(), 50)
+  pushHistory('Open', state)
+}
+
+async function loadPsdLayers() {
+  let psdData = null
+  try {
+    const res = await fetch(`/api/images/psd-layers?path=${encodeURIComponent(props.file.path)}`, { credentials: 'include' })
+    if (res.ok) psdData = await res.json()
+  } catch (_) { /* fall through */ }
+
+  if (!psdData?.layers?.length) {
+    await loadRasterImage()
+    return
+  }
+
+  const { width, height, layers: psdLayers } = psdData
+  const editorLayers = []
+  for (const psdLayer of psdLayers) {
+    const layer = createLayer(psdLayer.name, width, height)
+    layer.visible = psdLayer.visible
+    layer.opacity = psdLayer.opacity
+    layer.blendMode = psdLayer.blendMode
+    if (psdLayer.imageData) {
+      try {
+        const blob = await fetch(psdLayer.imageData).then(r => r.blob())
+        const bitmap = await createImageBitmap(blob)
+        layer.canvas.getContext('2d', { willReadFrequently: true }).drawImage(bitmap, psdLayer.x, psdLayer.y)
+        bitmap.close()
+      } catch (_) { /* leave layer empty */ }
+    }
+    editorLayers.push(layer)
+  }
+
+  state.canvasWidth = width
+  state.canvasHeight = height
+  state.layers = editorLayers.length ? editorLayers : [createLayer('Background', width || 100, height || 100)]
+  state.activeLayerId = state.layers[state.layers.length - 1]?.id ?? null
+  state.filePath = props.file.path
+  state.fileName = props.file.name
+  state.isDirty = false
+  setTimeout(() => viewport.fitToWindow(), 50)
+  pushHistory('Open', state)
 }
 
 onMounted(loadImage)
@@ -357,6 +409,10 @@ const cursorInfo = computed(() =>
 
     <!-- ── Body ─────────────────────────────────────────────────────────────── -->
     <div class="editor-body">
+      <!-- Loading overlay -->
+      <div v-if="loading" class="loading-overlay">
+        <v-progress-circular indeterminate color="primary" size="48" />
+      </div>
       <!-- Left toolbar -->
       <div class="tools-bar">
         <ColorPickerWidget />
@@ -498,6 +554,17 @@ const cursorInfo = computed(() =>
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  position: relative;
+}
+
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(30, 30, 30, 0.75);
 }
 
 /* Left toolbar */
