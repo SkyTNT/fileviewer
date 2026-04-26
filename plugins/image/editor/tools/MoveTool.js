@@ -298,6 +298,8 @@ class TransformSession {
         lh = Math.hypot(sBL[0]-sTL[0], sBL[1]-sTL[1])
       }
       this.corners = cornersFromHandle(this._handle, e.x, e.y, corners, this._lockAspect || e.shiftKey, lw, lh)
+      const [nTL, nTR, nBR, nBL] = this.corners
+      this.pivot = mid(mid(nTL, nBR), mid(nTR, nBL))
     }
   }
 
