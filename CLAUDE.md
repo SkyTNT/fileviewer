@@ -48,7 +48,7 @@ The frontend kernel exposes registries consumed by plugins:
 - **Layout Registry** — list, waterfall, etc.
 - **Action Registry** — context menus and detail panels
 - **Toolbar Registry** — toolbar buttons
-- **Plugin Slots** — UI injection points: `app.login`, `sidebar.top`, `toolbar`, `content.layout`, `windows`, `taskbar`, `task.panel`, `notifications`
+- **Plugin Slots** — UI injection points: `app.login`, `sidebar.top`, `toolbar`, `content.layout`, `windows`, `taskbar`, `notifications`
 
 i18n: vue-i18n, supports `en`, `zh-CN`, `zh-TW`, `ja`. Plugins extend messages via their own locale files.
 
