@@ -42,6 +42,10 @@ export function createEditorState() {
     brushFlow: 1.0,
     eraserSize: 20,
     eraserHardness: 0.5,
+    blurSize: 30,
+    blurStrength: 0.5,
+    smudgeSize: 30,
+    smudgeStrength: 0.7,
 
     // Selection tools
     fillTolerance: 32,

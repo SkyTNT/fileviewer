@@ -121,6 +121,26 @@ const SHAPE_TYPES = ['rect', 'ellipse', 'line']
       </template>
     </template>
 
+    <!-- Blur/Smudge options -->
+    <template v-else-if="tool === 'blur' || tool === 'smudge'">
+      <span class="opt-label">{{ t('editor.size') }}</span>
+      <v-slider
+        v-model="state[tool === 'blur' ? 'blurSize' : 'smudgeSize']"
+        :min="1" :max="500" :step="1" hide-details density="compact"
+        style="width:100px" class="mx-1"
+      />
+      <span class="opt-val">{{ state[tool === 'blur' ? 'blurSize' : 'smudgeSize'] }}</span>
+
+      <v-divider vertical class="mx-2" />
+
+      <span class="opt-label">{{ t('editor.strength') }}</span>
+      <v-slider
+        v-model="state[tool === 'blur' ? 'blurStrength' : 'smudgeStrength']"
+        :min="0" :max="1" :step="0.01" hide-details density="compact"
+        style="width:80px" class="mx-1"
+      />
+    </template>
+
     <!-- Selection mode -->
     <template v-else-if="['rect-select','ellipse-select','lasso','magic-wand'].includes(tool)">
       <v-btn-toggle v-model="state.selectionMode" density="compact" rounded="lg" mandatory>

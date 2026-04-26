@@ -1,5 +1,7 @@
 import BrushTool from './BrushTool.js'
 import EraserTool from './EraserTool.js'
+import BlurTool from './BlurTool.js'
+import SmudgeTool from './SmudgeTool.js'
 import MoveTool from './MoveTool.js'
 import RectSelectTool from './RectSelectTool.js'
 import EllipseSelectTool from './EllipseSelectTool.js'
@@ -13,7 +15,7 @@ import ShapeTool from './ShapeTool.js'
 import GradientTool from './GradientTool.js'
 
 export const ALL_TOOLS = [
-  BrushTool, EraserTool, MoveTool,
+  BrushTool, EraserTool, BlurTool, SmudgeTool, MoveTool,
   RectSelectTool, EllipseSelectTool, LassoTool, MagicWandTool,
   CropTool, FillTool, EyedropperTool, TextTool, ShapeTool, GradientTool,
 ]
@@ -28,7 +30,7 @@ export const TOOL_GROUPS = [
   { tools: ['move'] },
   { tools: ['rect-select', 'ellipse-select', 'lasso', 'magic-wand'] },
   { tools: ['crop'] },
-  { tools: ['brush', 'eraser', 'fill', 'gradient'] },
+  { tools: ['brush', 'eraser', 'blur', 'smudge', 'fill', 'gradient'] },
   { tools: ['eyedropper'] },
   { tools: ['text', 'shape'] },
 ]
@@ -42,6 +44,8 @@ export const TOOL_ICONS = {
   'crop':          'mdi-crop',
   'brush':         'mdi-brush',
   'eraser':        'mdi-eraser',
+  'blur':          'mdi-blur',
+  'smudge':        'mdi-hand-back-right',
   'fill':          'mdi-format-color-fill',
   'gradient':      'mdi-gradient-horizontal',
   'eyedropper':    'mdi-eyedropper',
