@@ -79,6 +79,7 @@ export default {
     freeTransform: '自由变换',
     transformHint: '拖动控制点缩放 · 旋转手柄旋转 · 拖动基准点改变旋转中心 · Enter 应用 · Esc 取消',
     transformNeedSel: '请先选择区域',
+    lockAspect: '锁定比例',
     cancel: '取消',
     apply: '应用',
     selectionNew: '新建',

@@ -15,6 +15,8 @@ let _previewCanvas = null
 let _previewX = 0, _previewY = 0
 
 // ── Transform state ──────────────────────────────────────────────────────────
+let _lockAspect = false
+let _lockAspectW = 0, _lockAspectH = 0  // ratio captured when lock was toggled ON
 let _txFloating = false
 let _txFloat = null       // OffscreenCanvas: extracted pixels (origW × origH)
 let _txOrigX = 0, _txOrigY = 0  // top-left of original selection bounds
@@ -86,21 +88,27 @@ const _CURSORS = {
 
 // Compute new corners after dragging a resize handle.
 // startCorners: corners at drag start (preserved angle).
-function _cornersFromHandle(handle, mx, my, startCorners) {
+// lockAspect: if true, constrain to lockW:lockH ratio.
+function _cornersFromHandle(handle, mx, my, startCorners, lockAspect, lockW, lockH) {
   const [TL, TR, BR, BL] = startCorners
   const { ux, uy } = _boxAxes(startCorners)
   const M = [mx, my]
   const MIN = 4
 
+  // For corners: scale so the box contains the mouse in both axes.
+  function lockCornerWH(wRaw, hRaw) {
+    if (!lockAspect || !lockW || !lockH) return [Math.max(MIN, wRaw), Math.max(MIN, hRaw)]
+    const scale = Math.max(wRaw / lockW, hRaw / lockH, MIN / lockW, MIN / lockH)
+    return [lockW * scale, lockH * scale]
+  }
+
   switch (handle) {
     case 'BR': {
-      const w = Math.max(MIN, _dot(_sub(M, TL), ux))
-      const h = Math.max(MIN, _dot(_sub(M, TL), uy))
+      const [w, h] = lockCornerWH(_dot(_sub(M, TL), ux), _dot(_sub(M, TL), uy))
       return [TL, _add(TL, _scl(ux, w)), _add(_add(TL, _scl(ux, w)), _scl(uy, h)), _add(TL, _scl(uy, h))]
     }
     case 'TL': {
-      const w = Math.max(MIN, _dot(_sub(BR, M), ux))
-      const h = Math.max(MIN, _dot(_sub(BR, M), uy))
+      const [w, h] = lockCornerWH(_dot(_sub(BR, M), ux), _dot(_sub(BR, M), uy))
       return [
         _sub(_sub(BR, _scl(ux, w)), _scl(uy, h)),
         _sub(BR, _scl(uy, h)),
@@ -109,8 +117,7 @@ function _cornersFromHandle(handle, mx, my, startCorners) {
       ]
     }
     case 'TR': {
-      const w = Math.max(MIN, _dot(_sub(M, BL), ux))
-      const h = Math.max(MIN, _dot(_sub(BL, M), uy))
+      const [w, h] = lockCornerWH(_dot(_sub(M, BL), ux), _dot(_sub(BL, M), uy))
       return [
         _sub(BL, _scl(uy, h)),
         _add(_sub(BL, _scl(uy, h)), _scl(ux, w)),
@@ -119,8 +126,7 @@ function _cornersFromHandle(handle, mx, my, startCorners) {
       ]
     }
     case 'BL': {
-      const w = Math.max(MIN, _dot(_sub(TR, M), ux))
-      const h = Math.max(MIN, _dot(_sub(M, TR), uy))
+      const [w, h] = lockCornerWH(_dot(_sub(TR, M), ux), _dot(_sub(M, TR), uy))
       return [
         _sub(TR, _scl(ux, w)),
         TR,
@@ -130,19 +136,35 @@ function _cornersFromHandle(handle, mx, my, startCorners) {
     }
     case 'S': {
       const h = Math.max(MIN, _dot(_sub(M, TL), uy))
-      return [TL, TR, _add(TR, _scl(uy, h)), _add(TL, _scl(uy, h))]
+      if (!lockAspect || !lockW || !lockH) return [TL, TR, _add(TR, _scl(uy, h)), _add(TL, _scl(uy, h))]
+      const w = Math.max(MIN, h * lockW / lockH)
+      const cTop = _mid(TL, TR)
+      const TLn = _sub(cTop, _scl(ux, w / 2)), TRn = _add(cTop, _scl(ux, w / 2))
+      return [TLn, TRn, _add(TRn, _scl(uy, h)), _add(TLn, _scl(uy, h))]
     }
     case 'N': {
       const h = Math.max(MIN, _dot(_sub(BL, M), uy))
-      return [_sub(BL, _scl(uy, h)), _sub(BR, _scl(uy, h)), BR, BL]
+      if (!lockAspect || !lockW || !lockH) return [_sub(BL, _scl(uy, h)), _sub(BR, _scl(uy, h)), BR, BL]
+      const w = Math.max(MIN, h * lockW / lockH)
+      const cBot = _mid(BL, BR)
+      const BLn = _sub(cBot, _scl(ux, w / 2)), BRn = _add(cBot, _scl(ux, w / 2))
+      return [_sub(BLn, _scl(uy, h)), _sub(BRn, _scl(uy, h)), BRn, BLn]
     }
     case 'E': {
       const w = Math.max(MIN, _dot(_sub(M, TL), ux))
-      return [TL, _add(TL, _scl(ux, w)), _add(BL, _scl(ux, w)), BL]
+      if (!lockAspect || !lockW || !lockH) return [TL, _add(TL, _scl(ux, w)), _add(BL, _scl(ux, w)), BL]
+      const h = Math.max(MIN, w * lockH / lockW)
+      const cLeft = _mid(TL, BL)
+      const TLn = _sub(cLeft, _scl(uy, h / 2)), BLn = _add(cLeft, _scl(uy, h / 2))
+      return [TLn, _add(TLn, _scl(ux, w)), _add(BLn, _scl(ux, w)), BLn]
     }
     case 'W': {
       const w = Math.max(MIN, _dot(_sub(TR, M), ux))
-      return [_sub(TR, _scl(ux, w)), TR, BR, _sub(BR, _scl(ux, w))]
+      if (!lockAspect || !lockW || !lockH) return [_sub(TR, _scl(ux, w)), TR, BR, _sub(BR, _scl(ux, w))]
+      const h = Math.max(MIN, w * lockH / lockW)
+      const cRight = _mid(TR, BR)
+      const TRn = _sub(cRight, _scl(uy, h / 2)), BRn = _add(cRight, _scl(uy, h / 2))
+      return [_sub(TRn, _scl(ux, w)), TRn, BRn, _sub(BRn, _scl(ux, w))]
     }
     default: return startCorners
   }
@@ -163,13 +185,21 @@ function _rotateCorners(mx, my, startState) {
 
 function startTransform(state, toolCtx) {
   if (_txFloating) return
-  if (!state.selection) return
   const layer = getActiveLayer(state)
   if (!layer || layer.locked) return
-  const extracted = getSelectionImageData(layer, state.selection, state.canvasWidth, state.canvasHeight)
-  if (!extracted) return
 
-  clearSelectionOnLayer(layer, state.selection, state.canvasWidth, state.canvasHeight)
+  let extracted
+  if (state.selection) {
+    extracted = getSelectionImageData(layer, state.selection, state.canvasWidth, state.canvasHeight)
+    if (!extracted) return
+    clearSelectionOnLayer(layer, state.selection, state.canvasWidth, state.canvasHeight)
+    state.selection = null
+  } else {
+    const ctx = layer.canvas.getContext('2d', { willReadFrequently: true })
+    const imageData = ctx.getImageData(0, 0, state.canvasWidth, state.canvasHeight)
+    ctx.clearRect(0, 0, state.canvasWidth, state.canvasHeight)
+    extracted = { imageData, x: 0, y: 0, w: state.canvasWidth, h: state.canvasHeight }
+  }
   toolCtx.invalidate()
 
   _txFloat = new OffscreenCanvas(extracted.w, extracted.h)
@@ -186,7 +216,6 @@ function startTransform(state, toolCtx) {
   _txPivot = [extracted.x + extracted.w / 2, extracted.y + extracted.h / 2]
   _txFloating = true
   _txHandle = null; _txHandleStart = null
-  state.selection = null
   toolCtx.invalidate()
 }
 
@@ -414,7 +443,13 @@ export default {
           _txCorners = corners.map(([cx, cy]) => [cx + dx, cy + dy])
           _txPivot = [pivot[0] + dx, pivot[1] + dy]
         } else {
-          _txCorners = _cornersFromHandle(_txHandle, e.x, e.y, _txHandleStart.corners)
+          let lockW = _lockAspectW, lockH = _lockAspectH
+          if (e.shiftKey && !_lockAspect) {
+            const [sTL, sTR, , sBL] = _txHandleStart.corners
+            lockW = Math.hypot(sTR[0] - sTL[0], sTR[1] - sTL[1])
+            lockH = Math.hypot(sBL[0] - sTL[0], sBL[1] - sTL[1])
+          }
+          _txCorners = _cornersFromHandle(_txHandle, e.x, e.y, _txHandleStart.corners, _lockAspect || e.shiftKey, lockW, lockH)
         }
         toolCtx.invalidate()
       } else {
@@ -517,6 +552,15 @@ export default {
   applyTransform,
   cancelTransform,
   isTransforming() { return _txFloating },
+  toggleLockAspect() {
+    _lockAspect = !_lockAspect
+    if (_lockAspect && _txCorners) {
+      const [TL, TR, , BL] = _txCorners
+      _lockAspectW = Math.hypot(TR[0] - TL[0], TR[1] - TL[1])
+      _lockAspectH = Math.hypot(BL[0] - TL[0], BL[1] - TL[1])
+    }
+  },
+  isLockAspect() { return _lockAspect },
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

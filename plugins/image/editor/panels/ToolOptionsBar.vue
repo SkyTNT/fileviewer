@@ -26,6 +26,12 @@ if ('queryLocalFonts' in window) {
 const tool = computed(() => state.activeTool)
 const hasCrop = computed(() => { void state.paintTick; return CropTool.hasCrop() })
 const isTransforming = computed(() => { void state.paintTick; return MoveTool.isTransforming() })
+const isLockAspect = computed(() => { void state.paintTick; return MoveTool.isLockAspect() })
+
+function toggleLockAspect() {
+  MoveTool.toggleLockAspect()
+  toolCtx.value.invalidate()
+}
 
 const BLEND_MODES = [
   { label: 'Normal', value: 'source-over' },
@@ -64,17 +70,25 @@ const SHAPE_TYPES = ['rect', 'ellipse', 'line']
           {{ t('editor.cancel') }}
         </v-btn>
         <v-divider vertical class="mx-2" />
+        <v-btn
+          size="small"
+          :variant="isLockAspect ? 'tonal' : 'text'"
+          :color="isLockAspect ? 'primary' : undefined"
+          :icon="isLockAspect ? 'mdi-lock' : 'mdi-lock-open-outline'"
+          density="compact"
+          @click="toggleLockAspect"
+        />
+        <span class="opt-label ml-1">{{ t('editor.lockAspect') }}</span>
+        <v-divider vertical class="mx-2" />
         <span class="opt-label">{{ t('editor.transformHint') }}</span>
       </template>
       <template v-else>
         <v-btn
           size="small" variant="tonal"
-          :disabled="!state.selection"
           @click="MoveTool.startTransform(state, toolCtx)"
         >
           {{ t('editor.freeTransform') }}
         </v-btn>
-        <span v-if="!state.selection" class="opt-label ml-2">{{ t('editor.transformNeedSel') }}</span>
       </template>
     </template>
 

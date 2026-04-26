@@ -27,6 +27,14 @@ export function createKeyboardHandler(state, historyAPI, actions, isFocused) {
     if ((mod && shift && key === 'z') || (mod && !shift && key === 'y')) { raw.preventDefault(); redo(state); actions.invalidate(); return }
     if (mod && !shift && key === 's') { raw.preventDefault(); actions.save(); return }
     if (mod && shift && key === 's') { raw.preventDefault(); actions.saveAs(); return }
+    if (mod && !shift && key === 't') {
+      raw.preventDefault()
+      if (!MoveTool.isTransforming()) {
+        state.activeTool = 'move'
+        MoveTool.startTransform(state, { state, pushHistory: (l) => historyAPI.push(l, state), invalidate: actions.invalidate })
+      }
+      return
+    }
     if (mod && key === 'e') { raw.preventDefault(); actions.exportDialog(); return }
     if (mod && key === '0') { raw.preventDefault(); actions.fitToWindow(); return }
     if (mod && (key === '=' || key === '+')) { raw.preventDefault(); actions.zoomIn(); return }

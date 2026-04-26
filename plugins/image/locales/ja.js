@@ -79,6 +79,7 @@ export default {
     freeTransform: '自由変形',
     transformHint: 'ハンドルをドラッグでサイズ変更 · 回転ハンドルで回転 · 基準点をドラッグで回転中心移動 · Enter で適用 · Esc でキャンセル',
     transformNeedSel: '先に範囲を選択してください',
+    lockAspect: '比率固定',
     cancel: 'キャンセル',
     apply: '適用',
     selectionNew: '新規',

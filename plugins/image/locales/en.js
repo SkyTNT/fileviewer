@@ -86,6 +86,7 @@ export default {
     freeTransform: 'Free Transform',
     transformHint: 'Drag handles to resize · Rotate handle to rotate · Drag pivot to move rotation center · Enter to apply · Esc to cancel',
     transformNeedSel: 'Select an area first',
+    lockAspect: 'Lock Aspect',
     cancel: 'Cancel',
     apply: 'Apply',
     // Selection mode
