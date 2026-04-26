@@ -23,8 +23,29 @@ export function createKeyboardHandler(state, historyAPI, actions, isFocused) {
       return
     }
 
-    if (mod && !shift && key === 'z') { raw.preventDefault(); undo(state); actions.invalidate(); return }
-    if ((mod && shift && key === 'z') || (mod && !shift && key === 'y')) { raw.preventDefault(); redo(state); actions.invalidate(); return }
+    if (mod && !shift && key === 'z') {
+      raw.preventDefault()
+      const toolCtx = { state, pushHistory: (l) => historyAPI.push(l, state), invalidate: actions.invalidate }
+      if (MoveTool.isTransforming()) {
+        if (!MoveTool.txUndo(toolCtx)) {
+          MoveTool.cancelTransform(state, toolCtx)
+          undo(state); actions.invalidate()
+        }
+      } else {
+        undo(state); actions.invalidate()
+      }
+      return
+    }
+    if ((mod && shift && key === 'z') || (mod && !shift && key === 'y')) {
+      raw.preventDefault()
+      const toolCtx = { state, pushHistory: (l) => historyAPI.push(l, state), invalidate: actions.invalidate }
+      if (MoveTool.isTransforming()) {
+        MoveTool.txRedo(toolCtx)
+      } else {
+        redo(state); actions.invalidate()
+      }
+      return
+    }
     if (mod && !shift && key === 's') { raw.preventDefault(); actions.save(); return }
     if (mod && shift && key === 's') { raw.preventDefault(); actions.saveAs(); return }
     if (mod && !shift && key === 't') {
