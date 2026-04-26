@@ -34,12 +34,17 @@ function toolCtx() {
 
 // ── Canvas resize ──────────────────────────────────────────────────────────────
 function resizeCanvases(w, h) {
-  if (!displayCanvas.value || !overlayCanvas.value || !w || !h) return
+  if (!displayCanvas.value || !w || !h) return
   displayCanvas.value.width = w
   displayCanvas.value.height = h
-  overlayCanvas.value.width = w
-  overlayCanvas.value.height = h
   compositeDirty = true
+}
+
+function resizeOverlay() {
+  const el = shellEl.value
+  if (!overlayCanvas.value || !el) return
+  overlayCanvas.value.width = el.clientWidth
+  overlayCanvas.value.height = el.clientHeight
 }
 
 watch(() => [state.canvasWidth, state.canvasHeight], ([w, h]) => resizeCanvases(w, h))
@@ -63,20 +68,34 @@ function rafLoop() {
     }
     const octx = overlayCanvas.value?.getContext('2d', { willReadFrequently: true })
     if (octx) {
-      octx.clearRect(0, 0, state.canvasWidth, state.canvasHeight)
-      drawMarchingAnts(octx, state)
-      activeTool.value?.renderOverlay?.(octx, state)
+      const ow = overlayCanvas.value.width, oh = overlayCanvas.value.height
+      octx.clearRect(0, 0, ow, oh)
+      const rect = shellEl.value?.getBoundingClientRect()
+      if (rect) {
+        const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2
+        const tx = cx - rect.left + state.panX - state.canvasWidth / 2 * state.zoom
+        const ty = cy - rect.top + state.panY - state.canvasHeight / 2 * state.zoom
+        octx.save()
+        octx.setTransform(state.zoom, 0, 0, state.zoom, tx, ty)
+        drawMarchingAnts(octx, state)
+        activeTool.value?.renderOverlay?.(octx, state)
+        octx.restore()
+      }
     }
   }
   rafId = requestAnimationFrame(rafLoop)
 }
 
+let _resizeObserver = null
 onMounted(() => {
   resizeCanvases(state.canvasWidth, state.canvasHeight)
+  resizeOverlay()
+  _resizeObserver = new ResizeObserver(resizeOverlay)
+  _resizeObserver.observe(shellEl.value)
   rafId = requestAnimationFrame(rafLoop)
   invalidateRef.value = () => { compositeDirty = true }
 })
-onUnmounted(() => { if (rafId) cancelAnimationFrame(rafId) })
+onUnmounted(() => { if (rafId) cancelAnimationFrame(rafId); _resizeObserver?.disconnect() })
 
 // ── Pan state ─────────────────────────────────────────────────────────────────
 let _panning = false
@@ -192,9 +211,9 @@ const cursorStyle = computed(() => {
   >
     <div class="canvas-group" :style="canvasGroupStyle">
       <canvas ref="displayCanvas" class="layer-canvas" />
-      <canvas ref="overlayCanvas" class="layer-canvas overlay-canvas" />
       <div v-if="state.showGrid" class="grid-overlay" />
     </div>
+    <canvas ref="overlayCanvas" class="overlay-canvas" />
   </div>
 </template>
 
@@ -226,6 +245,8 @@ const cursorStyle = computed(() => {
   image-rendering: pixelated;
 }
 .overlay-canvas {
+  position: absolute;
+  top: 0; left: 0;
   pointer-events: none;
 }
 .grid-overlay {

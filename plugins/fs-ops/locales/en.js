@@ -11,6 +11,7 @@ export default {
     download: 'Download',
     copyLink: 'Link',
     copyContent: 'Copy Content',
+    select: 'Select',
   },
   dialog: {
     cancel: 'Cancel',

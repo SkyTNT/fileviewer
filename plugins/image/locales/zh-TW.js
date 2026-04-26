@@ -137,5 +137,6 @@ export default {
     unsavedTitle: '未儲存的變更',
     unsavedMessage: '關閉前是否儲存對「{name}」的變更？',
     discard: '捨棄',
+    importImageAsLayer: '匯入圖片為圖層',
   },
 }

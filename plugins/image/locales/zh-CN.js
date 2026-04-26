@@ -137,5 +137,6 @@ export default {
     unsavedTitle: '未保存的更改',
     unsavedMessage: '关闭前是否保存对"{name}"的更改？',
     discard: '放弃',
+    importImageAsLayer: '导入图片为图层',
   },
 }

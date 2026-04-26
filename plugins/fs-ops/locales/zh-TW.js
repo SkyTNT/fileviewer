@@ -11,6 +11,7 @@ export default {
     download: '下載',
     copyLink: '連結',
     copyContent: '複製內容',
+    select: '選擇',
   },
   dialog: {
     cancel: '取消',

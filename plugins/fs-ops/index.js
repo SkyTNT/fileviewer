@@ -34,12 +34,49 @@ export async function setup(ctx) {
   ctx.services.register('write.state', writeStore, 'fs-ops')
   ctx.services.register('write.api', writeApi, 'fs-ops')
 
+  let _pending = null
+  const filePickerService = {
+    pick({ filter = null } = {}) {
+      if (_pending) _pending.resolve(null)
+      return new Promise((resolve) => { _pending = { filter, resolve } })
+    },
+    cancel() {
+      if (_pending) { _pending.resolve(null); _pending = null }
+    },
+  }
+  ctx.services.register('file.picker', filePickerService, 'fs-ops')
+
   const actionRegistry = await ctx.services.getAsync('action.registry')
 
   const sel       = () => explorerState.selectedEntries
   const ctxSel    = () => explorerState.ctxSel
   const writeMode = () => appConfig.writeMode
   const isAtHome  = () => explorerState.isAtHome
+
+  actionRegistry.register({
+    id: 'select', plugin: 'fs-ops', priority: 0,
+    icon: 'mdi-check-circle-outline', color: 'primary',
+    label: () => i18n.t('action.select'),
+    showIn: {
+      contextMenu: () => {
+        if (!_pending) return false
+        const e = ctxSel()[0]
+        return ctxSel().length === 1 && !e?.is_dir && (!_pending.filter || e?.type === _pending.filter)
+      },
+      detailPanel: () => {
+        if (!_pending) return false
+        const e = sel()[0]
+        return sel().length === 1 && !e?.is_dir && (!_pending.filter || e?.type === _pending.filter)
+      },
+    },
+    execute: () => {
+      const entry = ctxSel()[0]
+      if (!entry || !_pending) return
+      const resolve = _pending.resolve
+      _pending = null
+      resolve(entry)
+    },
+  })
 
   actionRegistry.register({
     id: 'open', plugin: 'fs-ops', priority: 1,
@@ -255,6 +292,7 @@ export async function teardown(ctx) {
   ctx.services.unregister('fs-ops.conflict-dialog', 'fs-ops')
   ctx.services.unregister('write.state', 'fs-ops')
   ctx.services.unregister('write.api', 'fs-ops')
+  ctx.services.unregister('file.picker', 'fs-ops')
   ctx.services.get('action.registry').unregisterAll('fs-ops')
   ctx.services.get('toolbar.registry').unregister('mkdir-button')
   ctx.services.get('toolbar.registry').unregister('clipboard-bar')

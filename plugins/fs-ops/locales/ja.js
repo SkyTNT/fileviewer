@@ -11,6 +11,7 @@ export default {
     download: 'ダウンロード',
     copyLink: 'リンク',
     copyContent: '内容をコピー',
+    select: '選択',
   },
   dialog: {
     cancel: 'キャンセル',

@@ -137,5 +137,6 @@ export default {
     unsavedTitle: '未保存の変更',
     unsavedMessage: '閉じる前に「{name}」への変更を保存しますか？',
     discard: '破棄',
+    importImageAsLayer: '画像をレイヤーとして読み込む',
   },
 }

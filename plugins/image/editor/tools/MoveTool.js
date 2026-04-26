@@ -257,7 +257,7 @@ class TransformSession {
     const a = (TR[0]-TL[0])/this._origW, b = (TR[1]-TL[1])/this._origW
     const c = (BL[0]-TL[0])/this._origH, d = (BL[1]-TL[1])/this._origH
     ctx.save()
-    ctx.setTransform(a, b, c, d, TL[0], TL[1])
+    ctx.transform(a, b, c, d, TL[0], TL[1])
     ctx.drawImage(this._float, 0, 0, this._origW, this._origH)
     ctx.restore()
     this._renderHandles(ctx, zoom)
@@ -521,6 +521,21 @@ export default {
 
   // Transform API (consumed by ToolOptionsBar and useKeyboard)
   startTransform:   (s, tc) => tx.start(s, tc),
+  startTransformFromBitmap(bitmap, layer, toolCtx) {
+    if (tx.active) return
+    const ctx = layer.canvas.getContext('2d', { willReadFrequently: true })
+    ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height)
+    tx._float = new OffscreenCanvas(bitmap.width, bitmap.height)
+    tx._float.getContext('2d', { willReadFrequently: true }).drawImage(bitmap, 0, 0)
+    tx._origX = 0; tx._origY = 0
+    tx._origW = bitmap.width; tx._origH = bitmap.height
+    tx.corners = [[0,0],[bitmap.width,0],[bitmap.width,bitmap.height],[0,bitmap.height]]
+    tx.pivot = [bitmap.width/2, bitmap.height/2]
+    tx._active = true
+    if (tx._lockAspect) tx._captureLockRatio()
+    tx._undoStack = [tx._snap()]; tx._undoIdx = 0
+    toolCtx.invalidate()
+  },
   applyTransform:   (s, tc) => tx.apply(s, tc),
   cancelTransform:  (s, tc) => tx.cancel(s, tc),
   isTransforming:   ()      => tx.active,

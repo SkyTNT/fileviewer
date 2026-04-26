@@ -149,5 +149,6 @@ export default {
     unsavedTitle: 'Unsaved Changes',
     unsavedMessage: 'Save changes to "{name}" before closing?',
     discard: 'Discard',
+    importImageAsLayer: 'Import Image as Layer',
   },
 }

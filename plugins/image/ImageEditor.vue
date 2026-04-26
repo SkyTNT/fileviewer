@@ -9,6 +9,7 @@ import { createKeyboardHandler } from './editor/useKeyboard.js'
 import { flattenToBlob } from './editor/canvas/LayerCompositor.js'
 import { getTool } from './editor/tools/toolRegistry.js'
 import { TOOL_GROUPS, TOOL_ICONS } from './editor/tools/toolRegistry.js'
+import MoveTool from './editor/tools/MoveTool.js'
 import { runFilter } from './editor/filters/filterRunner.js'
 import { invertSelection, selectionToMask } from './editor/selectionUtils.js'
 
@@ -169,6 +170,43 @@ async function loadPsdLayers() {
 
 onMounted(loadImage)
 
+// ── Import image as layer ──────────────────────────────────────────────────────
+async function importImageAsLayer() {
+  const picker = services?.get('file.picker')
+  if (!picker) return
+
+  // minimize editor, clear explorer selection before pick
+  winMgrSvc?.minimize(props.winId)
+  const explorerState = services?.get('explorer.state')
+  const prevSel = explorerState ? [...explorerState.selectedEntries] : []
+  explorerState?.clearSelection()
+
+  const entry = await picker.pick({ filter: 'image' })
+
+  // restore editor window
+  winMgrSvc?.minimize(props.winId)  // toggle back (minimize is a toggle)
+  explorerState?.setSelection(prevSel)
+
+  if (!entry) return
+
+  const url = imagesApi?.fullUrl(entry.path) ?? `/api/images/full?path=${encodeURIComponent(entry.path)}`
+  const res = await fetch(url, { credentials: 'include' })
+  const blob = await res.blob()
+  const bitmap = await createImageBitmap(blob)
+  const layer = createLayer(entry.name, state.canvasWidth, state.canvasHeight)
+  state.layers.push(layer)
+  state.activeLayerId = layer.id
+  state.isDirty = true
+  pushHistory('Import Layer', state)
+  invalidate()
+
+  // enter free transform on the new layer
+  state.activeTool = 'move'
+  const toolCtx = { state, history, viewport, pushHistory: (label) => pushHistory(label, state), invalidate, editorApi }
+  MoveTool.startTransformFromBitmap(bitmap, layer, toolCtx)
+  bitmap.close()
+}
+
 // ── Save operations ────────────────────────────────────────────────────────────
 const saving = ref(false)
 const saveError = ref('')
@@ -252,7 +290,7 @@ const actions = {
 
 const handleKey = createKeyboardHandler(state, historyAPI, actions, isFocused)
 onMounted(() => eventBus?.on('keyboard:keydown', handleKey))
-onUnmounted(() => eventBus?.off('keyboard:keydown', handleKey))
+onUnmounted(() => { eventBus?.off('keyboard:keydown', handleKey); services?.get('file.picker')?.cancel() })
 
 // ── Unsaved close guard ────────────────────────────────────────────────────────
 function tryClose() {
@@ -338,6 +376,8 @@ const cursorInfo = computed(() =>
           <v-divider />
           <v-list-item prepend-icon="mdi-selection-ellipse-arrow-inside" :title="t('editor.fillSelection') + '  Shift+F5'" @click="actions.fillSelection()" />
           <v-list-item prepend-icon="mdi-selection-inverse" :title="t('editor.invertSelection') + '  Ctrl+Shift+I'" @click="actions.invertSelection()" />
+          <v-divider />
+          <v-list-item prepend-icon="mdi-image-plus" :title="t('editor.importImageAsLayer')" @click="importImageAsLayer" />
         </v-list>
       </v-menu>
 
