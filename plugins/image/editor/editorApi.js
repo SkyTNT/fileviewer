@@ -22,17 +22,5 @@ export function createEditorApi() {
       if (!res.ok) throw new Error(await res.text())
       return res.json()
     },
-
-    async applyFilter(blob, filterId, params = {}) {
-      const qs = new URLSearchParams({ filter: filterId, params: JSON.stringify(params) })
-      const res = await fetch(`/api/images/filter?${qs}`, {
-        method: 'POST',
-        body: blob,
-        headers: { 'Content-Type': 'image/png' },
-        credentials: 'include',
-      })
-      if (!res.ok) throw new Error(await res.text())
-      return res.blob()
-    },
   }
 }

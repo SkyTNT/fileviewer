@@ -14,7 +14,6 @@ import CurvesDialog from './CurvesDialog.vue'
 const state = inject('editorState')
 const { pushHistory } = inject('editorHistory')
 const { invalidate } = inject('editorInvalidateObj')
-const editorApi = inject('editorApi')
 const { t } = useI18n()
 
 const open = ref([])
@@ -23,7 +22,7 @@ const open = ref([])
 async function applyFilter(filterId, params) {
   const layer = getActiveLayer(state)
   if (!layer || layer.locked) return
-  await runFilter(filterId, params, layer, editorApi, null, state.selection)
+  await runFilter(filterId, params, layer, state.selection)
   pushHistory(filterId, state)
   state.isDirty = true
   invalidate()

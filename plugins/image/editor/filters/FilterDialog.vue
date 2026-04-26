@@ -13,7 +13,6 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const { t } = useI18n()
-const editorApi = inject('editorApi')
 
 const values = ref({})
 
@@ -25,7 +24,7 @@ onMounted(() => {
 
 const { preview, apply: commitApply, cancel: commitCancel } = useAdjustment(
   props.filterLabel,
-  (layer, sel) => runFilter(props.filterId, values.value, layer, editorApi, null, sel),
+  (layer, sel) => runFilter(props.filterId, values.value, layer, sel),
   () => {
     const v = {}
     for (const p of props.params) v[p.key] = p.default ?? 0

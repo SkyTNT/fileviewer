@@ -112,6 +112,8 @@ export default {
     quickFilters: '快速滤镜',
     blur: '高斯模糊',
     sharpen: '锐化',
+    unsharpMask: 'USM锐化',
+    reduceNoise: '减少噪点',
     noise: '添加噪点',
     vignette: '暗角',
     pixelate: '像素化',

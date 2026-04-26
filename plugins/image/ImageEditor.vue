@@ -213,6 +213,12 @@ async function saveAndClose() { showUnsavedDialog.value = false; await save(); i
 // ── Filter menu definitions ────────────────────────────────────────────────────
 const FILTER_DIALOGS = {
   gaussian_blur: { label: 'editor.blur', params: [{ key: 'radius', label: 'Radius', min: 0.5, max: 30, step: 0.5, default: 2 }] },
+  unsharp_mask: { label: 'editor.unsharpMask', params: [
+    { key: 'radius', label: 'Radius', min: 0.5, max: 30, step: 0.5, default: 2 },
+    { key: 'percent', label: 'Amount %', min: 0, max: 500, step: 5, default: 150 },
+    { key: 'threshold', label: 'Threshold', min: 0, max: 50, step: 1, default: 3 },
+  ]},
+  reduce_noise: { label: 'editor.reduceNoise', params: [{ key: 'size', label: 'Size', min: 3, max: 15, step: 2, default: 3 }] },
   sharpen: { label: 'editor.sharpen', params: [{ key: 'amount', label: 'Amount', min: 0, max: 3, step: 0.1, default: 0.5 }] },
   noise: { label: 'editor.noise', params: [{ key: 'amount', label: 'Amount', min: 1, max: 100, step: 1, default: 25 }] },
   vignette: { label: 'editor.vignette', params: [{ key: 'strength', label: 'Strength', min: 0, max: 1, step: 0.05, default: 0.5 }, { key: 'radius', label: 'Radius', min: 0, max: 1, step: 0.05, default: 0.75 }] },
@@ -238,7 +244,7 @@ function openFilterDialog(id) {
 async function quickFilter(id) {
   const layer = getActiveLayer(state)
   if (!layer || layer.locked) return
-  await runFilter(id, {}, layer, editorApi, null, state.selection)
+  await runFilter(id, {}, layer, state.selection)
   pushHistory(id, state)
   state.isDirty = true
   invalidate()
@@ -291,6 +297,8 @@ const cursorInfo = computed(() =>
         <v-list density="compact">
           <v-list-item prepend-icon="mdi-blur" :title="t('editor.blur')" @click="openFilterDialog('gaussian_blur')" />
           <v-list-item prepend-icon="mdi-image-filter-vintage" :title="t('editor.sharpen')" @click="openFilterDialog('sharpen')" />
+          <v-list-item :title="t('editor.unsharpMask')" @click="openFilterDialog('unsharp_mask')" />
+          <v-list-item :title="t('editor.reduceNoise')" @click="openFilterDialog('reduce_noise')" />
           <v-divider />
           <v-list-item :title="t('editor.grayscale')" @click="quickFilter('grayscale')" />
           <v-list-item :title="t('editor.sepia')" @click="quickFilter('sepia')" />
@@ -414,10 +422,10 @@ const cursorInfo = computed(() =>
     <!-- Filter dialog (generic) -->
     <FilterDialog
       v-if="activeFilterDialog"
-      v-model="activeFilterDialog"
-      :filter-id="activeFilterDialog?.id"
-      :filter-label="activeFilterDialog?.label"
-      :params="activeFilterDialog?.params ?? []"
+      :model-value="true"
+      :filter-id="activeFilterDialog.id"
+      :filter-label="activeFilterDialog.label"
+      :params="activeFilterDialog.params ?? []"
       @update:model-value="v => { if (!v) activeFilterDialog = null }"
     />
 

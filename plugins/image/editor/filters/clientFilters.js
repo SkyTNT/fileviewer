@@ -303,7 +303,6 @@ function buildGaussianKernel(r) {
 }
 
 export function sharpen(canvas, { amount = 0.5 } = {}) {
-  // Unsharp mask via separate blur
   const blurred = new OffscreenCanvas(canvas.width, canvas.height)
   blurred.getContext('2d', { willReadFrequently: true }).drawImage(canvas, 0, 0)
   gaussian_blur(blurred, { radius: 2 })
@@ -317,6 +316,50 @@ export function sharpen(canvas, { amount = 0.5 } = {}) {
     d[i+2] = clamp(d[i+2] + (d[i+2] - b[i+2]) * amount * 3)
   }
   putImageData(canvas, orig)
+}
+
+export function unsharp_mask(canvas, { radius = 2, percent = 150, threshold = 3 } = {}) {
+  const blurred = new OffscreenCanvas(canvas.width, canvas.height)
+  blurred.getContext('2d', { willReadFrequently: true }).drawImage(canvas, 0, 0)
+  gaussian_blur(blurred, { radius })
+
+  const orig = getImageData(canvas)
+  const blur = blurred.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, canvas.width, canvas.height)
+  const d = orig.data, b = blur.data
+  const factor = percent / 100
+  for (let i = 0; i < d.length; i += 4) {
+    for (let c = 0; c < 3; c++) {
+      const diff = d[i+c] - b[i+c]
+      if (Math.abs(diff) >= threshold) d[i+c] = clamp(d[i+c] + diff * factor)
+    }
+  }
+  putImageData(canvas, orig)
+}
+
+export function reduce_noise(canvas, { size = 3 } = {}) {
+  const id = getImageData(canvas)
+  const { data: src, width: w, height: h } = id
+  const out = new Uint8ClampedArray(src.length)
+  const half = Math.floor(size / 2)
+  const buf = new Uint8Array(size * size)
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const oi = (y * w + x) * 4
+      for (let c = 0; c < 3; c++) {
+        let n = 0
+        for (let ky = -half; ky <= half; ky++) {
+          for (let kx = -half; kx <= half; kx++) {
+            buf[n++] = src[(Math.max(0, Math.min(h-1, y+ky)) * w + Math.max(0, Math.min(w-1, x+kx))) * 4 + c]
+          }
+        }
+        buf.subarray(0, n).sort()
+        out[oi+c] = buf[n >> 1]
+      }
+      out[oi+3] = src[oi+3]
+    }
+  }
+  putImageData(canvas, new ImageData(out, w, h))
 }
 
 export function emboss(canvas) {
@@ -399,6 +442,6 @@ export const ALL_FILTERS = {
   hue_saturation_lightness, exposure, vibrance,
   color_balance, shadows_highlights, apply_lut,
   invert, grayscale, sepia, vignette, noise, pixelate,
-  gaussian_blur, sharpen, emboss, edge_detect,
-  chromatic_aberration,
+  gaussian_blur, sharpen, unsharp_mask, reduce_noise,
+  emboss, edge_detect, chromatic_aberration,
 }

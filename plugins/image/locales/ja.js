@@ -112,6 +112,8 @@ export default {
     quickFilters: 'クイックフィルター',
     blur: 'ガウスぼかし',
     sharpen: 'シャープ',
+    unsharpMask: 'アンシャープマスク',
+    reduceNoise: 'ノイズ軽減',
     noise: 'ノイズを追加',
     vignette: 'ビネット',
     pixelate: 'ピクセレート',

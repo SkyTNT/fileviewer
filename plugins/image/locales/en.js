@@ -122,6 +122,8 @@ export default {
     quickFilters: 'Quick Filters',
     blur: 'Gaussian Blur',
     sharpen: 'Sharpen',
+    unsharpMask: 'Unsharp Mask',
+    reduceNoise: 'Reduce Noise',
     noise: 'Add Noise',
     vignette: 'Vignette',
     pixelate: 'Pixelate',
