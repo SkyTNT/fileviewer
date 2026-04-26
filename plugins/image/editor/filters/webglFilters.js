@@ -275,6 +275,67 @@ void main(){
   o=vec4(r,orig.g,b,orig.a);
 }`,
 
+// Noise: GPU PRNG via integer hash; u_seed changes each call so pattern differs every apply.
+// Per-channel noise when u_monochrome==0, same offset for all channels when u_monochrome!=0.
+noise: `#version 300 es
+precision highp float;
+precision highp int;
+in vec2 v_uv; uniform sampler2D u_img;
+uniform float u_amount; uniform int u_monochrome; uniform uint u_seed;
+out vec4 o;
+
+uint ihash(uint x) {
+  x ^= x >> 16u; x *= 0x45d9f3bu; x ^= x >> 16u; return x;
+}
+float rnd(uvec2 px, uint ch) {
+  return float(ihash(px.x*1664525u + px.y*1013904223u + ch + u_seed)) / 4294967295.0;
+}
+void main(){
+  vec4 c=texture(u_img,v_uv);
+  uvec2 px=uvec2(v_uv*vec2(textureSize(u_img,0)));
+  float s=u_amount/255.0;
+  if(u_monochrome!=0){
+    float n=(rnd(px,0u)-.5)*2.*s;
+    o=vec4(clamp(c.rgb+n,0.,1.),c.a);
+  } else {
+    o=vec4(
+      clamp(c.r+(rnd(px,0u)-.5)*2.*s,0.,1.),
+      clamp(c.g+(rnd(px,1u)-.5)*2.*s,0.,1.),
+      clamp(c.b+(rnd(px,2u)-.5)*2.*s,0.,1.),
+      c.a);
+  }
+}`,
+
+// Median filter: insertion-sort per channel, max kernel 7×7 (49 samples).
+// Returns false for size>7 so CPU handles larger kernels.
+reduce_noise: `#version 300 es
+precision highp float;
+in vec2 v_uv; uniform sampler2D u_img;
+uniform int u_half; uniform int u_n;
+out vec4 o;
+
+void isort(inout float a[49], int n){
+  for(int i=1;i<49;i++){
+    if(i>=n) break;
+    float key=a[i]; int j=i-1;
+    while(j>=0 && a[j]>key){ a[j+1]=a[j]; j--; }
+    a[j+1]=key;
+  }
+}
+void main(){
+  vec2 t=1.0/vec2(textureSize(u_img,0));
+  float r[49],g[49],b[49]; int idx=0;
+  for(int dy=-u_half;dy<=u_half;dy++){
+    for(int dx=-u_half;dx<=u_half;dx++){
+      vec4 c=texture(u_img,clamp(v_uv+vec2(float(dx),float(dy))*t,0.,1.));
+      r[idx]=c.r; g[idx]=c.g; b[idx]=c.b; idx++;
+    }
+  }
+  isort(r,u_n); isort(g,u_n); isort(b,u_n);
+  int med=u_n/2;
+  o=vec4(r[med],g[med],b[med],texture(u_img,v_uv).a);
+}`,
+
 }
 
 // ── Engine ────────────────────────────────────────────────────────────────────
@@ -632,6 +693,29 @@ class WebGLFilterEngine {
           gl.uniform1f(l.u_centerY,   centerY)
           gl.uniform1f(l.u_angleCos,  Math.cos(rad))
           gl.uniform1f(l.u_angleSin,  Math.sin(rad))
+        })
+        break
+      }
+
+      case 'noise': {
+        // Use a fresh integer seed so each apply call produces a different pattern
+        const seed = (Math.random() * 0x100000000) >>> 0
+        this._onePass(canvas, 'noise', (l) => {
+          gl.uniform1f(l.u_amount,     params.amount     ?? 25)
+          gl.uniform1i(l.u_monochrome, params.monochrome ? 1 : 0)
+          gl.uniform1ui(l.u_seed,      seed)
+        })
+        break
+      }
+
+      case 'reduce_noise': {
+        const size = Math.max(1, Math.round(params.size ?? 3))
+        if (size > 7) return false   // >7×7 = 49+ samples; let CPU handle it
+        const half = Math.floor(size / 2)
+        const n    = size * size
+        this._onePass(canvas, 'reduce_noise', (l) => {
+          gl.uniform1i(l.u_half, half)
+          gl.uniform1i(l.u_n,   n)
         })
         break
       }

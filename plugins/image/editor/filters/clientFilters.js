@@ -216,6 +216,7 @@ export function vignette(canvas, { strength = 0.5, radius = 0.75 } = {}) {
 }
 
 export function noise(canvas, { amount = 25, monochrome = false } = {}) {
+  if (applyWebGL(canvas, 'noise', { amount, monochrome })) return
   const id = getImageData(canvas)
   const d = id.data
   for (let i = 0; i < d.length; i += 4) {
@@ -356,6 +357,7 @@ export function unsharp_mask(canvas, { radius = 2, percent = 150, threshold = 3 
 }
 
 export function reduce_noise(canvas, { size = 3 } = {}) {
+  if (applyWebGL(canvas, 'reduce_noise', { size })) return
   const id = getImageData(canvas)
   const { data: src, width: w, height: h } = id
   const out = new Uint8ClampedArray(src.length)
