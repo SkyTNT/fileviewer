@@ -5,5 +5,6 @@ export function createImagesApi(http) {
     fullUrl: (path) =>
       `/api/images/full?path=${encodeURIComponent(path)}`,
     full: (path) => http.get('/images/full', { params: { path }, responseType: 'blob' }),
+    psdLayers: (path) => http.get('/images/psd-layers', { params: { path } }),
   }
 }

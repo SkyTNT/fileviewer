@@ -17,7 +17,7 @@ PLUGIN_ID = "fs_local"
 # ── File type registry (populated in setup) ──────────────────────────────────
 _file_type_registry = None
 
-IMAGE_EXTENSIONS   = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".svg"}
+IMAGE_EXTENSIONS   = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".svg", ".psd"}
 PARQUET_EXTENSIONS = {".parquet"}
 CSV_EXTENSIONS     = {".csv"}
 JSON_EXTENSIONS    = {".json"}

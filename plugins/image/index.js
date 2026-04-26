@@ -5,10 +5,11 @@ import zhTW from './locales/zh-TW.js'
 import ja   from './locales/ja.js'
 import ImageViewer from './ImageViewer.vue'
 import ImageComparisonViewer from './ImageComparisonViewer.vue'
+import ImageEditor from './ImageEditor.vue'
 import { createImagesApi } from './api.js'
 export { manifest } from './manifest.js'
 
-const IMAGE_EXTS = new Set(['jpg','jpeg','png','gif','webp','bmp','svg','ico','tiff','tif','avif'])
+const IMAGE_EXTS = new Set(['jpg','jpeg','png','gif','webp','bmp','svg','ico','tiff','tif','avif','psd'])
 
 function isImage(entry) {
   if (!entry?.name) return false
@@ -54,6 +55,25 @@ export async function setup(ctx) {
     },
   })
 
+  // Register image editor app
+  registry.register({
+    key: 'image-editor',
+    icon: 'mdi-image-edit-outline',
+    priority: 49,
+    match: (target) => !Array.isArray(target) && isImage(target) && !target.path?.startsWith('http'),
+    open(target) {
+      const id = `app:image-editor:${target.path}`
+      winMgr.open({
+        id, title: `Edit — ${target.name}`,
+        icon: 'mdi-image-edit-outline',
+        component: markRaw(ImageEditor),
+        props: { file: target },
+        width: 1400, height: 900, maximized: true,
+      })
+      return id
+    },
+  })
+
   const [actionRegistry, explorerState] = await Promise.all([
     ctx.services.getAsync('action.registry'),
     ctx.services.getAsync('explorer.state'),
@@ -71,12 +91,24 @@ export async function setup(ctx) {
     },
     execute: () => registry.open([ctxSel()[0], ctxSel()[1]], { app: 'image-compare' }),
   })
+
+  actionRegistry.register({
+    id: 'image-edit', plugin: 'image', priority: 2,
+    icon: 'mdi-image-edit-outline', color: undefined,
+    label: () => ctx.services.get('i18n').t('action.editImage'),
+    showIn: {
+      contextMenu: () => ctxSel().length === 1 && isImage(ctxSel()[0]) && !ctxSel()[0].path?.startsWith('http'),
+      detailPanel: () => sel().length === 1 && isImage(sel()[0]) && !sel()[0].path?.startsWith('http'),
+    },
+    execute: () => registry.open(ctxSel()[0], { app: 'image-editor' }),
+  })
 }
 
 export async function teardown(ctx) {
   const registry = ctx.services.get('app.registry')
   registry.unregister('image')
   registry.unregister('image-compare')
+  registry.unregister('image-editor')
   ctx.services.get('action.registry').unregisterAll('image')
   ctx.services.unregister('images.api', 'image')
 }

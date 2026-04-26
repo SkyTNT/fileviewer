@@ -1,23 +1,22 @@
 import { reactive, markRaw } from 'vue'
 
 let _nextId = 1
-const BASE_Z  = 2000
+const BASE_Z  = 1500
 const CASCADE = 24
 
 export function createWindowManager() {
   const state = reactive({
     windows: [],
-    _topZ: BASE_Z,
   })
 
   function _bringToFront(id) {
-    state._topZ++
     const win = state.windows.find(w => w.id === id)
-    if (win) {
-      win.z = state._topZ
-      win.focused = true
-      state.windows.forEach(w => { if (w.id !== id) w.focused = false })
-    }
+    if (!win) return
+    const others = state.windows.filter(w => w.id !== id)
+    const ordered = [...others, win]
+    ordered.forEach((w, i) => { w.z = BASE_Z + i + 1 })
+    win.focused = true
+    state.windows.forEach(w => { if (w.id !== id) w.focused = false })
   }
 
   function _defaultPos(w, h, customX, customY) {
@@ -52,7 +51,6 @@ export function createWindowManager() {
       const pos = _defaultPos(w, h, x, y)
       const winId = id ?? `win-${_nextId++}`
 
-      state._topZ++
       const win = reactive({
         id:        winId,
         title:     title ?? '',
@@ -61,7 +59,7 @@ export function createWindowManager() {
         props,
         x: pos.x, y: pos.y,
         w, h,
-        z:         state._topZ,
+        z:         BASE_Z + state.windows.length + 1,
         maximized: maximized,
         minimized: false,
         focused:   true,
