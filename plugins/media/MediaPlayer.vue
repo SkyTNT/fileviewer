@@ -35,13 +35,15 @@ const mediaUrl    = computed(() => props.file ? mediaApi.streamUrl(props.file.pa
 const coverUrl    = computed(() => props.file ? mediaApi.thumbnailUrl(props.file.path, 400) : '')
 const fileName    = computed(() => props.file?.name || '')
 
-const hasCover  = ref(false)
+const hasCover    = ref(false)
 const coverFailed = ref(false)
+const coverCircle = ref(true)
 
 watch(() => props.file, () => { hasCover.value = false; coverFailed.value = false }, { immediate: true })
 
 function onCoverLoad()  { hasCover.value = true }
 function onCoverError() { coverFailed.value = true }
+function toggleCoverStyle() { if (hasCover.value) coverCircle.value = !coverCircle.value }
 const progressPct = computed(() => {
   if (isDragging.value) return dragValue.value
   return duration.value > 0 ? (currentTime.value / duration.value) * 100 : 0
@@ -169,10 +171,10 @@ watch(() => props.file, () => {
     <div class="audio-glow" />
 
     <!-- album art / vinyl record -->
-    <div class="art-wrap">
-      <!-- cover image (hidden until loaded) -->
+    <div class="art-wrap" @click="toggleCoverStyle" :style="hasCover ? 'cursor:pointer' : ''">
+      <!-- cover: square mode -->
       <img
-        v-show="hasCover"
+        v-show="hasCover && !coverCircle"
         :src="coverUrl"
         class="cover-img"
         :class="{ 'cover-img--playing': playing }"
@@ -180,7 +182,18 @@ watch(() => props.file, () => {
         @error="onCoverError"
         alt=""
       />
-      <!-- vinyl fallback -->
+      <!-- cover: circle/vinyl mode -->
+      <div v-show="hasCover && coverCircle" class="vinyl" :class="{ 'vinyl--spin': playing }">
+        <img
+          :src="coverUrl"
+          class="cover-vinyl-img"
+          alt=""
+        />
+        <div class="vinyl-ring vinyl-ring-1"/>
+        <div class="vinyl-ring vinyl-ring-2"/>
+        <div class="vinyl-center-dot"/>
+      </div>
+      <!-- vinyl fallback (no cover) -->
       <div v-show="!hasCover" class="vinyl" :class="{ 'vinyl--spin': playing }">
         <div class="vinyl-ring vinyl-ring-1"/>
         <div class="vinyl-ring vinyl-ring-2"/>
@@ -380,6 +393,27 @@ watch(() => props.file, () => {
     0 0 60px rgba(var(--v-theme-primary), 0.25);
 }
 
+/* cover vinyl overlay ───────────────────────── */
+.cover-vinyl-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  opacity: 0.88;
+}
+
+.vinyl-center-dot {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.7);
+  border: 2px solid rgba(255,255,255,0.18);
+  z-index: 2;
+}
+
 /* vinyl record ─────────────────────────────── */
 
 .vinyl {
@@ -407,12 +441,13 @@ watch(() => props.file, () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: none;
+  animation: vinyl-spin 4s linear infinite;
+  animation-play-state: paused;
   transition: box-shadow 0.4s ease;
 }
 
 .vinyl--spin {
-  animation: vinyl-spin 4s linear infinite;
+  animation-play-state: running;
   box-shadow:
     0 0 0 1px rgba(255,255,255,0.06),
     0 12px 48px rgba(0,0,0,0.5),
