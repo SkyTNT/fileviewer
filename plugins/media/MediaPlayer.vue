@@ -76,7 +76,7 @@ function togglePlay() {
   }
 }
 
-function onPlay()  { playing.value = true }
+function onPlay()  { playing.value = true;  if (!isVideo.value) { ensureAudioCtx(); audioCtx?.resume() } }
 function onPause() { playing.value = false }
 function onEnded() { playing.value = false }
 
@@ -147,6 +147,80 @@ function onVideoClick(e) {
   scheduleHide()
 }
 
+// ── spectrum ──────────────────────────────────────────
+const spectrumCanvas = ref(null)
+let audioCtx  = null
+let analyser  = null
+let animFrame = null
+
+function ensureAudioCtx() {
+  if (audioCtx || isVideo.value || !mediaEl.value) return
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+    analyser  = audioCtx.createAnalyser()
+    analyser.fftSize = 512
+    analyser.smoothingTimeConstant = 0.82
+    audioCtx.createMediaElementSource(mediaEl.value).connect(analyser)
+    analyser.connect(audioCtx.destination)
+    drawSpectrum()
+  } catch { /* unsupported */ }
+}
+
+function drawSpectrum() {
+  animFrame = requestAnimationFrame(drawSpectrum)
+  const canvas = spectrumCanvas.value
+  if (!canvas || !analyser) return
+
+  const dpr = window.devicePixelRatio || 1
+  const W = canvas.clientWidth, H = canvas.clientHeight
+  if (!W || !H) return
+  if (canvas.width  !== Math.round(W * dpr)) canvas.width  = Math.round(W * dpr)
+  if (canvas.height !== Math.round(H * dpr)) canvas.height = Math.round(H * dpr)
+
+  const c  = canvas.getContext('2d')
+  const cw = canvas.width, ch = canvas.height
+  c.clearRect(0, 0, cw, ch)
+
+  const freq = new Uint8Array(analyser.frequencyBinCount)
+  analyser.getByteFrequencyData(freq)
+
+  const rgb = getComputedStyle(canvas).getPropertyValue('--v-theme-primary').trim() || '99,102,241'
+  const N   = 56
+  const gap = Math.round(2 * dpr)
+  const bw  = (cw - gap * (N - 1)) / N
+
+  for (let i = 0; i < N; i++) {
+    const t   = i / (N - 1)
+    const bin = Math.round(Math.pow(freq.length * 0.75, t))
+    const v   = (freq[Math.min(bin, freq.length - 1)] || 0) / 255
+    const bh  = Math.max(2, v * ch * 0.95)
+    const x   = i * (bw + gap)
+    const y   = ch - bh
+    const r   = Math.min(bw / 2, 3 * dpr)
+
+    const g = c.createLinearGradient(0, y, 0, ch)
+    g.addColorStop(0, `rgba(${rgb},0.9)`)
+    g.addColorStop(1, `rgba(${rgb},0.3)`)
+    c.fillStyle = g
+
+    c.beginPath()
+    c.moveTo(x + r, y)
+    c.lineTo(x + bw - r, y)
+    c.arcTo(x + bw, y, x + bw, y + r, r)
+    c.lineTo(x + bw, ch)
+    c.lineTo(x, ch)
+    c.lineTo(x, y + r)
+    c.arcTo(x, y, x + r, y, r)
+    c.closePath()
+    c.fill()
+  }
+}
+
+function stopSpectrum() {
+  cancelAnimationFrame(animFrame)
+  animFrame = null
+}
+
 // ── fullscreen ────────────────────────────────────────
 function toggleFullscreen() {
   if (!videoWrapper.value) return
@@ -175,6 +249,8 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('fullscreenchange', onFsChange)
   clearTimeout(hideTimer)
+  stopSpectrum()
+  audioCtx?.close()
 })
 watch(() => props.file, () => {
   playing.value = false; currentTime.value = 0; duration.value = 0
@@ -226,6 +302,9 @@ watch(() => props.file, () => {
     <div class="audio-info">
       <div class="audio-title text-body-1 font-weight-medium">{{ fileName }}</div>
     </div>
+
+    <!-- spectrum -->
+    <canvas ref="spectrumCanvas" class="spectrum-canvas" />
 
     <!-- time labels -->
     <div class="audio-times">
@@ -524,6 +603,15 @@ watch(() => props.file, () => {
   white-space: nowrap;
   max-width: 380px;
   letter-spacing: 0.01em;
+}
+
+/* spectrum canvas ───────────────────────────── */
+.spectrum-canvas {
+  width: 100%;
+  max-width: 420px;
+  height: 56px;
+  display: block;
+  flex-shrink: 0;
 }
 
 /* times ─────────────────────────────────────── */
