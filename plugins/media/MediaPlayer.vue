@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, nextTick, onMounted, inject } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted, inject } from 'vue'
 
 const props = defineProps({
   file:       { type: Object, required: true },
@@ -8,56 +8,718 @@ const props = defineProps({
 })
 
 const mediaApi = inject('services')?.get('media.api')
+const mediaEl  = ref(null)
+const videoWrapper = ref(null)
 
-const mediaEl = ref(null)
+const playing      = ref(false)
+const currentTime  = ref(0)
+const duration     = ref(0)
+const volume       = ref(1)
+const muted        = ref(false)
+const buffered     = ref(0)
+const showControls = ref(true)
+const showCenterIcon = ref(false)
+const centerIconPlay = ref(false)
+const isDragging   = ref(false)
+const dragValue    = ref(0)
+const isFullscreen = ref(false)
+
+let hideTimer = null
 
 const isVideo = computed(() => {
   const ext = (props.file?.extension || '').toLowerCase()
-  return ['.mp4', '.webm', '.ogv', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.m4v', '.ts'].includes(ext)
+  return ['.mp4','.webm','.ogv','.avi','.mov','.mkv','.flv','.wmv','.m4v','.ts'].includes(ext)
 })
 
-const mediaUrl = computed(() => props.file ? mediaApi.streamUrl(props.file.path) : '')
+const mediaUrl    = computed(() => props.file ? mediaApi.streamUrl(props.file.path) : '')
+const coverUrl    = computed(() => props.file ? mediaApi.thumbnailUrl(props.file.path, 400) : '')
+const fileName    = computed(() => props.file?.name || '')
 
-onMounted(() => nextTick(() => mediaEl.value?.load()))
+const hasCover  = ref(false)
+const coverFailed = ref(false)
 
-watch(() => props.file, () => nextTick(() => mediaEl.value?.load()))
+watch(() => props.file, () => { hasCover.value = false; coverFailed.value = false }, { immediate: true })
+
+function onCoverLoad()  { hasCover.value = true }
+function onCoverError() { coverFailed.value = true }
+const progressPct = computed(() => {
+  if (isDragging.value) return dragValue.value
+  return duration.value > 0 ? (currentTime.value / duration.value) * 100 : 0
+})
+const bufferedPct = computed(() => duration.value > 0 ? (buffered.value / duration.value) * 100 : 0)
+const volumeValue = computed(() => muted.value ? 0 : Math.round(volume.value * 100))
+const volumeIcon  = computed(() => {
+  if (muted.value || volume.value === 0) return 'mdi-volume-off'
+  if (volume.value < 0.4) return 'mdi-volume-low'
+  if (volume.value < 0.7) return 'mdi-volume-medium'
+  return 'mdi-volume-high'
+})
+
+function fmt(s) {
+  if (!s || isNaN(s)) return '0:00'
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60)
+  return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`
+}
+
+function togglePlay() {
+  if (!mediaEl.value) return
+  if (playing.value) { mediaEl.value.pause() } else { mediaEl.value.play() }
+  if (isVideo.value) {
+    centerIconPlay.value = !playing.value
+    showCenterIcon.value = true
+    setTimeout(() => { showCenterIcon.value = false }, 700)
+  }
+}
+
+function onPlay()  { playing.value = true }
+function onPause() { playing.value = false }
+function onEnded() { playing.value = false }
+
+function onTimeUpdate() {
+  if (!isDragging.value) currentTime.value = mediaEl.value?.currentTime || 0
+  if (mediaEl.value?.buffered?.length > 0)
+    buffered.value = mediaEl.value.buffered.end(mediaEl.value.buffered.length - 1)
+}
+function onLoaded() {
+  duration.value = mediaEl.value?.duration || 0
+  mediaEl.value?.play()
+}
+
+// ── seek bar ──────────────────────────────────────────
+function getSeekPct(e, el) {
+  const rect = el.getBoundingClientRect()
+  return Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100))
+}
+
+function onSeekPointerDown(e) {
+  e.currentTarget.setPointerCapture(e.pointerId)
+  isDragging.value = true
+  dragValue.value = getSeekPct(e, e.currentTarget)
+}
+function onSeekPointerMove(e) {
+  if (!isDragging.value) return
+  dragValue.value = getSeekPct(e, e.currentTarget)
+}
+function onSeekPointerUp(e) {
+  if (!isDragging.value) return
+  const pct = getSeekPct(e, e.currentTarget)
+  const newTime = (pct / 100) * duration.value
+  currentTime.value = newTime
+  if (mediaEl.value) mediaEl.value.currentTime = newTime
+  isDragging.value = false
+}
+
+// ── volume ────────────────────────────────────────────
+function setVolume(val) {
+  volume.value = val / 100
+  muted.value = val === 0
+  if (mediaEl.value) { mediaEl.value.volume = val / 100; mediaEl.value.muted = val === 0 }
+}
+function toggleMute() {
+  muted.value = !muted.value
+  if (mediaEl.value) mediaEl.value.muted = muted.value
+}
+function onVolumeInput(e) { setVolume(Number(e.target.value)) }
+
+// ── video controls visibility ─────────────────────────
+function scheduleHide() {
+  clearTimeout(hideTimer)
+  if (playing.value) hideTimer = setTimeout(() => { showControls.value = false }, 3000)
+}
+function onMouseMove() {
+  if (!isVideo.value) return
+  showControls.value = true
+  scheduleHide()
+}
+function onMouseLeave() {
+  if (!isVideo.value) return
+  scheduleHide()
+}
+function onVideoClick(e) {
+  e.preventDefault()
+  togglePlay()
+  showControls.value = true
+  scheduleHide()
+}
+
+// ── fullscreen ────────────────────────────────────────
+function toggleFullscreen() {
+  if (!videoWrapper.value) return
+  document.fullscreenElement ? document.exitFullscreen() : videoWrapper.value.requestFullscreen()
+}
+function onFsChange() { isFullscreen.value = !!document.fullscreenElement }
+
+onMounted(() => {
+  nextTick(() => mediaEl.value?.load())
+  document.addEventListener('fullscreenchange', onFsChange)
+})
+onUnmounted(() => {
+  document.removeEventListener('fullscreenchange', onFsChange)
+  clearTimeout(hideTimer)
+})
+watch(() => props.file, () => {
+  playing.value = false; currentTime.value = 0; duration.value = 0
+  nextTick(() => mediaEl.value?.load())
+})
 </script>
 
 <template>
-  <div class="media-app">
-    <video
-      v-if="isVideo"
-      ref="mediaEl"
-      :src="mediaUrl"
-      controls
-      class="media-el"
-    />
+  <!-- ═══════════════ AUDIO PLAYER ═══════════════ -->
+  <div v-if="!isVideo" class="audio-player">
+    <div class="audio-glow" />
+
+    <!-- album art / vinyl record -->
+    <div class="art-wrap">
+      <!-- cover image (hidden until loaded) -->
+      <img
+        v-show="hasCover"
+        :src="coverUrl"
+        class="cover-img"
+        :class="{ 'cover-img--playing': playing }"
+        @load="onCoverLoad"
+        @error="onCoverError"
+        alt=""
+      />
+      <!-- vinyl fallback -->
+      <div v-show="!hasCover" class="vinyl" :class="{ 'vinyl--spin': playing }">
+        <div class="vinyl-ring vinyl-ring-1"/>
+        <div class="vinyl-ring vinyl-ring-2"/>
+        <div class="vinyl-ring vinyl-ring-3"/>
+        <div class="vinyl-hole">
+          <v-icon size="28" style="color: rgb(var(--v-theme-on-primary)); opacity:0.85">mdi-music-note</v-icon>
+        </div>
+      </div>
+    </div>
+
+    <!-- track info -->
+    <div class="audio-info">
+      <div class="audio-title text-body-1 font-weight-medium">{{ fileName }}</div>
+    </div>
+
+    <!-- time labels -->
+    <div class="audio-times">
+      <span class="text-caption">{{ fmt(currentTime) }}</span>
+      <span class="text-caption">{{ fmt(duration) }}</span>
+    </div>
+
+    <!-- seek bar -->
+    <div
+      class="seek-container"
+      @pointerdown="onSeekPointerDown"
+      @pointermove="onSeekPointerMove"
+      @pointerup="onSeekPointerUp"
+    >
+      <div class="seek-track">
+        <div class="seek-buffered" :style="{ width: bufferedPct + '%' }"/>
+        <div class="seek-fill" :style="{ width: progressPct + '%' }"/>
+        <div class="seek-thumb" :style="{ left: progressPct + '%' }"/>
+      </div>
+    </div>
+
+    <!-- controls + volume row -->
+    <div class="audio-controls">
+      <div class="audio-volume">
+        <button class="vol-icon-btn" @click="toggleMute" type="button">
+          <v-icon :size="18">{{ volumeIcon }}</v-icon>
+        </button>
+        <input
+          type="range" class="vol-range"
+          min="0" max="100" :value="volumeValue"
+          @input="onVolumeInput"
+        />
+      </div>
+
+      <button class="play-btn" @click="togglePlay" type="button">
+        <v-icon :size="64" color="primary">{{ playing ? 'mdi-pause-circle-outline' : 'mdi-play-circle-outline' }}</v-icon>
+      </button>
+
+      <!-- right spacer matches volume width -->
+      <div class="audio-volume" style="visibility:hidden" aria-hidden="true">
+        <button class="vol-icon-btn" type="button"><v-icon :size="18">mdi-volume-high</v-icon></button>
+        <input type="range" class="vol-range" />
+      </div>
+    </div>
+
     <audio
-      v-else
-      ref="mediaEl"
-      :src="mediaUrl"
-      controls
-      class="audio-el"
+      ref="mediaEl" :src="mediaUrl"
+      @play="onPlay" @pause="onPause"
+      @timeupdate="onTimeUpdate" @loadedmetadata="onLoaded" @ended="onEnded"
     />
+  </div>
+
+  <!-- ═══════════════ VIDEO PLAYER ═══════════════ -->
+  <div
+    v-else
+    ref="videoWrapper"
+    class="video-player"
+    :class="{ 'hide-cursor': playing && !showControls }"
+    @mousemove="onMouseMove"
+    @mouseleave="onMouseLeave"
+  >
+    <video
+      ref="mediaEl" :src="mediaUrl" class="video-el"
+      @play="onPlay" @pause="onPause"
+      @timeupdate="onTimeUpdate" @loadedmetadata="onLoaded" @ended="onEnded"
+      @click="onVideoClick"
+    />
+
+    <!-- center play/pause flash -->
+    <transition name="center-flash">
+      <div v-if="showCenterIcon" class="center-flash-wrap">
+        <div class="center-flash-circle">
+          <v-icon size="52" color="white">{{ centerIconPlay ? 'mdi-play' : 'mdi-pause' }}</v-icon>
+        </div>
+      </div>
+    </transition>
+
+    <!-- controls overlay -->
+    <transition name="ctrl-fade">
+      <div v-show="showControls" class="video-ctrl-wrap">
+        <div class="video-ctrl-bar">
+          <!-- seek -->
+          <div
+            class="v-seek-container"
+            @pointerdown="onSeekPointerDown"
+            @pointermove="onSeekPointerMove"
+            @pointerup="onSeekPointerUp"
+          >
+            <div class="v-seek-track">
+              <div class="v-seek-buffered" :style="{ width: bufferedPct + '%' }"/>
+              <div class="v-seek-fill" :style="{ width: progressPct + '%' }"/>
+              <div class="v-seek-thumb" :style="{ left: progressPct + '%' }"/>
+            </div>
+          </div>
+
+          <!-- bottom row -->
+          <div class="video-ctrl-row">
+            <div class="ctrl-left">
+              <v-btn icon variant="text" size="small" @click.stop="togglePlay">
+                <v-icon size="22" color="white">{{ playing ? 'mdi-pause' : 'mdi-play' }}</v-icon>
+              </v-btn>
+              <v-btn icon variant="text" size="small" @click.stop="toggleMute">
+                <v-icon size="20" color="white">{{ volumeIcon }}</v-icon>
+              </v-btn>
+              <input
+                type="range" class="vol-range vol-range--video"
+                min="0" max="100" :value="volumeValue"
+                @input="onVolumeInput" @click.stop
+              />
+              <span class="ctrl-time">{{ fmt(currentTime) }} / {{ fmt(duration) }}</span>
+            </div>
+            <div class="ctrl-right">
+              <v-btn icon variant="text" size="small" @click.stop="toggleFullscreen">
+                <v-icon size="20" color="white">{{ isFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen' }}</v-icon>
+              </v-btn>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
 <style scoped>
-.media-app {
+/* ── shared tokens ─────────────────────────────────────── */
+.seek-container,
+.v-seek-container {
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+}
+
+/* ══════════════════════════════════════════════════════════
+   AUDIO PLAYER
+══════════════════════════════════════════════════════════ */
+.audio-player {
+  position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 100%;
-  padding: 16px;
-  background: #000;
+  gap: 10px;
+  padding: 24px 32px;
+  overflow: hidden;
+  background: rgb(var(--v-theme-surface));
 }
-.media-el {
+
+/* radial glow from primary color */
+.audio-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 80% 60% at 50% -10%,
+    rgba(var(--v-theme-primary), 0.18) 0%,
+    transparent 70%);
+  pointer-events: none;
+}
+
+/* art area ──────────────────────────────────── */
+.art-wrap {
+  position: relative;
+  margin-bottom: 4px;
+  width: 200px;
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cover-img {
+  width: 200px;
+  height: 200px;
+  border-radius: 12px;
+  object-fit: cover;
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.45),
+    0 0 40px rgba(var(--v-theme-primary), 0.15);
+  transition: box-shadow 0.4s ease;
+}
+.cover-img--playing {
+  box-shadow:
+    0 12px 48px rgba(0,0,0,0.5),
+    0 0 60px rgba(var(--v-theme-primary), 0.25);
+}
+
+/* vinyl record ─────────────────────────────── */
+
+.vinyl {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%,
+      rgba(var(--v-theme-primary), 0.9) 0%,
+      rgba(var(--v-theme-primary), 0.6) 30%,
+      #1a1a1a 31%,
+      #222 34%,
+      #1a1a1a 35%,
+      #222 45%,
+      #1a1a1a 46%,
+      #222 56%,
+      #1a1a1a 57%,
+      #222 70%,
+      #111 100%);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.06),
+    0 8px 32px rgba(0,0,0,0.45),
+    0 0 40px rgba(var(--v-theme-primary), 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: none;
+  transition: box-shadow 0.4s ease;
+}
+
+.vinyl--spin {
+  animation: vinyl-spin 4s linear infinite;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.06),
+    0 12px 48px rgba(0,0,0,0.5),
+    0 0 60px rgba(var(--v-theme-primary), 0.22);
+}
+
+@keyframes vinyl-spin { to { transform: rotate(360deg) } }
+
+.vinyl-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+.vinyl-ring-1 { inset: 36px; }
+.vinyl-ring-2 { inset: 54px; }
+.vinyl-ring-3 { inset: 70px; }
+
+.vinyl-hole {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(var(--v-theme-primary)) 0%, rgba(var(--v-theme-primary), 0.7) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  z-index: 1;
+}
+
+/* track info ───────────────────────────────── */
+.audio-info {
+  text-align: center;
+  max-width: 460px;
+}
+.audio-title {
+  color: rgb(var(--v-theme-on-surface));
+  opacity: 0.9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 380px;
+  letter-spacing: 0.01em;
+}
+
+/* times ─────────────────────────────────────── */
+.audio-times {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 420px;
+  opacity: 0.55;
+  padding: 0 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* seek bar ──────────────────────────────────── */
+.seek-container {
+  width: 100%;
+  max-width: 420px;
+  padding: 8px 0;
+}
+
+.seek-track {
+  position: relative;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(var(--v-theme-on-surface), 0.12);
+  transition: height 0.15s ease;
+}
+.seek-container:hover .seek-track { height: 6px; }
+
+.seek-buffered {
+  position: absolute;
+  inset: 0;
+  right: auto;
+  border-radius: 2px;
+  background: rgba(var(--v-theme-on-surface), 0.18);
+}
+.seek-fill {
+  position: absolute;
+  inset: 0;
+  right: auto;
+  border-radius: 2px;
+  background: rgb(var(--v-theme-primary));
+}
+.seek-thumb {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgb(var(--v-theme-primary));
+  transition: transform 0.15s ease;
+  pointer-events: none;
+}
+.seek-container:hover .seek-thumb { transform: translate(-50%, -50%) scale(1); }
+
+/* controls row ──────────────────────────────── */
+.audio-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+  max-width: 420px;
+}
+
+.play-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+  outline: none;
+  color: inherit;
+}
+.play-btn:hover  { opacity: 0.82; transform: scale(1.06); }
+.play-btn:active { transform: scale(0.94); }
+
+/* volume ─────────────────────────────────────── */
+.audio-volume {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0.65;
+  transition: opacity 0.2s;
+  flex: 1;
+}
+.audio-volume:hover { opacity: 1; }
+
+.vol-icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgb(var(--v-theme-on-surface));
+  opacity: 0.75;
+  transition: opacity 0.15s;
+  outline: none;
+  flex-shrink: 0;
+}
+.vol-icon-btn:hover { opacity: 1; }
+
+/* ── shared volume range ─────────────────────── */
+.vol-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 90px;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    rgb(var(--v-theme-primary)) 0%,
+    rgb(var(--v-theme-primary)) calc(v-bind(volumeValue) * 1%),
+    rgba(var(--v-theme-on-surface), 0.18) calc(v-bind(volumeValue) * 1%),
+    rgba(var(--v-theme-on-surface), 0.18) 100%
+  );
+  outline: none;
+  cursor: pointer;
+}
+.vol-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: rgb(var(--v-theme-primary));
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+.vol-range::-moz-range-thumb {
+  width: 12px; height: 12px;
+  border: none;
+  border-radius: 50%;
+  background: rgb(var(--v-theme-primary));
+}
+
+
+/* ══════════════════════════════════════════════════════════
+   VIDEO PLAYER
+══════════════════════════════════════════════════════════ */
+.video-player {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+}
+.video-player.hide-cursor { cursor: none; }
+
+.video-el {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  border-radius: 4px;
+  display: block;
 }
-.audio-el {
-  width: 100%;
+
+/* center flash ──────────────────────────────── */
+.center-flash-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.center-flash-circle {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.center-flash-enter-active,
+.center-flash-leave-active { transition: opacity 0.25s ease, transform 0.25s ease; }
+.center-flash-enter-from   { opacity: 0; transform: scale(0.7); }
+.center-flash-leave-to     { opacity: 0; transform: scale(1.2); }
+
+/* controls overlay ──────────────────────────── */
+.video-ctrl-wrap {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0,0,0,0.72) 100%);
+  padding: 40px 16px 10px;
+}
+.ctrl-fade-enter-active,
+.ctrl-fade-leave-active { transition: opacity 0.25s ease; }
+.ctrl-fade-enter-from,
+.ctrl-fade-leave-to { opacity: 0; }
+
+/* video seek ────────────────────────────────── */
+.v-seek-container {
+  padding: 6px 0;
+  margin-bottom: 2px;
+}
+.v-seek-track {
+  position: relative;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.2);
+  transition: height 0.15s ease;
+}
+.v-seek-container:hover .v-seek-track { height: 5px; }
+
+.v-seek-buffered {
+  position: absolute;
+  inset: 0; right: auto;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.28);
+}
+.v-seek-fill {
+  position: absolute;
+  inset: 0; right: auto;
+  border-radius: 2px;
+  background: rgb(var(--v-theme-primary));
+}
+.v-seek-thumb {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: rgb(var(--v-theme-primary));
+  transition: transform 0.15s ease;
+  pointer-events: none;
+}
+.v-seek-container:hover .v-seek-thumb { transform: translate(-50%, -50%) scale(1); }
+
+/* video bottom row ──────────────────────────── */
+.video-ctrl-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ctrl-left, .ctrl-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.ctrl-time {
+  font-size: 12px;
+  color: rgba(255,255,255,0.85);
+  font-variant-numeric: tabular-nums;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+.vol-range--video {
+  width: 72px;
+  background: linear-gradient(
+    to right,
+    rgb(var(--v-theme-primary)) 0%,
+    rgb(var(--v-theme-primary)) calc(v-bind(volumeValue) * 1%),
+    rgba(255,255,255,0.25) calc(v-bind(volumeValue) * 1%),
+    rgba(255,255,255,0.25) 100%
+  );
 }
 </style>
