@@ -7,8 +7,11 @@ const props = defineProps({
   winManager: { type: Object, default: null },
 })
 
-const mediaApi = inject('services')?.get('media.api')
-const mediaEl  = ref(null)
+const services   = inject('services')
+const mediaApi   = services?.get('media.api')
+const fileStore  = services?.get('explorer.state')
+const eventBus   = services?.get('event.bus')
+const mediaEl    = ref(null)
 const videoWrapper = ref(null)
 
 const playing      = ref(false)
@@ -41,6 +44,15 @@ const subLabel    = computed(() => activeSubIdx.value >= 0 ? (subtitles.value[ac
 const hasCover    = ref(false)
 const coverFailed = ref(false)
 const coverCircle = ref(true)
+
+// ── track list navigation ─────────────────────────────
+const audioEntries  = computed(() => fileStore?.displayedEntries?.filter(f => f.type === 'audio') ?? [])
+const trackIndex    = computed(() => audioEntries.value.findIndex(f => f.path === props.file?.path))
+const prevTrack     = computed(() => trackIndex.value > 0 ? audioEntries.value[trackIndex.value - 1] : null)
+const nextTrack     = computed(() => trackIndex.value >= 0 && trackIndex.value < audioEntries.value.length - 1 ? audioEntries.value[trackIndex.value + 1] : null)
+
+function navigatePrev() { if (prevTrack.value) props.winManager?.setProps(props.winId, { file: prevTrack.value }) }
+function navigateNext() { if (nextTrack.value) props.winManager?.setProps(props.winId, { file: nextTrack.value }) }
 
 watch(() => props.file, () => { hasCover.value = false; coverFailed.value = false }, { immediate: true })
 
@@ -242,19 +254,28 @@ function cycleSubtitle() {
   nextTick(applySubMode)
 }
 
+function onKey({ key, raw }) {
+  if (isVideo.value) return
+  if (key === 'ArrowLeft')  { raw.preventDefault(); navigatePrev() }
+  if (key === 'ArrowRight') { raw.preventDefault(); navigateNext() }
+}
+
 onMounted(() => {
   nextTick(() => mediaEl.value?.load())
   document.addEventListener('fullscreenchange', onFsChange)
+  eventBus?.on('keyboard:keydown', onKey)
 })
 onUnmounted(() => {
   document.removeEventListener('fullscreenchange', onFsChange)
   clearTimeout(hideTimer)
   stopSpectrum()
   audioCtx?.close()
+  eventBus?.off('keyboard:keydown', onKey)
 })
-watch(() => props.file, () => {
+watch(() => props.file, (f) => {
   playing.value = false; currentTime.value = 0; duration.value = 0
   activeSubIdx.value = -1
+  if (f) props.winManager?.setTitle(props.winId, f.name)
   nextTick(() => mediaEl.value?.load())
 })
 </script>
@@ -328,6 +349,7 @@ watch(() => props.file, () => {
 
     <!-- controls + volume row -->
     <div class="audio-controls">
+      <!-- left: volume -->
       <div class="audio-volume">
         <button class="vol-icon-btn" @click="toggleMute" type="button">
           <v-icon :size="18">{{ volumeIcon }}</v-icon>
@@ -339,14 +361,24 @@ watch(() => props.file, () => {
         />
       </div>
 
-      <button class="play-btn" @click="togglePlay" type="button">
-        <v-icon :size="64" color="primary">{{ playing ? 'mdi-pause-circle-outline' : 'mdi-play-circle-outline' }}</v-icon>
-      </button>
+      <!-- center: prev + play + next -->
+      <div class="ctrl-center">
+        <button class="skip-btn" @click="navigatePrev" :disabled="!prevTrack" type="button">
+          <v-icon size="26">mdi-skip-previous</v-icon>
+        </button>
+        <button class="play-btn" @click="togglePlay" type="button">
+          <v-icon :size="64" color="primary">{{ playing ? 'mdi-pause-circle-outline' : 'mdi-play-circle-outline' }}</v-icon>
+        </button>
+        <button class="skip-btn" @click="navigateNext" :disabled="!nextTrack" type="button">
+          <v-icon size="26">mdi-skip-next</v-icon>
+        </button>
+      </div>
 
-      <!-- right spacer matches volume width -->
-      <div class="audio-volume" style="visibility:hidden" aria-hidden="true">
-        <button class="vol-icon-btn" type="button"><v-icon :size="18">mdi-volume-high</v-icon></button>
-        <input type="range" class="vol-range" />
+      <!-- right: track counter -->
+      <div class="track-counter">
+        <span v-if="audioEntries.length > 1" class="text-caption">
+          {{ trackIndex + 1 }} / {{ audioEntries.length }}
+        </span>
       </div>
     </div>
 
@@ -672,14 +704,18 @@ watch(() => props.file, () => {
 .audio-controls {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 16px;
   width: 100%;
   max-width: 420px;
 }
 
+.ctrl-center {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .play-btn {
-  flex-shrink: 0;
   background: none;
   border: none;
   cursor: pointer;
@@ -694,6 +730,34 @@ watch(() => props.file, () => {
 }
 .play-btn:hover  { opacity: 0.82; transform: scale(1.06); }
 .play-btn:active { transform: scale(0.94); }
+
+.skip-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgb(var(--v-theme-on-surface));
+  opacity: 0.6;
+  transition: opacity 0.15s, transform 0.15s;
+  outline: none;
+}
+.skip-btn:hover:not(:disabled)  { opacity: 1; transform: scale(1.08); }
+.skip-btn:active:not(:disabled) { transform: scale(0.92); }
+.skip-btn:disabled { opacity: 0.2; cursor: default; }
+
+.track-counter {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  opacity: 0.45;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 
 /* volume ─────────────────────────────────────── */
 .audio-volume {
