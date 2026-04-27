@@ -59,7 +59,7 @@ const invalidateObj = { invalidate }
 provide('editorState', state)
 provide('editorHistory', {
   history,
-  pushHistory: (label, s) => pushHistory(label, s ?? state),
+  pushHistory: (label, s) => { pushHistory(label, s ?? state); state.isDirty = true },
   undo: (s) => { undo(s ?? state); invalidate() },
   redo: (s) => { redo(s ?? state); invalidate() },
   jumpTo: (idx, s) => { historyAPI.jumpTo(idx, s ?? state); invalidate() },
