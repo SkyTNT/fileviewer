@@ -39,6 +39,29 @@ _http_client = None
 router = APIRouter()
 
 
+@lru_cache(maxsize=4096)
+def _image_dims(path: str, mtime: float) -> "tuple[int, int] | None":
+    try:
+        with Image.open(path) as img:
+            return img.size
+    except Exception:
+        return None
+
+
+def _image_entry_enricher(path, entry_path: str, mtime: float) -> dict:
+    from urllib.parse import quote
+    result = {"thumbnail_url": f"/api/images/thumbnail?path={quote(entry_path, safe='')}"}
+    dims = _image_dims(str(path), mtime)
+    if dims:
+        result["img_w"], result["img_h"] = dims
+    suffix = path.suffix
+    json_path = path.with_suffix('.json')
+    if json_path.is_file():
+        meta_entry_path = (entry_path[:-len(suffix)] if suffix else entry_path) + '.json'
+        result['meta_path'] = meta_entry_path
+    return result
+
+
 @lru_cache(maxsize=512)
 def _generate_thumbnail(path: str, size: int, mtime: float) -> bytes:
     if path.lower().endswith('.psd'):
@@ -295,11 +318,13 @@ async def setup(ctx):
         timeout=10.0,
         limits=httpx.Limits(max_connections=100),
     )
+    ctx.services.get("file-type.registry").register_enricher("image", _image_entry_enricher, PLUGIN_ID)
     ctx.app.include_router(router, prefix="/api/images", tags=["images"])
 
 
 async def teardown(ctx):
     global _http_client
+    ctx.services.get("file-type.registry").unregister_plugin(PLUGIN_ID)
     if _http_client:
         await _http_client.aclose()
         _http_client = None

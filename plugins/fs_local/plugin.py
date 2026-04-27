@@ -80,15 +80,6 @@ def _get_file_type(path: Path) -> str:
     return _EXT_TO_TYPE.get(path.suffix.lower(), "unknown")
 
 
-@lru_cache(maxsize=4096)
-def _image_dims(path: str, mtime: float) -> "tuple[int, int] | None":
-    try:
-        from PIL import Image
-        with Image.open(path) as img:
-            return img.size
-    except Exception:
-        return None
-
 
 def _entry_info(p: Path, slug: "str | None", root: Path) -> dict:
     path_str = build_entry_path(p, slug, root)
@@ -106,10 +97,10 @@ def _entry_info(p: Path, slug: "str | None", root: Path) -> dict:
             "is_symlink": is_symlink,
             "extension": p.suffix.lower() if p.is_file() else None,
         }
-        if ftype == "image" and p.is_file():
-            dims = _image_dims(str(p), stat.st_mtime)
-            if dims:
-                info["img_w"], info["img_h"] = dims
+        if p.is_file() and _file_type_registry is not None:
+            extras = _file_type_registry.enrich_entry(ftype, p, path_str, stat.st_mtime)
+            if extras:
+                info.update(extras)
         return info
     except (PermissionError, OSError):
         return {
@@ -609,7 +600,9 @@ def _fs_resolve(path_str: str) -> Path:
 
 
 async def setup(ctx):
+    global _file_type_registry
     ft_registry = ctx.services.get("file-type.registry")
+    _file_type_registry = ft_registry
     ft_registry.register("image",   list(IMAGE_EXTENSIONS),   PLUGIN_ID)
     ft_registry.register("parquet", list(PARQUET_EXTENSIONS), PLUGIN_ID)
     ft_registry.register("csv",     list(CSV_EXTENSIONS),     PLUGIN_ID)

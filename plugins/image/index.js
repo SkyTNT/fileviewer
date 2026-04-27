@@ -6,6 +6,7 @@ import ja   from './locales/ja.js'
 import ImageViewer from './ImageViewer.vue'
 import ImageComparisonViewer from './ImageComparisonViewer.vue'
 import ImageEditor from './ImageEditor.vue'
+import ImageMetaSection from './ImageMetaSection.vue'
 import { createImagesApi } from './api.js'
 export { manifest } from './manifest.js'
 
@@ -23,6 +24,13 @@ export async function setup(ctx) {
   i18n.extend('image', 'zh-CN', zhCN)
   i18n.extend('image', 'zh-TW', zhTW)
   i18n.extend('image', 'ja', ja)
+
+  const ft = await ctx.services.getAsync('file.types')
+  ft.registerDetailSection('image', {
+    id: 'image-json-meta',
+    component: markRaw(ImageMetaSection),
+    propsFor: (entry) => entry.meta_path ? { file: entry } : null,
+  }, 'image')
 
   const [http, winMgr, registry] = await Promise.all([
     ctx.services.getAsync('network.http'),
@@ -111,4 +119,5 @@ export async function teardown(ctx) {
   registry.unregister('image-editor')
   ctx.services.get('action.registry').unregisterAll('image')
   ctx.services.unregister('images.api', 'image')
+  ctx.services.get('file.types').unregisterDetailSections('image')
 }

@@ -3,11 +3,8 @@ import { computed, ref, watch, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const fileStore = inject('services')?.get('explorer.state')
-const JsonNode  = inject('services')?.get('text.json-node')
 const { t }     = useI18n()
 const services  = inject('services')
-const imagesApi = services?.get('images.api')
-const textApi   = services?.get('text.api')
 const ft        = services?.get('file.types')
 
 const singleActions = computed(() => {
@@ -22,32 +19,16 @@ const multiActions = computed(() => {
 const file    = computed(() => fileStore.selectedEntry)
 const isMulti = computed(() => fileStore.selectedEntries.length > 1)
 
-const typeIcon   = computed(() => ft?.icon(file.value?.type))
-const typeColor  = computed(() => ft?.color(file.value?.type, 'surface-variant'))
-const formatSize = (bytes) => ft?.formatBytes(bytes, '—') ?? '—'
-const fmtDate    = (ts)    => ft?.formatDate(ts, '—') ?? '—'
+const typeIcon    = computed(() => ft?.icon(file.value?.type))
+const typeColor   = computed(() => ft?.color(file.value?.type, 'surface-variant'))
+const formatSize  = (bytes) => ft?.formatBytes(bytes, '—') ?? '—'
+const fmtDate     = (ts)    => ft?.formatDate(ts, '—') ?? '—'
 
-const isImage  = computed(() => file.value?.type === 'image')
-const imgError = ref(false)
+const previewUrl    = computed(() => ft?.thumbnailUrl(file.value, 400) ?? null)
+const extraFields   = computed(() => ft?.extraDetailFields(file.value) ?? [])
+const detailSections = computed(() => ft?.detailSections(file.value) ?? [])
+const imgError      = ref(false)
 watch(file, () => { imgError.value = false })
-
-// Same-name .json meta file (images only)
-const metaData    = ref(null)
-const metaLoading = ref(false)
-watch(file, async (f) => {
-  metaData.value = null
-  if (!f || f.type !== 'image' || !f.extension) return
-  const jsonPath = f.path.slice(0, -f.extension.length) + '.json'
-  metaLoading.value = true
-  try {
-    const res = await textApi.getContent(jsonPath)
-    metaData.value = JSON.parse(res.data.content)
-  } catch {
-    metaData.value = null
-  } finally {
-    metaLoading.value = false
-  }
-}, { immediate: true })
 </script>
 
 <template>
@@ -131,8 +112,8 @@ watch(file, async (f) => {
     <!-- Preview -->
     <div class="preview-area pa-4 d-flex align-center justify-center">
       <img
-        v-if="isImage && !imgError"
-        :src="imagesApi.thumbnailUrl(file.path, 400)"
+        v-if="previewUrl && !imgError"
+        :src="previewUrl"
         class="preview-img" :alt="file.name"
         @error="imgError = true"
       />
@@ -199,19 +180,16 @@ watch(file, async (f) => {
         <span class="info-label text-caption text-medium-emphasis">{{ t('detail.path') }}</span>
         <span class="info-value text-body-2 text-wrap path-text">{{ file.path || '/' }}</span>
       </div>
+      <div v-for="field in extraFields" :key="field.key" class="info-row">
+        <span class="info-label text-caption text-medium-emphasis">{{ t(field.label) }}</span>
+        <span class="info-value text-body-2">{{ field.value }}</span>
+      </div>
     </div>
 
-    <!-- JSON meta from sibling .json file -->
-    <template v-if="isImage">
+    <!-- Type-specific detail sections from file.types registry -->
+    <template v-for="section in detailSections" :key="section.id">
       <v-divider class="mt-1" />
-      <div class="px-3 pt-3 pb-1 d-flex align-center">
-        <span class="text-caption text-medium-emphasis" style="text-transform:uppercase;letter-spacing:.05em;font-size:11px">{{ t('detail.meta') }}</span>
-        <v-progress-circular v-if="metaLoading" indeterminate size="12" width="2" class="ml-2" />
-        <span v-else-if="!metaData" class="text-caption text-disabled ml-2">{{ t('detail.noJsonFound') }}</span>
-      </div>
-      <div v-if="metaData" class="px-3 pb-3 meta-tree">
-        <JsonNode :value="metaData" :depth="0" />
-      </div>
+      <component :is="section.component" v-bind="section.props" />
     </template>
   </div>
 </template>
@@ -225,5 +203,4 @@ watch(file, async (f) => {
 .info-label   { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
 .info-value   { word-break: break-all; }
 .path-text    { font-family: 'Roboto Mono', monospace; font-size: 12px; }
-.meta-tree    { overflow-x: auto; }
 </style>

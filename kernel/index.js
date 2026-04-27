@@ -139,6 +139,8 @@ export class Kernel {
     const fileTypeRegistry = {
       _icons:  {},
       _colors: {},
+      _detailFields: {},
+      _detailSections: {},
       register(type, icon, color) {
         if (icon  != null) this._icons[type]  = icon
         if (color != null) this._colors[type] = color
@@ -155,6 +157,42 @@ export class Kernel {
       formatDate(ts, fallback = '') {
         if (!ts) return fallback
         return new Date(ts * 1000).toLocaleString()
+      },
+      thumbnailUrl(entry, size = 300) {
+        if (!entry?.thumbnail_url) return null
+        return entry.thumbnail_url + '&size=' + size
+      },
+      registerDetailFields(type, fn, pluginId) {
+        if (!this._detailFields[type]) this._detailFields[type] = []
+        this._detailFields[type].push({ fn, pluginId })
+      },
+      unregisterDetailFields(pluginId) {
+        for (const type of Object.keys(this._detailFields)) {
+          this._detailFields[type] = this._detailFields[type].filter(e => e.pluginId !== pluginId)
+        }
+      },
+      extraDetailFields(entry) {
+        if (!entry) return []
+        const entries = this._detailFields[entry.type] ?? []
+        return entries
+          .flatMap(({ fn }) => { try { return fn(entry) ?? [] } catch { return [] } })
+          .filter(f => f.value != null && f.value !== '')
+      },
+      registerDetailSection(type, spec, pluginId) {
+        // spec: { id, component, propsFor(entry) -> props | null }
+        if (!this._detailSections[type]) this._detailSections[type] = []
+        this._detailSections[type].push({ ...spec, pluginId })
+      },
+      unregisterDetailSections(pluginId) {
+        for (const type of Object.keys(this._detailSections)) {
+          this._detailSections[type] = this._detailSections[type].filter(s => s.pluginId !== pluginId)
+        }
+      },
+      detailSections(entry) {
+        if (!entry) return []
+        return (this._detailSections[entry.type] ?? [])
+          .map(s => { try { const props = s.propsFor(entry); return props != null ? { id: s.id, component: s.component, props } : null } catch { return null } })
+          .filter(Boolean)
       },
     }
     services.register('file.types', fileTypeRegistry, 'kernel')

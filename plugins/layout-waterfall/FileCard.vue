@@ -8,14 +8,10 @@ const emit           = defineEmits(['context-menu', 'select'])
 const services    = inject('services')
 const store       = services.get('explorer.state')
 const appRegistry = services?.get('app.registry')
-const imagesApi   = services?.get('images.api')
 const ft          = services.get('file.types')
 
 const isSelected   = computed(() => store.selectedEntries.some(e => e.path === props.file.path))
-const isImage      = computed(() => props.file.type === 'image')
-const thumbnailUrl = computed(() =>
-  isImage.value ? imagesApi.thumbnailUrl(props.file.path, 400) : null
-)
+const thumbnailUrl = computed(() => ft.thumbnailUrl(props.file, 400))
 const imgError = ref(false)
 
 const typeIcon   = computed(() => ft.icon(props.file.type))
@@ -56,7 +52,7 @@ function onContextMenu(e) {
     @contextmenu="onContextMenu"
   >
     <img
-      v-if="isImage && !imgError"
+      v-if="thumbnailUrl && !imgError"
       :src="thumbnailUrl"
       :alt="file.name"
       class="thumb-img"
