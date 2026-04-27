@@ -22,7 +22,8 @@ const showCenterIcon = ref(false)
 const centerIconPlay = ref(false)
 const isDragging   = ref(false)
 const dragValue    = ref(0)
-const isFullscreen = ref(false)
+const isFullscreen  = ref(false)
+const activeSubIdx  = ref(-1)
 
 let hideTimer = null
 
@@ -34,6 +35,8 @@ const isVideo = computed(() => {
 const mediaUrl    = computed(() => props.file ? mediaApi.streamUrl(props.file.path) : '')
 const coverUrl    = computed(() => props.file ? mediaApi.thumbnailUrl(props.file.path, 400) : '')
 const fileName    = computed(() => props.file?.name || '')
+const subtitles   = computed(() => props.file?.subtitles || [])
+const subLabel    = computed(() => activeSubIdx.value >= 0 ? (subtitles.value[activeSubIdx.value]?.label || String(activeSubIdx.value + 1)) : null)
 
 const hasCover    = ref(false)
 const coverFailed = ref(false)
@@ -151,6 +154,20 @@ function toggleFullscreen() {
 }
 function onFsChange() { isFullscreen.value = !!document.fullscreenElement }
 
+function applySubMode() {
+  const tracks = mediaEl.value?.textTracks
+  if (!tracks) return
+  for (let i = 0; i < tracks.length; i++)
+    tracks[i].mode = i === activeSubIdx.value ? 'showing' : 'hidden'
+}
+
+function cycleSubtitle() {
+  const count = subtitles.value.length
+  if (!count) return
+  activeSubIdx.value = activeSubIdx.value >= count - 1 ? -1 : activeSubIdx.value + 1
+  nextTick(applySubMode)
+}
+
 onMounted(() => {
   nextTick(() => mediaEl.value?.load())
   document.addEventListener('fullscreenchange', onFsChange)
@@ -161,6 +178,7 @@ onUnmounted(() => {
 })
 watch(() => props.file, () => {
   playing.value = false; currentTime.value = 0; duration.value = 0
+  activeSubIdx.value = -1
   nextTick(() => mediaEl.value?.load())
 })
 </script>
@@ -274,7 +292,15 @@ watch(() => props.file, () => {
       @play="onPlay" @pause="onPause"
       @timeupdate="onTimeUpdate" @loadedmetadata="onLoaded" @ended="onEnded"
       @click="onVideoClick"
-    />
+    >
+      <track
+        v-for="(sub, i) in subtitles" :key="sub.url"
+        kind="subtitles"
+        :srclang="sub.lang || 'und'"
+        :label="sub.label"
+        :src="sub.url"
+      />
+    </video>
 
     <!-- center play/pause flash -->
     <transition name="center-flash">
@@ -320,6 +346,14 @@ watch(() => props.file, () => {
               <span class="ctrl-time">{{ fmt(currentTime) }} / {{ fmt(duration) }}</span>
             </div>
             <div class="ctrl-right">
+              <v-btn
+                v-if="subtitles.length"
+                icon variant="text" size="small"
+                :title="subLabel ? `字幕: ${subLabel}` : '字幕关闭'"
+                @click.stop="cycleSubtitle"
+              >
+                <v-icon size="20" :color="subLabel ? 'primary' : 'white'">mdi-closed-caption</v-icon>
+              </v-btn>
               <v-btn icon variant="text" size="small" @click.stop="toggleFullscreen">
                 <v-icon size="20" color="white">{{ isFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen' }}</v-icon>
               </v-btn>

@@ -1,5 +1,6 @@
 import asyncio
 import io
+import re
 import subprocess
 from functools import lru_cache
 
@@ -103,6 +104,9 @@ def _generate_media_thumbnail(path: str, suffix: str, size: int, mtime: float) -
     return _audio_cover_sync(path, size)
 
 
+BITMAP_SUB_CODECS = {'dvd_subtitle', 'hdmv_pgs_subtitle', 'dvbsub', 'xsub', 'dvb_teletext'}
+
+
 @lru_cache(maxsize=256)
 def _video_info_sync(path: str, mtime: float) -> dict:
     try:
@@ -114,19 +118,31 @@ def _video_info_sync(path: str, mtime: float) -> dict:
         )
         data = _json.loads(result.stdout)
         info = {}
+        sub_streams = []
         for stream in data.get('streams', []):
-            if stream.get('codec_type') == 'video':
+            ctype = stream.get('codec_type')
+            if ctype == 'video' and 'img_w' not in info:
                 if stream.get('width'):
                     info['img_w'] = stream['width']
                 if stream.get('height'):
                     info['img_h'] = stream['height']
                 if stream.get('duration'):
                     info['duration'] = float(stream['duration'])
-                break
+            elif ctype == 'subtitle':
+                codec = stream.get('codec_name', '')
+                if codec in BITMAP_SUB_CODECS:
+                    continue
+                tags = stream.get('tags', {})
+                lang  = tags.get('language') or tags.get('lang') or ''
+                title = tags.get('title') or tags.get('handler_name') or ''
+                label = title or lang or f'Track {len(sub_streams) + 1}'
+                sub_streams.append({'index': stream['index'], 'lang': lang, 'label': label})
         if 'duration' not in info:
             dur = data.get('format', {}).get('duration')
             if dur:
                 info['duration'] = float(dur)
+        if sub_streams:
+            info['_sub_streams'] = sub_streams
         return info
     except Exception:
         return {}
@@ -167,13 +183,135 @@ def _audio_info_sync(path: str, mtime: float) -> dict:
         return {}
 
 
+SUBTITLE_EXTS = {'.srt', '.vtt', '.ass', '.ssa'}
+
+
+def _srt_to_vtt(text: str) -> str:
+    vtt = re.sub(r'(\d{2}:\d{2}:\d{2}),(\d{3})', r'\1.\2', text)
+    return 'WEBVTT\n\n' + vtt.strip()
+
+
+def _ass_time(t: str) -> str:
+    try:
+        h, m, s = t.strip().split(':')
+        s_int, cs = s.split('.')
+        return f'{int(h):02d}:{int(m):02d}:{int(s_int):02d}.{int(cs) * 10:03d}'
+    except Exception:
+        return ''
+
+
+def _ass_to_vtt(text: str) -> str:
+    lines = ['WEBVTT', '']
+    format_cols: list[str] = []
+    in_events = False
+    for line in text.splitlines():
+        s = line.strip()
+        if s == '[Events]':
+            in_events = True
+        elif in_events and s.startswith('Format:'):
+            format_cols = [c.strip() for c in s[7:].split(',')]
+        elif in_events and s.startswith('Dialogue:') and format_cols:
+            parts = s[9:].split(',', len(format_cols) - 1)
+            if len(parts) == len(format_cols):
+                row = dict(zip(format_cols, parts))
+                start = _ass_time(row.get('Start', ''))
+                end = _ass_time(row.get('End', ''))
+                txt = re.sub(r'\{[^}]*\}', '', row.get('Text', ''))
+                txt = txt.replace('\\N', '\n').replace('\\n', '\n').strip()
+                if start and end and txt:
+                    lines += [f'{start} --> {end}', txt, '']
+    return '\n'.join(lines)
+
+
+def _find_subtitle_files(path, entry_path: str) -> list:
+    from urllib.parse import quote
+    parent = path.parent
+    stem = path.stem
+    entry_parent = entry_path.rsplit('/', 1)[0] if '/' in entry_path else ''
+    result = []
+    try:
+        for f in sorted(parent.iterdir()):
+            if f.suffix.lower() not in SUBTITLE_EXTS:
+                continue
+            f_lower = f.stem.lower()
+            stem_lower = stem.lower()
+            if f_lower == stem_lower or f_lower.startswith(stem_lower + '.'):
+                extra = f.stem[len(stem):]
+                lang = extra.lstrip('.') or 'und'
+                label = lang if lang != 'und' else f.stem
+                sub_path = f'{entry_parent}/{f.name}' if entry_parent else f.name
+                result.append({
+                    'label': label,
+                    'lang': '' if lang == 'und' else lang,
+                    'url': f'/api/media/subtitle?path={quote(sub_path, safe="")}',
+                })
+    except Exception:
+        pass
+    return result
+
+
+@router.get("/subtitle")
+def get_subtitle(path: str = Query(...), stream: int = Query(None)):
+    file_path = validate_path(path)
+    suffix = file_path.suffix.lower()
+
+    if stream is not None:
+        if suffix not in VIDEO_MIME_TYPES:
+            raise HTTPException(status_code=400, detail="Not a video file")
+        try:
+            r = subprocess.run(
+                ['ffmpeg', '-i', str(file_path),
+                 '-map', f'0:{stream}', '-f', 'webvtt', 'pipe:1', '-loglevel', 'quiet'],
+                capture_output=True, timeout=30,
+            )
+            if not r.stdout:
+                raise HTTPException(status_code=404, detail="No subtitle data")
+            content = r.stdout.decode('utf-8', errors='replace')
+            if not content.strip().startswith('WEBVTT'):
+                content = 'WEBVTT\n\n' + content
+            return Response(content=content, media_type='text/vtt; charset=utf-8',
+                            headers={'Cache-Control': 'no-cache'})
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    if suffix not in SUBTITLE_EXTS:
+        raise HTTPException(status_code=400, detail="Not a subtitle file")
+    try:
+        text = file_path.read_text(encoding='utf-8-sig', errors='replace')
+        if suffix == '.vtt':
+            content = text
+        elif suffix == '.srt':
+            content = _srt_to_vtt(text)
+        else:
+            content = _ass_to_vtt(text)
+        return Response(content=content, media_type='text/vtt; charset=utf-8',
+                        headers={'Cache-Control': 'no-cache'})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 def _video_entry_enricher(path, entry_path: str, mtime: float) -> dict:
     from urllib.parse import quote
     info = _video_info_sync(str(path), mtime)
-    return {
+    result = {
         'thumbnail_url': f'/api/media/thumbnail?path={quote(entry_path, safe="")}',
-        **info,
+        **{k: v for k, v in info.items() if not k.startswith('_')},
     }
+    subs = []
+    for s in info.get('_sub_streams', []):
+        subs.append({
+            'label': s['label'],
+            'lang':  s['lang'],
+            'url':   f'/api/media/subtitle?path={quote(entry_path, safe="")}&stream={s["index"]}',
+        })
+    subs.extend(_find_subtitle_files(path, entry_path))
+    if subs:
+        result['subtitles'] = subs
+    return result
 
 
 def _audio_entry_enricher(path, entry_path: str, mtime: float) -> dict:
