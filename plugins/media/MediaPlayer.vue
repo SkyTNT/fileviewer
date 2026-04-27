@@ -17,7 +17,7 @@ const videoWrapper = ref(null)
 const playing      = ref(false)
 const currentTime  = ref(0)
 const duration     = ref(0)
-const volume       = ref(1)
+const volume       = ref(Number(localStorage.getItem('fv-media-volume') ?? 1))
 const muted        = ref(false)
 const buffered     = ref(0)
 const showControls = ref(true)
@@ -99,6 +99,7 @@ function onTimeUpdate() {
 }
 function onLoaded() {
   duration.value = mediaEl.value?.duration || 0
+  if (mediaEl.value) mediaEl.value.volume = volume.value
   mediaEl.value?.play()
 }
 
@@ -130,6 +131,7 @@ function onSeekPointerUp(e) {
 function setVolume(val) {
   volume.value = val / 100
   muted.value = val === 0
+  localStorage.setItem('fv-media-volume', val / 100)
   if (mediaEl.value) { mediaEl.value.volume = val / 100; mediaEl.value.muted = val === 0 }
 }
 function toggleMute() {
