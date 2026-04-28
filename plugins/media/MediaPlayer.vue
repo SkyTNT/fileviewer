@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onUnmounted, inject } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps({
   file:       { type: Object, required: true },
@@ -7,6 +8,7 @@ const props = defineProps({
   winManager: { type: Object, default: null },
 })
 
+const { t } = useI18n()
 const services   = inject('services')
 const mediaApi   = services?.get('media.api')
 const fileStore  = services?.get('explorer.state')
@@ -27,6 +29,7 @@ const isDragging   = ref(false)
 const dragValue    = ref(0)
 const isFullscreen  = ref(false)
 const activeSubIdx  = ref(-1)
+const subMenuOpen   = ref(false)
 
 let hideTimer = null
 
@@ -249,15 +252,25 @@ function applySubMode() {
     tracks[i].mode = i === activeSubIdx.value ? 'showing' : 'hidden'
 }
 
-function cycleSubtitle() {
-  const count = subtitles.value.length
-  if (!count) return
-  activeSubIdx.value = activeSubIdx.value >= count - 1 ? -1 : activeSubIdx.value + 1
+function selectSubtitle(idx) {
+  activeSubIdx.value = idx
   nextTick(applySubMode)
 }
 
+function seekBy(seconds) {
+  if (!mediaEl.value) return
+  const t = Math.max(0, Math.min(duration.value, mediaEl.value.currentTime + seconds))
+  mediaEl.value.currentTime = t
+  currentTime.value = t
+}
+
 function onKey({ key, raw }) {
-  if (isVideo.value) return
+  if (key === ' ') { raw.preventDefault(); togglePlay(); return }
+  if (isVideo.value) {
+    if (key === 'ArrowLeft')  { raw.preventDefault(); seekBy(-5) }
+    if (key === 'ArrowRight') { raw.preventDefault(); seekBy(5) }
+    return
+  }
   if (key === 'ArrowLeft')  { raw.preventDefault(); navigatePrev() }
   if (key === 'ArrowRight') { raw.preventDefault(); navigateNext() }
 }
@@ -459,14 +472,37 @@ watch(() => props.file, (f) => {
               <span class="ctrl-time">{{ fmt(currentTime) }} / {{ fmt(duration) }}</span>
             </div>
             <div class="ctrl-right">
-              <v-btn
+              <v-menu
                 v-if="subtitles.length"
-                icon variant="text" size="small"
-                :title="subLabel ? `字幕: ${subLabel}` : '字幕关闭'"
-                @click.stop="cycleSubtitle"
+                v-model="subMenuOpen"
+                location="top"
+                :close-on-content-click="true"
               >
-                <v-icon size="20" :color="subLabel ? 'primary' : 'white'">mdi-closed-caption</v-icon>
-              </v-btn>
+                <template #activator="{ props: menuProps }">
+                  <v-btn
+                    icon variant="text" size="small"
+                    v-bind="menuProps"
+                    @click.stop
+                  >
+                    <v-icon size="20" :color="subLabel ? 'primary' : 'white'">mdi-closed-caption</v-icon>
+                  </v-btn>
+                </template>
+                <v-list density="compact" min-width="140">
+                  <v-list-item
+                    :active="activeSubIdx === -1"
+                    @click="selectSubtitle(-1)"
+                  >
+                    <v-list-item-title>{{ t('media.subtitleOff') }}</v-list-item-title>
+                  </v-list-item>
+                  <v-list-item
+                    v-for="(sub, i) in subtitles" :key="sub.url"
+                    :active="activeSubIdx === i"
+                    @click="selectSubtitle(i)"
+                  >
+                    <v-list-item-title>{{ sub.label || t('media.subtitleTrack', { n: i + 1 }) }}</v-list-item-title>
+                  </v-list-item>
+                </v-list>
+              </v-menu>
               <v-btn icon variant="text" size="small" @click.stop="toggleFullscreen">
                 <v-icon size="20" color="white">{{ isFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen' }}</v-icon>
               </v-btn>
@@ -944,5 +980,13 @@ watch(() => props.file, (f) => {
     rgba(255,255,255,0.25) calc(v-bind(volumeValue) * 1%),
     rgba(255,255,255,0.25) 100%
   );
+}
+</style>
+
+<style>
+video::cue {
+  background-color: transparent;
+  color: white;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.6);
 }
 </style>

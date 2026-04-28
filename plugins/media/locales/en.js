@@ -4,5 +4,7 @@ export default {
     title:    'Title',
     artist:   'Artist',
     album:    'Album',
+    subtitleOff:   'Off',
+    subtitleTrack: 'Subtitle {n}',
   },
 }

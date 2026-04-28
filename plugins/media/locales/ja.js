@@ -4,5 +4,7 @@ export default {
     title:    'タイトル',
     artist:   'アーティスト',
     album:    'アルバム',
+    subtitleOff:   'オフ',
+    subtitleTrack: '字幕 {n}',
   },
 }
