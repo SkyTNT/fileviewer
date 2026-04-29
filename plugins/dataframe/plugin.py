@@ -98,11 +98,18 @@ def get_data(
                 lf = sql_ctx.execute(sql_str, eager=False)
             else:
                 lf = sql_ctx.execute(f"SELECT * FROM df WHERE {sql_str}", eager=False)
+        # Count before sort — sort doesn't affect total, and streaming works without sort in plan.
+        try:
+            total = lf.select(pl.len()).collect(engine="streaming").item()
+        except Exception:
+            total = lf.select(pl.len()).collect().item()
         if sort_col:
             lf = lf.sort(sort_col, descending=not sort_asc)
-        total = lf.select(pl.len()).collect().item()
         offset = (page - 1) * page_size
-        chunk = lf.slice(offset, page_size).collect()
+        try:
+            chunk = lf.slice(offset, page_size).collect(engine="streaming")
+        except Exception:
+            chunk = lf.slice(offset, page_size).collect()
         data = chunk.to_dicts()
         for row in data:
             for k, v in row.items():
