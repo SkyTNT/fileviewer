@@ -296,50 +296,98 @@ function buildTracks(parsed) {
   for (let ti = 0; ti < parsed.tracks.length; ti++) {
     const evs = parsed.tracks[ti]
     const pending = new Map()
-    const notes = [], otherEvs = [], ccEventsArr = [], pcEventsArr = []
+
+    // Per-channel collections
+    const channelNotes    = new Map()  // channel -> note[]
+    const channelCcEvents = new Map()  // channel -> ccEvent[]
+    const channelPcEvents = new Map()  // channel -> pcEvent[]
+    const channelProgram  = new Map()  // channel -> initial program number
+    const channelOtherEvs = new Map()  // channel (or -1) -> rawBytes event[]
+
     let name = ti === 0 ? 'Conductor' : `Track ${ti}`
-    let primaryChannel = 0
-    let program = 0
 
     for (const ev of evs) {
       if (ev.type === 'trackName') { name = ev.name; continue }
       if (ev.type === 'tempo')    { result.tempos.push({ tick: ev.tick, tempo: ev.tempo }); continue }
       if (ev.type === 'timeSig')  { result.timeSigs.push({ tick: ev.tick, num: ev.num, den: ev.den }); continue }
       if (ev.type === 'pc') {
-        if (ev.tick === 0) program = ev.program
-        else pcEventsArr.push({ tick: ev.tick, program: ev.program })
+        const ch = ev.channel
+        if (ev.tick === 0) channelProgram.set(ch, ev.program)
+        else {
+          if (!channelPcEvents.has(ch)) channelPcEvents.set(ch, [])
+          channelPcEvents.get(ch).push({ tick: ev.tick, program: ev.program })
+        }
         continue
       }
       if (ev.type === 'noteOn') {
         pending.set(`${ev.channel}-${ev.note}`, { tick: ev.tick, velocity: ev.velocity, channel: ev.channel })
-        primaryChannel = ev.channel
         continue
       }
       if (ev.type === 'noteOff') {
         const key = `${ev.channel}-${ev.note}`, p = pending.get(key)
         if (p) {
-          notes.push({ id: ++noteIdSeq, channel: p.channel, note: ev.note, startTick: p.tick, endTick: ev.tick, velocity: p.velocity, selected: false })
+          const ch = p.channel
+          if (!channelNotes.has(ch)) channelNotes.set(ch, [])
+          channelNotes.get(ch).push({ id: ++noteIdSeq, channel: ch, note: ev.note, startTick: p.tick, endTick: ev.tick, velocity: p.velocity, selected: false })
           pending.delete(key)
         }
         continue
       }
       if (ev.type === 'cc') {
-        ccEventsArr.push({ tick: ev.tick, controller: ev.controller, value: ev.value })
+        const ch = ev.channel
+        if (!channelCcEvents.has(ch)) channelCcEvents.set(ch, [])
+        channelCcEvents.get(ch).push({ tick: ev.tick, controller: ev.controller, value: ev.value })
         continue
       }
-      if (ev.rawBytes) otherEvs.push({ tick: ev.tick, rawBytes: ev.rawBytes })
+      if (ev.rawBytes) {
+        // aftertouch / channel-pressure / pitch-bend all carry a channel
+        const ch = ev.channel ?? -1
+        if (!channelOtherEvs.has(ch)) channelOtherEvs.set(ch, [])
+        channelOtherEvs.get(ch).push({ tick: ev.tick, rawBytes: ev.rawBytes })
+      }
     }
 
-    ccEventsArr.sort((a, b) => a.tick - b.tick)
-    pcEventsArr.sort((a, b) => a.tick - b.tick)
-    result.tracks.push({
-      index: ti, name: name.trim() || `Track ${ti + 1}`,
-      channel: primaryChannel,
-      program,
-      color: TRACK_COLORS[ti % TRACK_COLORS.length],
-      muted: false, solo: false,
-      notes, events: otherEvs, ccEvents: ccEventsArr, pcEvents: pcEventsArr,
-    })
+    // Collect every channel that appears in this MIDI track
+    const allChannels = new Set([
+      ...channelNotes.keys(), ...channelCcEvents.keys(),
+      ...channelPcEvents.keys(), ...channelProgram.keys(),
+      ...[...channelOtherEvs.keys()].filter(c => c !== -1),
+    ])
+    const globalOtherEvs = channelOtherEvs.get(-1) || []
+
+    if (allChannels.size === 0) {
+      // Meta-only / conductor track — keep as a single empty track
+      const idx = result.tracks.length
+      result.tracks.push({
+        index: idx, name: name.trim() || `Track ${ti + 1}`,
+        channel: 0, program: 0,
+        color: TRACK_COLORS[idx % TRACK_COLORS.length],
+        muted: false, solo: false,
+        notes: [], events: globalOtherEvs, ccEvents: [], pcEvents: [],
+      })
+    } else {
+      // One editor-track per channel found in this MIDI track
+      const sortedChannels = [...allChannels].sort((a, b) => a - b)
+      const multi = sortedChannels.length > 1
+      const baseName = name.trim() || `Track ${ti + 1}`
+      for (let ci = 0; ci < sortedChannels.length; ci++) {
+        const ch = sortedChannels[ci]
+        const trackName = multi ? `${baseName} Ch.${ch + 1}` : baseName
+        const notes  = channelNotes.get(ch) || []
+        const ccEvs  = (channelCcEvents.get(ch) || []).sort((a, b) => a.tick - b.tick)
+        const pcEvs  = (channelPcEvents.get(ch) || []).sort((a, b) => a.tick - b.tick)
+        // Unassigned raw events go into the first channel's track
+        const otherEvs = [...(channelOtherEvs.get(ch) || []), ...(ci === 0 ? globalOtherEvs : [])]
+        const idx = result.tracks.length
+        result.tracks.push({
+          index: idx, name: trackName,
+          channel: ch, program: channelProgram.get(ch) ?? 0,
+          color: TRACK_COLORS[idx % TRACK_COLORS.length],
+          muted: false, solo: false,
+          notes, events: otherEvs, ccEvents: ccEvs, pcEvents: pcEvs,
+        })
+      }
+    }
   }
 
   if (result.tempos.length === 0) result.tempos.push({ tick: 0, tempo: 500000 })
@@ -517,13 +565,16 @@ function draw() {
       const ny = RULER_H + noteToY(note.note) - scrollY.value
       const nh = rh - 1
       if (nx + nw < KEYS_W || nx > W || ny + nh < RULER_H || ny > RULER_H + noteH) continue
-      ctx.fillStyle = note.selected ? '#ffffff' : color
-      ctx.globalAlpha = note.selected ? 1 : 0.88
+      const isActive = (playing.value || (drag?.type === 'ruler' && drag?.button === 2)) &&
+        note.startTick <= currentTick.value && note.endTick > currentTick.value
+      ctx.fillStyle = note.selected ? '#ffffff' : (isActive ? adjustColor(color, 80) : color)
+      ctx.globalAlpha = note.selected ? 1 : (isActive ? 1 : 0.88)
       ctx.fillRect(nx, ny + 1, nw, nh - 1)
       ctx.globalAlpha = 1
-      ctx.strokeStyle = note.selected ? '#ffffaa' : adjustColor(color, -40)
-      ctx.lineWidth = 1
+      ctx.strokeStyle = note.selected ? '#ffffaa' : (isActive ? '#ffffff' : adjustColor(color, -40))
+      ctx.lineWidth = isActive ? 1.5 : 1
       ctx.strokeRect(nx + 0.5, ny + 1.5, nw - 1, nh - 2)
+      ctx.lineWidth = 1
       if (nw > 18 && rh >= 9) {
         ctx.fillStyle = note.selected ? '#000' : 'rgba(0,0,0,0.75)'
         ctx.font = `bold ${Math.min(9, rh - 2)}px sans-serif`
@@ -570,12 +621,24 @@ function draw() {
   }
 
   // ── Piano keys ───────────────────────────────────────────────────────────────
+  const activePitches = new Set()
+  if (playing.value || (drag?.type === 'ruler' && drag?.button === 2)) {
+    for (const track of trackData.value) {
+      if (soloActive.value ? !track.solo : track.muted) continue
+      for (const note of track.notes) {
+        if (note.startTick <= currentTick.value && note.endTick > currentTick.value)
+          activePitches.add(note.note)
+      }
+    }
+  }
+
   ctx.fillStyle = '#0a0a14'; ctx.fillRect(0, RULER_H, KEYS_W, noteH)
   for (let n = 127; n >= 0; n--) {
     const ky = RULER_H + noteToY(n) - scrollY.value
     if (ky + rh < RULER_H || ky > RULER_H + noteH) continue
     const isBlack = IS_BLACK[n % 12]
-    ctx.fillStyle = isBlack ? '#1e1e30' : '#d0d0e8'
+    const keyActive = activePitches.has(n)
+    ctx.fillStyle = keyActive ? '#88bbff' : (isBlack ? '#1e1e30' : '#d0d0e8')
     const kw = isBlack ? KEYS_W * 0.65 : KEYS_W - 1
     ctx.fillRect(1, ky + 0.5, kw - 1, rh - 1)
     if (!isBlack) {
@@ -1149,6 +1212,7 @@ function onMouseUp() {
   stopPreview()
   stopRulerPreview()
   drag = null
+  markDirty()
 }
 
 function onMouseLeave() {
