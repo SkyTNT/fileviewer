@@ -135,8 +135,9 @@ const timeSigs  = ref([{ tick: 0, num: 4, den: 4 }])
 const trackData = ref([])
 const totalTicks = ref(0)
 
-const playing     = ref(false)
-const currentTick = ref(0)
+const playing      = ref(false)
+const currentTick  = ref(0)
+const trackLoudness = ref({})
 const looping     = ref(false)
 const loopStart   = ref(0)
 const loopEnd     = ref(0)
@@ -174,6 +175,7 @@ let seq      = null
 
 let animFrameId  = null
 let rafDirtyId   = null
+let loudnessDecay = {}
 
 let drag = null
 let noteIdSeq = 0
@@ -926,6 +928,7 @@ function startAnimation() {
       const t = seq.currentHighResolutionTime ?? seq.currentTime ?? 0
       currentTick.value = secondsToTicks(t)
       ensureCursorVisible()
+      updateTrackLoudness()
     }
     draw()
     animFrameId = requestAnimationFrame(loop)
@@ -945,6 +948,29 @@ function ensureCursorVisible() {
   const maxSX = Math.max(0, ticksToPx(totalTicks.value) + 200 - noteW)
   if (cx > noteW * 0.75) scrollX.value = Math.min(maxSX, scrollX.value + noteW * 0.25)
   else if (cx < 0) scrollX.value = Math.max(0, ticksToPx(currentTick.value) - 40)
+}
+
+function updateTrackLoudness() {
+  const tick = currentTick.value
+  const result = {}
+  for (const track of trackData.value) {
+    const idx = track.index
+    if (track.muted) { loudnessDecay[idx] = 0; result[idx] = 0; continue }
+    let maxVel = 0
+    for (const note of track.notes) {
+      if (note.startTick <= tick && note.endTick > tick && note.velocity > maxVel) {
+        maxVel = note.velocity
+      }
+    }
+    if (loudnessDecay[idx] === undefined) loudnessDecay[idx] = 0
+    if (maxVel >= loudnessDecay[idx]) {
+      loudnessDecay[idx] = maxVel
+    } else {
+      loudnessDecay[idx] = Math.max(maxVel, loudnessDecay[idx] * 0.85)
+    }
+    result[idx] = loudnessDecay[idx] / 127
+  }
+  trackLoudness.value = result
 }
 
 // ── Note preview ──────────────────────────────────────────────────────────────
@@ -1534,6 +1560,8 @@ async function startPlayback() {
 function pausePlayback() {
   if (seq) try { seq.pause() } catch {}
   playing.value = false
+  loudnessDecay = {}
+  trackLoudness.value = {}
   stopAnimation()
   draw()
 }
@@ -1542,6 +1570,8 @@ function stopPlayback() {
   if (seq) { try { seq.pause(); seq.currentTime = 0 } catch {} }
   playing.value = false
   currentTick.value = 0
+  loudnessDecay = {}
+  trackLoudness.value = {}
   stopAnimation()
   draw()
 }
@@ -1708,6 +1738,14 @@ watch(isDark, () => nextTick(draw))
             <div class="tl-color" :style="{background: track.color}" />
             <div class="tl-info">
               <div class="tl-name">{{ track.name }}</div>
+              <div class="tl-meter">
+                <div class="tl-meter-bar"
+                  :style="{
+                    width: ((trackLoudness[track.index] ?? 0) * 100).toFixed(1) + '%',
+                    background: track.color,
+                  }"
+                />
+              </div>
               <div class="tl-controls" :class="{ 'tl-controls--disabled': activeTrack !== track.index }">
                 <v-select
                   :model-value="track.channel"
@@ -1957,6 +1995,20 @@ watch(isDark, () => nextTick(draw))
   font-size: 11px;
   color: rgba(var(--v-theme-on-surface), 0.85);
   line-height: 1.3;
+}
+
+.tl-meter {
+  height: 3px;
+  background: rgba(var(--v-theme-on-surface), 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 1px 0;
+}
+
+.tl-meter-bar {
+  height: 100%;
+  border-radius: 2px;
+  will-change: width;
 }
 
 .tl-btns {
