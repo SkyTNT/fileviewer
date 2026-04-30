@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, inject, nextTick } from 'vue'
+import { useTheme } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 import spessaWorkletUrl from 'spessasynth_lib/dist/spessasynth_processor.min.js?url'
 
@@ -14,6 +15,39 @@ const services = inject('services')
 const midiApi  = services?.get('midi.api')
 const http     = services?.get('network.http')
 const eventBus = services?.get('event.bus')
+
+const vuetifyTheme = useTheme()
+const isDark = computed(() => vuetifyTheme.global.current.value.dark)
+
+const colors = computed(() => isDark.value ? {
+  bg:           '#16161e', bgBlack:      '#0f0f18',
+  bgDark:       '#0c0c18', bgDarker:     '#0a0a14',
+  gridQ:        '#1e1e36', gridBeat:     '#20203a', gridBar:     '#333352',
+  border:       '#2a2a40', borderHard:   '#3a3a5a',
+  cursor:       '#ff4455',
+  pianoBlack:   '#1e1e30', pianoWhite:   '#d0d0e8', pianoText:   '#666690',
+  rulerBeat:    '#28284a', rulerBar:     '#3a3a5a',
+  textDim:      '#8888bb', textGreen:    '#66cc99',
+  velBorder:    '#2a2a44',
+  bpmRefLine:   '#252535', bpmRefText:   '#3a3a55',
+  bpmLine:      '#f472b6', bpmDotFirst:  '#ff88aa',
+  bpmDotStroke: '#ffaabb', bpmText:      '#ddaacc',
+  pcText:       '#bbccee', pcDotFirst:   '#aaddff',
+} : {
+  bg:           '#f4f4fc', bgBlack:      '#e4e4f2',
+  bgDark:       '#ebebf5', bgDarker:     '#e0e0ec',
+  gridQ:        '#d8d8ec', gridBeat:     '#ccccdd', gridBar:     '#aaaac0',
+  border:       '#c8c8dc', borderHard:   '#9090aa',
+  cursor:       '#dd2233',
+  pianoBlack:   '#5a5a7a', pianoWhite:   '#f8f8ff', pianoText:   '#7070a0',
+  rulerBeat:    '#c8c8d8', rulerBar:     '#9090aa',
+  textDim:      '#7070a0', textGreen:    '#1a8a55',
+  velBorder:    '#c0c0d8',
+  bpmRefLine:   '#d8d8e8', bpmRefText:   '#9090aa',
+  bpmLine:      '#cc44aa', bpmDotFirst:  '#ee66aa',
+  bpmDotStroke: '#dd88aa', bpmText:      '#aa3388',
+  pcText:       '#445588', pcDotFirst:   '#3366cc',
+})
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const KEYS_W  = 72
@@ -544,6 +578,10 @@ function draw() {
   const ctx = canvas.getContext('2d')
   ctx.save(); ctx.resetTransform(); ctx.scale(dpr, dpr)
 
+  const C = colors.value
+  const primaryRgb = getComputedStyle(canvas).getPropertyValue('--v-theme-primary').trim() || '136,187,255'
+  const pianoActive = `rgb(${primaryRgb})`
+
   const noteW  = W - KEYS_W
   const noteH  = H - RULER_H - VEL_H
   const rh     = rowHeight()
@@ -551,16 +589,16 @@ function draw() {
   const beatPx = zoomX.value * BASE_PPB
 
   // ── Background stripes ──────────────────────────────────────────────────────
-  ctx.fillStyle = '#16161e'; ctx.fillRect(KEYS_W, RULER_H, noteW, noteH)
+  ctx.fillStyle = C.bg; ctx.fillRect(KEYS_W, RULER_H, noteW, noteH)
   for (let n = 0; n < 128; n++) {
     const y = RULER_H + noteToY(n) - scrollY.value
     if (y + rh < RULER_H || y > RULER_H + noteH) continue
     if (IS_BLACK[n % 12]) {
-      ctx.fillStyle = '#0f0f18'
+      ctx.fillStyle = C.bgBlack
       ctx.fillRect(KEYS_W, y, noteW, rh - 0.5)
     }
     if (n % 12 === 0) {
-      ctx.strokeStyle = '#2a2a40'; ctx.lineWidth = 0.5
+      ctx.strokeStyle = C.border; ctx.lineWidth = 0.5
       ctx.beginPath(); ctx.moveTo(KEYS_W, y - 0.25); ctx.lineTo(W, y - 0.25); ctx.stroke()
     }
   }
@@ -573,7 +611,7 @@ function draw() {
   const q   = gridTicks()
   const qPx = q > 0 ? ticksToPx(q) : 0
   if (q > 0 && qPx >= 3) {
-    ctx.strokeStyle = '#1e1e36'; ctx.lineWidth = 0.5
+    ctx.strokeStyle = C.gridQ; ctx.lineWidth = 0.5
     const firstQ = Math.floor(firstTick / q) * q
     for (let qt = firstQ; qt <= lastTick; qt += q) {
       const qx = KEYS_W + ticksToPx(qt) - scrollX.value
@@ -589,14 +627,14 @@ function draw() {
       for (let b = 1; b < beats; b++) {
         const bbx = KEYS_W + ticksToPx(barTick + b * ppqV) - scrollX.value
         if (bbx > KEYS_W && bbx <= W) {
-          ctx.strokeStyle = '#20203a'; ctx.lineWidth = 0.5
+          ctx.strokeStyle = C.gridBeat; ctx.lineWidth = 0.5
           ctx.beginPath(); ctx.moveTo(bbx + 0.5, RULER_H); ctx.lineTo(bbx + 0.5, RULER_H + noteH); ctx.stroke()
         }
       }
     }
     const bx = KEYS_W + ticksToPx(barTick) - scrollX.value
     if (bx >= KEYS_W && bx <= W) {
-      ctx.strokeStyle = '#333352'; ctx.lineWidth = 1
+      ctx.strokeStyle = C.gridBar; ctx.lineWidth = 1
       ctx.beginPath(); ctx.moveTo(bx + 0.5, RULER_H); ctx.lineTo(bx + 0.5, RULER_H + noteH); ctx.stroke()
     }
   })
@@ -634,14 +672,14 @@ function draw() {
   // ── Playback cursor ──────────────────────────────────────────────────────────
   const cx = KEYS_W + ticksToPx(currentTick.value) - scrollX.value
   if (cx >= KEYS_W && cx <= W) {
-    ctx.strokeStyle = '#ff4455'; ctx.lineWidth = 2
+    ctx.strokeStyle = C.cursor; ctx.lineWidth = 2
     ctx.beginPath(); ctx.moveTo(cx, RULER_H - 4); ctx.lineTo(cx, RULER_H + noteH); ctx.stroke()
-    ctx.fillStyle = '#ff4455'
+    ctx.fillStyle = C.cursor
     ctx.beginPath(); ctx.moveTo(cx-5,RULER_H-8); ctx.lineTo(cx+5,RULER_H-8); ctx.lineTo(cx,RULER_H-2); ctx.closePath(); ctx.fill()
   }
 
   // ── Ruler ────────────────────────────────────────────────────────────────────
-  ctx.fillStyle = '#0c0c18'; ctx.fillRect(KEYS_W, 0, noteW, RULER_H)
+  ctx.fillStyle = C.bgDark; ctx.fillRect(KEYS_W, 0, noteW, RULER_H)
   forEachBar(firstTick, lastTick, ppqV, ({ tick: barTick, barNum, num, den, barTicks }) => {
     const bx = KEYS_W + ticksToPx(barTick) - scrollX.value
     if (beatPx >= 24) {
@@ -649,16 +687,16 @@ function draw() {
       for (let b = 1; b < beats; b++) {
         const bbx = KEYS_W + ticksToPx(barTick + b * ppqV) - scrollX.value
         if (bbx > KEYS_W && bbx <= W) {
-          ctx.strokeStyle = '#28284a'; ctx.lineWidth = 0.5
+          ctx.strokeStyle = C.rulerBeat; ctx.lineWidth = 0.5
           ctx.beginPath(); ctx.moveTo(bbx + 0.5, RULER_H * 0.6); ctx.lineTo(bbx + 0.5, RULER_H); ctx.stroke()
         }
       }
     }
     if (bx < KEYS_W || bx > W) return
-    ctx.strokeStyle = '#3a3a5a'; ctx.lineWidth = 1
+    ctx.strokeStyle = C.rulerBar; ctx.lineWidth = 1
     ctx.beginPath(); ctx.moveTo(bx + 0.5, 0); ctx.lineTo(bx + 0.5, RULER_H); ctx.stroke()
     if (ticksToPx(barTicks) > 24) {
-      ctx.fillStyle = '#8888bb'; ctx.font = '10px monospace'
+      ctx.fillStyle = C.textDim; ctx.font = '10px monospace'
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
       ctx.fillText(String(barNum), bx + 3, RULER_H * 0.72)
     }
@@ -668,7 +706,7 @@ function draw() {
   for (const ts of [...timeSigs.value].sort((a, b) => a.tick - b.tick)) {
     const tx = KEYS_W + ticksToPx(ts.tick) - scrollX.value
     if (tx < KEYS_W || tx > W) continue
-    ctx.fillStyle = '#66cc99'; ctx.font = 'bold 9px sans-serif'
+    ctx.fillStyle = C.textGreen; ctx.font = 'bold 9px sans-serif'
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
     ctx.fillText(`${ts.num}/${ts.den}`, tx + 3, RULER_H * 0.3)
   }
@@ -685,32 +723,32 @@ function draw() {
     }
   }
 
-  ctx.fillStyle = '#0a0a14'; ctx.fillRect(0, RULER_H, KEYS_W, noteH)
+  ctx.fillStyle = C.bgDarker; ctx.fillRect(0, RULER_H, KEYS_W, noteH)
   for (let n = 127; n >= 0; n--) {
     const ky = RULER_H + noteToY(n) - scrollY.value
     if (ky + rh < RULER_H || ky > RULER_H + noteH) continue
     const isBlack = IS_BLACK[n % 12]
     const keyActive = activePitches.has(n)
-    ctx.fillStyle = keyActive ? '#88bbff' : (isBlack ? '#1e1e30' : '#d0d0e8')
+    ctx.fillStyle = keyActive ? pianoActive : (isBlack ? C.pianoBlack : C.pianoWhite)
     const kw = isBlack ? KEYS_W * 0.65 : KEYS_W - 1
     ctx.fillRect(1, ky + 0.5, kw - 1, rh - 1)
     if (!isBlack) {
-      ctx.strokeStyle = '#3a3a5a'; ctx.lineWidth = 0.5
+      ctx.strokeStyle = C.borderHard; ctx.lineWidth = 0.5
       ctx.beginPath(); ctx.moveTo(1, ky+rh-0.5); ctx.lineTo(KEYS_W-1, ky+rh-0.5); ctx.stroke()
     }
     if (n % 12 === 0 && rh >= 7) {
-      ctx.fillStyle = '#666690'; ctx.font = `${Math.max(7, Math.min(10, rh-2))}px monospace`
+      ctx.fillStyle = C.pianoText; ctx.font = `${Math.max(7, Math.min(10, rh-2))}px monospace`
       ctx.textAlign = 'right'; ctx.textBaseline = 'middle'
       ctx.fillText(`C${Math.floor(n/12)-1}`, KEYS_W - 3, ky + rh/2)
     }
   }
-  ctx.strokeStyle = '#3a3a5a'; ctx.lineWidth = 1
+  ctx.strokeStyle = C.borderHard; ctx.lineWidth = 1
   ctx.beginPath(); ctx.moveTo(KEYS_W-0.5,RULER_H); ctx.lineTo(KEYS_W-0.5,RULER_H+noteH); ctx.stroke()
 
   // ── Bottom lane (velocity / CC / BPM) ────────────────────────────────────────
   const velY = RULER_H + noteH
-  ctx.fillStyle = '#0c0c18'; ctx.fillRect(KEYS_W, velY, noteW, VEL_H)
-  ctx.strokeStyle = '#2a2a44'; ctx.lineWidth = 1
+  ctx.fillStyle = C.bgDark; ctx.fillRect(KEYS_W, velY, noteW, VEL_H)
+  ctx.strokeStyle = C.velBorder; ctx.lineWidth = 1
   ctx.beginPath(); ctx.moveTo(KEYS_W, velY+0.5); ctx.lineTo(W, velY+0.5); ctx.stroke()
 
   if (laneMode.value === 'velocity') {
@@ -794,13 +832,13 @@ function draw() {
         const ex = KEYS_W + ticksToPx(ev.tick) - scrollX.value
         if (ex < KEYS_W - 8 || ex > W + 8) continue
         const ey = velY + 2 + (1 - ev.program / 127) * (VEL_H - 4)
-        ctx.fillStyle = ev.tick === 0 ? '#aaddff' : color
+        ctx.fillStyle = ev.tick === 0 ? C.pcDotFirst : color
         ctx.beginPath(); ctx.arc(ex, ey, 3, 0, Math.PI * 2); ctx.fill()
         if (ex > KEYS_W + 4) {
           const name = isDrum
             ? (GM_DRUM_KITS[ev.program] ?? `Kit ${ev.program}`)
             : (GM_INSTRUMENTS[ev.program] ?? `Program ${ev.program}`)
-          ctx.fillStyle = '#bbccee'; ctx.font = '8px sans-serif'
+          ctx.fillStyle = C.pcText; ctx.font = '8px sans-serif'
           ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
           ctx.fillText(`${ev.program}: ${name}`, ex + 6, ey)
         }
@@ -813,9 +851,9 @@ function draw() {
     for (const refBpm of [60, 90, 120, 150, 180, 240]) {
       if (refBpm <= BPM_MIN || refBpm >= BPM_MAX) continue
       const ry = velY + bpmToLaneY(refBpm, VEL_H)
-      ctx.strokeStyle = '#252535'; ctx.lineWidth = 0.5
+      ctx.strokeStyle = C.bpmRefLine; ctx.lineWidth = 0.5
       ctx.beginPath(); ctx.moveTo(KEYS_W, ry); ctx.lineTo(W, ry); ctx.stroke()
-      ctx.fillStyle = '#3a3a55'; ctx.font = '8px monospace'; ctx.textAlign = 'left'
+      ctx.fillStyle = C.bpmRefText; ctx.font = '8px monospace'; ctx.textAlign = 'left'
       ctx.fillText(`${refBpm}`, KEYS_W + 2, ry - 2)
     }
     ctx.setLineDash([])
@@ -823,7 +861,7 @@ function draw() {
     // Step curve
     const sorted = [...tempos.value].sort((a, b) => a.tick - b.tick)
     if (sorted.length > 0) {
-      ctx.strokeStyle = '#f472b6'; ctx.lineWidth = 1.5
+      ctx.strokeStyle = C.bpmLine; ctx.lineWidth = 1.5
       ctx.beginPath()
       const firstBpm = 60000000 / sorted[0].tempo
       let prevY = velY + bpmToLaneY(firstBpm, VEL_H)
@@ -845,12 +883,12 @@ function draw() {
         if (tx < KEYS_W - 8 || tx > W + 8) continue
         const bpm = Math.round(60000000 / tc.tempo)
         const ty = velY + bpmToLaneY(bpm, VEL_H)
-        ctx.fillStyle = tc.tick === 0 ? '#ff88aa' : '#f472b6'
+        ctx.fillStyle = tc.tick === 0 ? C.bpmDotFirst : C.bpmLine
         ctx.beginPath(); ctx.arc(tx, ty, 4, 0, Math.PI * 2); ctx.fill()
-        ctx.strokeStyle = '#ffaabb'; ctx.lineWidth = 1
+        ctx.strokeStyle = C.bpmDotStroke; ctx.lineWidth = 1
         ctx.stroke()
         if (tx > KEYS_W + 4) {
-          ctx.fillStyle = '#ddaacc'; ctx.font = 'bold 9px monospace'
+          ctx.fillStyle = C.bpmText; ctx.font = 'bold 9px monospace'
           ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
           ctx.fillText(`${bpm}`, tx + 7, ty)
         }
@@ -859,7 +897,7 @@ function draw() {
   }
 
   // ── Corners ───────────────────────────────────────────────────────────────────
-  ctx.fillStyle = '#0a0a14'
+  ctx.fillStyle = C.bgDarker
   ctx.fillRect(0, 0, KEYS_W, RULER_H)
   ctx.fillRect(0, velY, KEYS_W, VEL_H)
 
@@ -1599,6 +1637,8 @@ watch(() => props.file, async (f) => {
   stopPlayback()
   if (f) { props.winManager?.setTitle(props.winId, f.name); await loadMidi() }
 })
+
+watch(isDark, () => nextTick(draw))
 </script>
 
 <template>
@@ -1800,8 +1840,8 @@ watch(() => props.file, async (f) => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #11111a;
-  color: #c0c0d8;
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
   overflow: hidden;
   position: relative;
 }
@@ -1810,10 +1850,10 @@ watch(() => props.file, async (f) => {
   position: absolute; inset: 0;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  background: rgba(17,17,26,0.85);
+  background: rgba(var(--v-theme-surface), 0.9);
   z-index: 10;
 }
-.error-overlay { color: #ff6677; }
+.error-overlay { color: rgb(var(--v-theme-error)); }
 
 /* ── Top bar ────────────────────────────────────────────────── */
 .top-bar {
@@ -1821,8 +1861,8 @@ watch(() => props.file, async (f) => {
   align-items: center;
   gap: 6px;
   padding: 4px 8px;
-  background: #0d0d18;
-  border-bottom: 1px solid #2a2a40;
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   flex-shrink: 0;
   height: 48px;
   overflow: hidden;
@@ -1831,13 +1871,13 @@ watch(() => props.file, async (f) => {
 .pos-display {
   font-family: monospace;
   font-size: 13px;
-  background: #0a0a12;
-  border: 1px solid #2a2a40;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 4px;
   padding: 2px 8px;
   min-width: 90px;
   text-align: center;
-  color: #88aaff;
+  color: rgb(var(--v-theme-primary));
   flex-shrink: 0;
 }
 
@@ -1860,8 +1900,8 @@ watch(() => props.file, async (f) => {
 .track-list {
   width: 180px;
   flex-shrink: 0;
-  background: #0d0d18;
-  border-right: 1px solid #2a2a40;
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  border-right: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
@@ -1870,8 +1910,8 @@ watch(() => props.file, async (f) => {
 
 .tl-header {
   padding: 6px 8px 4px;
-  color: #666688;
-  border-bottom: 1px solid #1e1e30;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  border-bottom: 1px solid rgba(var(--v-border-color), 0.5);
   flex-shrink: 0;
 }
 
@@ -1880,13 +1920,13 @@ watch(() => props.file, async (f) => {
   align-items: center;
   gap: 4px;
   padding: 4px 6px;
-  border-bottom: 1px solid #1a1a28;
+  border-bottom: 1px solid rgba(var(--v-border-color), 0.3);
   cursor: pointer;
   transition: background 0.12s;
   min-height: 56px;
 }
-.tl-row:hover { background: #16162a; }
-.tl-row--active { background: #1c1c34; }
+.tl-row:hover { background: rgba(var(--v-theme-on-surface), 0.05); }
+.tl-row--active { background: rgba(var(--v-theme-primary), 0.12); }
 
 .tl-color {
   width: 4px;
@@ -1908,7 +1948,7 @@ watch(() => props.file, async (f) => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 11px;
-  color: #b0b0cc;
+  color: rgba(var(--v-theme-on-surface), 0.8);
   line-height: 1.3;
 }
 
@@ -1957,7 +1997,7 @@ watch(() => props.file, async (f) => {
 
 .tl-drum-label {
   font-size: 10px;
-  color: #666688;
+  color: rgba(var(--v-theme-on-surface), 0.5);
 }
 
 /* ── Piano roll ─────────────────────────────────────────────── */
@@ -1984,7 +2024,7 @@ watch(() => props.file, async (f) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(10,10,20,0.85);
+  background: rgba(var(--v-theme-surface), 0.9);
 }
 
 .lane-mode-btns {
@@ -1998,16 +2038,16 @@ watch(() => props.file, async (f) => {
   font-weight: bold;
   padding: 2px 6px;
   border-radius: 3px;
-  border: 1px solid #333352;
-  background: #1a1a2e;
-  color: #7070a0;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  color: rgba(var(--v-theme-on-surface), 0.6);
   cursor: pointer;
   line-height: 1.4;
   letter-spacing: 0.05em;
   transition: background 0.1s, color 0.1s;
 }
-.lane-btn:hover { background: #222240; color: #aaaacc; }
-.lane-btn.active { background: #2a2a60; color: #aaaaff; border-color: #5555aa; }
+.lane-btn:hover { background: rgba(var(--v-theme-on-surface), 0.10); color: rgba(var(--v-theme-on-surface), 0.85); }
+.lane-btn.active { background: rgba(var(--v-theme-primary), 0.2); color: rgb(var(--v-theme-primary)); border-color: rgba(var(--v-theme-primary), 0.6); }
 
 .cc-selector-overlay {
   position: absolute;
@@ -2018,7 +2058,7 @@ watch(() => props.file, async (f) => {
   display: flex;
   align-items: center;
   padding: 0 6px;
-  background: rgba(10,10,20,0.75);
+  background: rgba(var(--v-theme-surface), 0.85);
 }
 
 /* ── TS popup ───────────────────────────────────────────────── */
@@ -2031,8 +2071,8 @@ watch(() => props.file, async (f) => {
 .ts-popup {
   position: absolute;
   z-index: 10;
-  background: #1a1a2e;
-  border: 1px solid #3a3a5a;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 4px;
   padding: 8px 10px;
   min-width: 154px;
@@ -2056,10 +2096,10 @@ watch(() => props.file, async (f) => {
 }
 
 .ts-input {
-  background: #0d0d1e;
-  border: 1px solid #3a3a5a;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 3px;
-  color: #c8c8e0;
+  color: rgb(var(--v-theme-on-surface));
   padding: 3px 5px;
   font-size: 13px;
   font-family: monospace;
@@ -2069,7 +2109,7 @@ watch(() => props.file, async (f) => {
 .ts-den { width: 48px; cursor: pointer; }
 .ts-input:focus { outline: 1px solid #66cc99; }
 
-.ts-sep { color: #8888bb; font-size: 16px; }
+.ts-sep { color: rgba(var(--v-theme-on-surface), 0.5); font-size: 16px; }
 
 .ts-popup-actions { display: flex; gap: 4px; }
 
@@ -2077,18 +2117,18 @@ watch(() => props.file, async (f) => {
   flex: 1;
   padding: 3px 2px;
   font-size: 11px;
-  border: 1px solid #3a3a5a;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 3px;
-  background: #252540;
-  color: #c8c8e0;
+  background: rgba(var(--v-theme-on-surface), 0.08);
+  color: rgb(var(--v-theme-on-surface));
   cursor: pointer;
   transition: background 0.1s;
 }
-.ts-btn:hover { background: #30305a; }
+.ts-btn:hover { background: rgba(var(--v-theme-on-surface), 0.14); }
 
-.ts-ok { background: #1a3a2a; border-color: #66cc99; color: #66cc99; }
-.ts-ok:hover { background: #204a36; }
+.ts-ok { background: rgba(102,204,153, 0.15); border-color: #66cc99; color: #66cc99; }
+.ts-ok:hover { background: rgba(102,204,153, 0.25); }
 
-.ts-del { color: #ff7777; border-color: #553333; }
-.ts-del:hover { background: #3a2020; }
+.ts-del { color: #ff7777; border-color: rgba(255,77,77, 0.35); }
+.ts-del:hover { background: rgba(255,77,77, 0.15); }
 </style>
