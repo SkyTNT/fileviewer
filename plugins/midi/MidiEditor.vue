@@ -1684,7 +1684,7 @@ watch(isDark, () => nextTick(draw))
     <template v-else>
       <!-- ── Top bar ───────────────────────────────────────────────────────── -->
       <div class="top-bar">
-        <v-btn-group density="compact" variant="outlined">
+        <v-btn-group density="compact" variant="tonal" rounded="pill">
           <v-btn size="small" icon="mdi-skip-backward" @click="stopPlayback" />
           <v-btn size="small" :icon="playing ? 'mdi-pause' : 'mdi-play'"
             :color="playing ? 'primary' : undefined" @click="togglePlay" />
@@ -1698,40 +1698,46 @@ watch(isDark, () => nextTick(draw))
           :model-value="currentBpm" @change="setBpm"
           hide-details density="compact" variant="outlined"
           type="number" min="20" max="300" suffix="BPM"
-          style="width:100px;flex-shrink:0"
+          style="width:106px;flex-shrink:0"
         />
 
         <v-select v-model="quantize" :items="QUANTIZE_OPTS"
           hide-details density="compact" variant="outlined" style="width:96px;flex-shrink:0" />
 
-        <v-btn size="small" icon density="compact" @click="zoomX = Math.max(0.1, +(zoomX-0.25).toFixed(2))">
-          <v-icon size="14">mdi-magnify-minus-outline</v-icon>
-        </v-btn>
-        <span class="zoom-label">{{ Math.round(zoomX * 100) }}%</span>
-        <v-btn size="small" icon density="compact" @click="zoomX = Math.min(16, +(zoomX+0.25).toFixed(2))">
-          <v-icon size="14">mdi-magnify-plus-outline</v-icon>
-        </v-btn>
+        <div class="zoom-group">
+          <v-btn size="small" icon density="compact" variant="text"
+            @click="zoomX = Math.max(0.1, +(zoomX-0.25).toFixed(2))">
+            <v-icon size="16">mdi-magnify-minus-outline</v-icon>
+          </v-btn>
+          <span class="zoom-label">{{ Math.round(zoomX * 100) }}%</span>
+          <v-btn size="small" icon density="compact" variant="text"
+            @click="zoomX = Math.min(16, +(zoomX+0.25).toFixed(2))">
+            <v-icon size="16">mdi-magnify-plus-outline</v-icon>
+          </v-btn>
+        </div>
 
         <div style="flex:1" />
 
         <v-btn size="small" :color="sfLoaded ? 'success' : 'warning'" variant="tonal"
-          prepend-icon="mdi-music" @click="showSFDialog = true">
+          rounded="pill" prepend-icon="mdi-music" @click="showSFDialog = true">
           {{ sfLoaded ? 'SoundFont ✓' : 'Load SoundFont' }}
         </v-btn>
 
-        <v-btn size="small" prepend-icon="mdi-content-save" variant="tonal"
-          :loading="saving" @click="saveMidi">Save</v-btn>
+        <v-btn size="small" color="primary" variant="tonal" rounded="pill"
+          prepend-icon="mdi-content-save" :loading="saving" @click="saveMidi">Save</v-btn>
       </div>
 
       <!-- ── Body ─────────────────────────────────────────────────────────── -->
       <div class="editor-body">
         <!-- Track list -->
         <div class="track-list">
-          <div class="tl-header text-caption px-2">
-            Tracks ({{ trackData.length }})
+          <div class="tl-header">
+            <span class="text-overline">Tracks</span>
+            <v-chip size="x-small" label class="ml-1" density="comfortable">{{ trackData.length }}</v-chip>
           </div>
           <div
             v-for="track in trackData" :key="track.index"
+            v-ripple
             class="tl-row" :class="{ 'tl-row--active': activeTrack === track.index }"
             @click="activeTrack = track.index"
           >
@@ -1794,13 +1800,13 @@ watch(isDark, () => nextTick(draw))
           <!-- Lane mode controls (sits over the piano-keys column of the bottom lane) -->
           <div class="lane-overlay" style="pointer-events:none">
             <div class="lane-mode-btns" style="pointer-events:auto">
-              <button class="lane-btn" :class="{active: laneMode==='velocity'}"
+              <button v-ripple class="lane-btn" :class="{active: laneMode==='velocity'}"
                 @click="laneMode='velocity'; markDirty()">VEL</button>
-              <button class="lane-btn" :class="{active: laneMode==='cc'}"
+              <button v-ripple class="lane-btn" :class="{active: laneMode==='cc'}"
                 @click="laneMode='cc'; markDirty()">CC</button>
-              <button class="lane-btn" :class="{active: laneMode==='bpm'}"
+              <button v-ripple class="lane-btn" :class="{active: laneMode==='bpm'}"
                 @click="laneMode='bpm'; markDirty()">BPM</button>
-              <button class="lane-btn" :class="{active: laneMode==='pc'}"
+              <button v-ripple class="lane-btn" :class="{active: laneMode==='pc'}"
                 @click="laneMode='pc'; markDirty()">PC</button>
             </div>
           </div>
@@ -1820,7 +1826,7 @@ watch(isDark, () => nextTick(draw))
           <div v-if="tsDialog" class="ts-overlay" @mousedown="tsDialog = null" />
 
           <!-- TS popup -->
-          <div v-if="tsDialog" class="ts-popup"
+          <v-card v-if="tsDialog" class="ts-popup" rounded="lg" elevation="3"
                :style="{ left: tsDialog.x + 'px', top: tsDialog.y + 'px' }"
                @mousedown.stop>
             <div class="ts-popup-title">
@@ -1837,22 +1843,24 @@ watch(isDark, () => nextTick(draw))
               </select>
             </div>
             <div class="ts-popup-actions">
-              <button class="ts-btn ts-ok" @click="commitTsDialog">OK</button>
-              <button class="ts-btn" @click="tsDialog = null">Cancel</button>
-              <button v-if="tsDialog.tick !== 0" class="ts-btn ts-del" @click="deleteTsDialog">Delete</button>
+              <v-btn size="small" variant="tonal" color="primary" @click="commitTsDialog">OK</v-btn>
+              <v-btn size="small" variant="text" @click="tsDialog = null">Cancel</v-btn>
+              <v-spacer />
+              <v-btn v-if="tsDialog.tick !== 0" size="small" variant="text" color="error"
+                @click="deleteTsDialog">Delete</v-btn>
             </div>
-          </div>
+          </v-card>
         </div>
       </div>
     </template>
 
     <!-- SoundFont dialog -->
-    <v-dialog v-model="showSFDialog" max-width="500">
-      <v-card>
-        <v-card-title class="text-h6">SoundFont Configuration</v-card-title>
-        <v-card-text>
-          <p class="text-body-2 mb-3">
-            Enter a URL or file path to a SoundFont (.sf2) file for MIDI playback.
+    <v-dialog v-model="showSFDialog" max-width="480">
+      <v-card rounded="xl">
+        <v-card-title class="text-subtitle-1 pt-5 px-6">SoundFont Configuration</v-card-title>
+        <v-card-text class="px-6 pb-2">
+          <p class="text-body-2 text-medium-emphasis mb-4">
+            Enter a URL or file path to a SoundFont (.sf2/.sf3) file for MIDI playback.
           </p>
           <v-text-field
             v-model="sfUrlInput"
@@ -1861,15 +1869,15 @@ watch(isDark, () => nextTick(draw))
             variant="outlined" hide-details
           />
           <div v-if="sfError" class="text-error text-body-2 mt-2">{{ sfError }}</div>
-          <v-alert type="info" variant="tonal" density="compact" class="mt-3 text-caption">
-            Free SoundFonts: download GeneralUser GS or MuseScore_General.sf3 and specify the path.
+          <v-alert type="info" variant="tonal" density="compact" rounded="lg" class="mt-4 text-caption">
+            Free SoundFonts: GeneralUser GS or MuseScore_General.sf3 — specify the path above.<br>
             Scroll: wheel · Pan X: Shift+wheel · Zoom X: Ctrl+wheel · Zoom Y: Ctrl+Alt+wheel
           </v-alert>
         </v-card-text>
-        <v-card-actions>
+        <v-card-actions class="px-6 pb-5">
           <v-spacer />
-          <v-btn variant="text" @click="showSFDialog = false">Cancel</v-btn>
-          <v-btn color="primary" variant="flat" :loading="sfLoading" @click="loadSoundFont">
+          <v-btn variant="text" rounded="pill" @click="showSFDialog = false">Cancel</v-btn>
+          <v-btn color="primary" variant="tonal" rounded="pill" :loading="sfLoading" @click="loadSoundFont">
             Load SoundFont
           </v-btn>
         </v-card-actions>
@@ -1902,26 +1910,37 @@ watch(isDark, () => nextTick(draw))
 .top-bar {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  background: rgba(var(--v-theme-on-surface), 0.04);
+  gap: 8px;
+  padding: 0 12px;
+  background: rgba(var(--v-theme-on-surface), 0.03);
   border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   flex-shrink: 0;
-  height: 48px;
+  height: 52px;
   overflow: hidden;
 }
 
 .pos-display {
   font-family: monospace;
   font-size: 13px;
-  background: rgba(var(--v-theme-on-surface), 0.06);
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 4px;
-  padding: 2px 8px;
-  min-width: 90px;
+  background: rgba(var(--v-theme-primary), 0.08);
+  border: 1px solid rgba(var(--v-theme-primary), 0.2);
+  border-radius: 20px;
+  padding: 3px 12px;
+  min-width: 96px;
   text-align: center;
   color: rgb(var(--v-theme-primary));
   flex-shrink: 0;
+  letter-spacing: 0.04em;
+}
+
+.zoom-group {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 20px;
+  padding: 0 2px;
 }
 
 .zoom-label {
@@ -1929,7 +1948,7 @@ watch(isDark, () => nextTick(draw))
   font-variant-numeric: tabular-nums;
   min-width: 36px;
   text-align: center;
-  opacity: 0.7;
+  opacity: 0.65;
 }
 
 /* ── Body ───────────────────────────────────────────────────── */
@@ -1941,9 +1960,9 @@ watch(isDark, () => nextTick(draw))
 
 /* ── Track list ─────────────────────────────────────────────── */
 .track-list {
-  width: 180px;
+  width: 188px;
   flex-shrink: 0;
-  background: rgba(var(--v-theme-on-surface), 0.04);
+  background: rgba(var(--v-theme-on-surface), 0.025);
   border-right: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   overflow-y: auto;
   overflow-x: hidden;
@@ -1952,31 +1971,36 @@ watch(isDark, () => nextTick(draw))
 }
 
 .tl-header {
-  padding: 6px 8px 4px;
+  display: flex;
+  align-items: center;
+  padding: 8px 10px 6px;
   color: rgba(var(--v-theme-on-surface), 0.5);
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.5);
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   flex-shrink: 0;
 }
 
 .tl-row {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 4px 4px 6px;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.3);
+  gap: 6px;
+  padding: 5px 4px 5px 8px;
+  border-bottom: 1px solid rgba(var(--v-border-color), 0.25);
   cursor: pointer;
-  transition: background 0.12s;
-  min-height: 34px;
+  transition: background 0.2s cubic-bezier(0.2, 0, 0, 1);
+  min-height: 42px;
+  position: relative;
+  overflow: hidden;
 }
-.tl-row:hover { background: rgba(var(--v-theme-on-surface), 0.05); }
-.tl-row--active { background: rgba(var(--v-theme-primary), 0.12); }
+.tl-row:hover { background: rgba(var(--v-theme-on-surface), 0.08); }
+.tl-row--active { background: rgba(var(--v-theme-primary), 0.1); }
+.tl-row--active:hover { background: rgba(var(--v-theme-primary), 0.14); }
 
 .tl-color {
-  width: 3px;
+  width: 4px;
   align-self: stretch;
-  border-radius: 2px;
+  border-radius: 4px;
   flex-shrink: 0;
-  margin: 4px 0;
+  margin: 6px 0;
 }
 
 .tl-info {
@@ -1985,30 +2009,32 @@ watch(isDark, () => nextTick(draw))
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 1px;
+  gap: 2px;
 }
 
 .tl-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
-  color: rgba(var(--v-theme-on-surface), 0.85);
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(var(--v-theme-on-surface), 0.87);
   line-height: 1.3;
 }
 
 .tl-meter {
   height: 3px;
-  background: rgba(var(--v-theme-on-surface), 0.1);
-  border-radius: 2px;
+  background: rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 3px;
   overflow: hidden;
   margin: 1px 0;
 }
 
 .tl-meter-bar {
   height: 100%;
-  border-radius: 2px;
+  border-radius: 3px;
   will-change: width;
+  transition: width 0.05s linear;
 }
 
 .tl-btns {
@@ -2026,7 +2052,7 @@ watch(isDark, () => nextTick(draw))
 
 .tl-controls--disabled {
   pointer-events: none;
-  opacity: 0.55;
+  opacity: 0.45;
 }
 
 .tl-channel {
@@ -2072,11 +2098,6 @@ watch(isDark, () => nextTick(draw))
   --v-field-padding-bottom: 0;
 }
 
-.tl-drum-label {
-  font-size: 10px;
-  color: rgba(var(--v-theme-on-surface), 0.5);
-}
-
 /* ── Piano roll ─────────────────────────────────────────────── */
 .piano-roll {
   flex: 1;
@@ -2101,30 +2122,52 @@ watch(isDark, () => nextTick(draw))
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(var(--v-theme-surface), 0.9);
+  background: rgba(var(--v-theme-surface), 0.92);
+  backdrop-filter: blur(4px);
 }
 
 .lane-mode-btns {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 4px;
+  padding: 6px;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
 }
 
 .lane-btn {
   font-size: 9px;
-  font-weight: bold;
-  padding: 2px 6px;
-  border-radius: 3px;
+  font-weight: 600;
+  padding: 0;
+  border-radius: 8px;
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  background: rgba(var(--v-theme-on-surface), 0.06);
-  color: rgba(var(--v-theme-on-surface), 0.6);
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  color: rgba(var(--v-theme-on-surface), 0.55);
   cursor: pointer;
-  line-height: 1.4;
-  letter-spacing: 0.05em;
-  transition: background 0.1s, color 0.1s;
+  letter-spacing: 0.06em;
+  transition: background 0.2s cubic-bezier(0.2, 0, 0, 1),
+              color 0.2s cubic-bezier(0.2, 0, 0, 1),
+              border-color 0.2s cubic-bezier(0.2, 0, 0, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
 }
-.lane-btn:hover { background: rgba(var(--v-theme-on-surface), 0.10); color: rgba(var(--v-theme-on-surface), 0.85); }
-.lane-btn.active { background: rgba(var(--v-theme-primary), 0.2); color: rgb(var(--v-theme-primary)); border-color: rgba(var(--v-theme-primary), 0.6); }
+.lane-btn:hover {
+  background: rgba(var(--v-theme-on-surface), 0.10);
+  color: rgba(var(--v-theme-on-surface), 0.87);
+}
+.lane-btn.active {
+  background: rgba(var(--v-theme-primary), 0.15);
+  color: rgb(var(--v-theme-primary));
+  border-color: rgba(var(--v-theme-primary), 0.5);
+}
+.lane-btn.active:hover {
+  background: rgba(var(--v-theme-primary), 0.22);
+}
 
 .cc-selector-overlay {
   position: absolute;
@@ -2134,8 +2177,9 @@ watch(isDark, () => nextTick(draw))
   width: 170px;
   display: flex;
   align-items: center;
-  padding: 0 6px;
-  background: rgba(var(--v-theme-surface), 0.85);
+  padding: 0 8px;
+  background: rgba(var(--v-theme-surface), 0.88);
+  backdrop-filter: blur(4px);
 }
 
 /* ── TS popup ───────────────────────────────────────────────── */
@@ -2148,64 +2192,50 @@ watch(isDark, () => nextTick(draw))
 .ts-popup {
   position: absolute;
   z-index: 10;
-  background: rgb(var(--v-theme-surface));
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 4px;
-  padding: 8px 10px;
-  min-width: 154px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+  min-width: 164px;
+  padding: 12px 12px 8px;
 }
 
 .ts-popup-title {
-  font-size: 10px;
-  font-weight: bold;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #66cc99;
-  margin-bottom: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgb(var(--v-theme-primary));
+  margin-bottom: 10px;
 }
 
 .ts-popup-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .ts-input {
   background: rgba(var(--v-theme-on-surface), 0.06);
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 3px;
+  border-radius: 8px;
   color: rgb(var(--v-theme-on-surface));
-  padding: 3px 5px;
+  padding: 5px 6px;
   font-size: 13px;
   font-family: monospace;
   text-align: center;
-  width: 44px;
+  width: 46px;
+  transition: border-color 0.2s cubic-bezier(0.2, 0, 0, 1);
 }
-.ts-den { width: 48px; cursor: pointer; }
-.ts-input:focus { outline: 1px solid #66cc99; }
-
-.ts-sep { color: rgba(var(--v-theme-on-surface), 0.5); font-size: 16px; }
-
-.ts-popup-actions { display: flex; gap: 4px; }
-
-.ts-btn {
-  flex: 1;
-  padding: 3px 2px;
-  font-size: 11px;
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 3px;
-  background: rgba(var(--v-theme-on-surface), 0.08);
-  color: rgb(var(--v-theme-on-surface));
-  cursor: pointer;
-  transition: background 0.1s;
+.ts-den { width: 50px; cursor: pointer; }
+.ts-input option { background: rgb(var(--v-theme-surface)); color: rgb(var(--v-theme-on-surface)); }
+.ts-input:focus {
+  outline: none;
+  border-color: rgb(var(--v-theme-primary));
+  box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.15);
 }
-.ts-btn:hover { background: rgba(var(--v-theme-on-surface), 0.14); }
 
-.ts-ok { background: rgba(102,204,153, 0.15); border-color: #66cc99; color: #66cc99; }
-.ts-ok:hover { background: rgba(102,204,153, 0.25); }
+.ts-sep { color: rgba(var(--v-theme-on-surface), 0.4); font-size: 18px; font-weight: 300; }
 
-.ts-del { color: #ff7777; border-color: rgba(255,77,77, 0.35); }
-.ts-del:hover { background: rgba(255,77,77, 0.15); }
+.ts-popup-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
 </style>
