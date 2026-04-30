@@ -59,8 +59,8 @@ const BASE_PPB = 120
 const IS_BLACK = [false,true,false,true,false,false,true,false,true,false,true,false]
 const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
 const TRACK_COLORS = ['#4ade80','#60a5fa','#f87171','#fb923c','#a78bfa','#34d399','#f472b6','#facc15','#22d3ee','#e879f9']
-const QUANTIZE_OPTS = [
-  { title: 'Off',    value: null  },
+const QUANTIZE_OPTS = computed(() => [
+  { title: t('midi.quantizeOff'), value: null  },
   { title: '1/4',   value: 1     },
   { title: '1/8',   value: 1/2   },
   { title: '1/16',  value: 1/4   },
@@ -71,7 +71,7 @@ const QUANTIZE_OPTS = [
   { title: '1/4×5', value: 4/5   },
   { title: '1/8×5', value: 2/5   },
   { title: '1/16×5',value: 1/5   },
-]
+])
 const BPM_MIN = 20, BPM_MAX = 320
 const CC_NAMES = {
   0:'Bank Select', 1:'Modulation', 2:'Breath', 4:'Foot', 7:'Volume',
@@ -83,10 +83,10 @@ const CC_ITEMS = Array.from({length:128}, (_,i) => ({
   value: i,
   title: CC_NAMES[i] ? `${i}: ${CC_NAMES[i]}` : `CC ${i}`,
 }))
-const CHANNEL_ITEMS = Array.from({length:16}, (_,i) => ({
+const CHANNEL_ITEMS = computed(() => Array.from({length:16}, (_,i) => ({
   value: i,
-  title: i === 9 ? 'Channel 10 (Drum)' : `Channel ${i + 1}`,
-}))
+  title: i === 9 ? t('midi.channel10') : t('midi.channelN', { n: i + 1 }),
+})))
 
 const GM_INSTRUMENTS = [
   'Acoustic Grand Piano','Bright Acoustic Piano','Electric Grand Piano','Honky-tonk Piano',
@@ -307,13 +307,13 @@ function readVarLen(buf, pos) {
 function parseMidi(buffer) {
   const buf = new Uint8Array(buffer)
   if (buf[0] !== 0x4D || buf[1] !== 0x54 || buf[2] !== 0x68 || buf[3] !== 0x64)
-    throw new Error('Not a valid MIDI file')
+    throw new Error(t('midi.errors.invalidMidiFile'))
   let pos = 4
   const headerLen = (buf[pos]<<24|buf[pos+1]<<16|buf[pos+2]<<8|buf[pos+3])>>>0; pos+=4
   const format    = (buf[pos]<<8)|buf[pos+1]; pos+=2
   const numTracks = (buf[pos]<<8)|buf[pos+1]; pos+=2
   const timeDivision = (buf[pos]<<8)|buf[pos+1]; pos+=2
-  if (timeDivision & 0x8000) throw new Error('SMPTE time division not supported')
+  if (timeDivision & 0x8000) throw new Error(t('midi.errors.smpteNotSupported'))
   pos += headerLen - 6
 
   const tracks = []
@@ -389,7 +389,7 @@ function buildTracks(parsed) {
     const channelProgram  = new Map()  // channel -> initial program number
     const channelOtherEvs = new Map()  // channel (or -1) -> rawBytes event[]
 
-    let name = ti === 0 ? 'Conductor' : `Track ${ti}`
+    let name = ti === 0 ? t('midi.conductor') : t('midi.trackN', { n: ti })
 
     for (const ev of evs) {
       if (ev.type === 'trackName') { name = ev.name; continue }
@@ -1527,7 +1527,7 @@ async function loadSoundFont() {
   sfLoading.value = true; sfError.value = null
   try {
     const url = sfUrlInput.value.trim()
-    if (!url) throw new Error('Please enter a SoundFont URL or path')
+    if (!url) throw new Error(t('midi.errors.sfRequired'))
     const fetchUrl = url.match(/^https?:\/\//) || url.startsWith('/api/')
       ? url
       : `/api/files/download?path=${encodeURIComponent(url)}`
@@ -1775,11 +1775,11 @@ watch(isDark, () => nextTick(draw))
 
         <v-btn size="small" :color="sfLoaded ? 'success' : 'warning'" variant="tonal"
           rounded="pill" prepend-icon="mdi-music" @click="showSFDialog = true">
-          {{ sfLoaded ? 'SoundFont ✓' : 'Load SoundFont' }}
+          {{ sfLoaded ? t('midi.soundFontLoaded') : t('midi.loadSoundFont') }}
         </v-btn>
 
         <v-btn size="small" color="primary" variant="tonal" rounded="pill"
-          prepend-icon="mdi-content-save" :loading="saving" @click="saveMidi">Save</v-btn>
+          prepend-icon="mdi-content-save" :loading="saving" @click="saveMidi">{{ t('midi.save') }}</v-btn>
       </div>
 
       <!-- ── Body ─────────────────────────────────────────────────────────── -->
@@ -1787,7 +1787,7 @@ watch(isDark, () => nextTick(draw))
         <!-- Track list -->
         <div class="track-list">
           <div class="tl-header">
-            <span class="text-overline">Tracks</span>
+            <span class="text-overline">{{ t('midi.tracks') }}</span>
             <v-chip size="x-small" label class="ml-1" density="comfortable">{{ trackData.length }}</v-chip>
           </div>
           <div
@@ -1856,13 +1856,13 @@ watch(isDark, () => nextTick(draw))
           <div class="lane-overlay" style="pointer-events:none">
             <div class="lane-mode-btns" style="pointer-events:auto">
               <button v-ripple class="lane-btn" :class="{active: laneMode==='velocity'}"
-                @click="laneMode='velocity'; markDirty()">VEL</button>
+                @click="laneMode='velocity'; markDirty()">{{ t('midi.vel') }}</button>
               <button v-ripple class="lane-btn" :class="{active: laneMode==='cc'}"
-                @click="laneMode='cc'; markDirty()">CC</button>
+                @click="laneMode='cc'; markDirty()">{{ t('midi.cc') }}</button>
               <button v-ripple class="lane-btn" :class="{active: laneMode==='bpm'}"
-                @click="laneMode='bpm'; markDirty()">BPM</button>
+                @click="laneMode='bpm'; markDirty()">{{ t('midi.bpm') }}</button>
               <button v-ripple class="lane-btn" :class="{active: laneMode==='pc'}"
-                @click="laneMode='pc'; markDirty()">PC</button>
+                @click="laneMode='pc'; markDirty()">{{ t('midi.pc') }}</button>
             </div>
           </div>
 
@@ -1874,7 +1874,7 @@ watch(isDark, () => nextTick(draw))
                :style="{ left: tsDialog.x + 'px', top: tsDialog.y + 'px' }"
                @mousedown.stop>
             <div class="ts-popup-title">
-              {{ tsDialog.isNew ? 'Add Time Signature' : 'Edit Time Signature' }}
+              {{ tsDialog.isNew ? t('midi.timeSig.add') : t('midi.timeSig.edit') }}
             </div>
             <div class="ts-popup-row">
               <input ref="tsNumInputRef" class="ts-input" type="number" min="1" max="32"
@@ -1887,11 +1887,11 @@ watch(isDark, () => nextTick(draw))
               </select>
             </div>
             <div class="ts-popup-actions">
-              <v-btn size="small" variant="tonal" color="primary" @click="commitTsDialog">OK</v-btn>
-              <v-btn size="small" variant="text" @click="tsDialog = null">Cancel</v-btn>
+              <v-btn size="small" variant="tonal" color="primary" @click="commitTsDialog">{{ t('midi.ok') }}</v-btn>
+              <v-btn size="small" variant="text" @click="tsDialog = null">{{ t('midi.cancel') }}</v-btn>
               <v-spacer />
               <v-btn v-if="tsDialog.tick !== 0" size="small" variant="text" color="error"
-                @click="deleteTsDialog">Delete</v-btn>
+                @click="deleteTsDialog">{{ t('midi.delete') }}</v-btn>
             </div>
           </v-card>
         </div>
@@ -1901,28 +1901,28 @@ watch(isDark, () => nextTick(draw))
     <!-- SoundFont dialog -->
     <v-dialog v-model="showSFDialog" max-width="480">
       <v-card rounded="xl">
-        <v-card-title class="text-subtitle-1 pt-5 px-6">SoundFont Configuration</v-card-title>
+        <v-card-title class="text-subtitle-1 pt-5 px-6">{{ t('midi.sfConfig') }}</v-card-title>
         <v-card-text class="px-6 pb-2">
           <p class="text-body-2 text-medium-emphasis mb-4">
-            Enter a URL or file path to a SoundFont (.sf2/.sf3) file for MIDI playback.
+            {{ t('midi.sfConfigDesc') }}
           </p>
           <v-text-field
             v-model="sfUrlInput"
-            label="SoundFont URL or path"
-            placeholder="https://... or /path/to/soundfont.sf2"
+            :label="t('midi.sfConfigLabel')"
+            :placeholder="t('midi.sfConfigPlaceholder')"
             variant="outlined" hide-details
           />
           <div v-if="sfError" class="text-error text-body-2 mt-2">{{ sfError }}</div>
           <v-alert type="info" variant="tonal" density="compact" rounded="lg" class="mt-4 text-caption">
-            Free SoundFonts: GeneralUser GS or MuseScore_General.sf3 — specify the path above.<br>
-            Scroll: wheel · Pan X: Shift+wheel · Zoom X: Ctrl+wheel · Zoom Y: Ctrl+Alt+wheel
+            {{ t('midi.sfConfigHelp') }}<br>
+            {{ t('midi.sfConfigShortcuts') }}
           </v-alert>
         </v-card-text>
         <v-card-actions class="px-6 pb-5">
           <v-spacer />
-          <v-btn variant="text" rounded="pill" @click="showSFDialog = false">Cancel</v-btn>
+          <v-btn variant="text" rounded="pill" @click="showSFDialog = false">{{ t('midi.cancel') }}</v-btn>
           <v-btn color="primary" variant="tonal" rounded="pill" :loading="sfLoading" @click="loadSoundFont">
-            Load SoundFont
+            {{ t('midi.loadSoundFont') }}
           </v-btn>
         </v-card-actions>
       </v-card>
