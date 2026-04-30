@@ -125,8 +125,14 @@ const scrollY    = ref(0)
 const laneMode = ref('velocity')  // 'velocity' | 'cc' | 'bpm' | 'pc'
 const ccNumber = ref(7)
 
-const canvasRef  = ref(null)
-const rollRef    = ref(null)
+const canvasRef    = ref(null)
+const rollRef      = ref(null)
+const tsNumInputRef = ref(null)
+
+// TS popup
+const tsDialog  = ref(null)   // { x, y, tick, isNew }
+const tsEditNum = ref(4)
+const tsEditDen = ref(4)
 
 let audioCtx = null
 let synth    = null
@@ -1087,17 +1093,65 @@ function findNearestPcPx(x) {
   return null
 }
 
+// ── Time-signature popup ──────────────────────────────────────────────────────
+function tickToBarStart(tick) {
+  const tsList = [...timeSigs.value].sort((a, b) => a.tick - b.tick)
+  if (!tsList.length) return 0
+  for (let si = tsList.length - 1; si >= 0; si--) {
+    const ts = tsList[si]
+    if (tick >= ts.tick) {
+      const bt = ppq.value * ts.num * (4 / ts.den)
+      return ts.tick + Math.floor((tick - ts.tick) / bt) * bt
+    }
+  }
+  return 0
+}
+
+async function openTsDialog(canvasX, barTick) {
+  const existing = timeSigs.value.find(ts => ts.tick === barTick)
+  tsEditNum.value = existing?.num ?? 4
+  tsEditDen.value = existing?.den ?? 4
+  const cw = canvasRef.value?.getBoundingClientRect().width ?? 400
+  tsDialog.value = { x: Math.min(canvasX, cw - 168), y: RULER_H + 4, tick: barTick, isNew: !existing }
+  await nextTick()
+  tsNumInputRef.value?.focus()
+  tsNumInputRef.value?.select()
+}
+
+function commitTsDialog() {
+  if (!tsDialog.value) return
+  const num = Math.max(1, Math.min(32, Math.round(tsEditNum.value) || 4))
+  const den = tsEditDen.value
+  const { tick } = tsDialog.value
+  const idx = timeSigs.value.findIndex(ts => ts.tick === tick)
+  if (idx >= 0) timeSigs.value[idx] = { tick, num, den }
+  else { timeSigs.value.push({ tick, num, den }); timeSigs.value.sort((a, b) => a.tick - b.tick) }
+  tsDialog.value = null
+  markDirty()
+}
+
+function deleteTsDialog() {
+  if (!tsDialog.value || tsDialog.value.tick === 0) return
+  timeSigs.value = timeSigs.value.filter(ts => ts.tick !== tsDialog.value.tick)
+  tsDialog.value = null
+  markDirty()
+}
+
 function onMouseDown(e) {
   const { x, y } = canvasCoords(e)
 
   if (y < RULER_H && x >= KEYS_W) {
     const tick = Math.max(0, pxToTicks(x - KEYS_W + scrollX.value))
+    if (e.button === 2 && !e.ctrlKey) {
+      openTsDialog(x, tickToBarStart(tick))
+      return
+    }
     currentTick.value = tick
     markDirty()
     if (e.button === 0) {
       if (seq) seq.currentTime = ticksToSeconds(tick)
       drag = { type: 'ruler', button: 0 }
-    } else if (e.button === 2) {
+    } else if (e.button === 2 && e.ctrlKey) {
       playChordAtTick(tick)
       drag = { type: 'ruler', button: 2 }
     }
@@ -1645,13 +1699,12 @@ watch(() => props.file, async (f) => {
         </div>
 
         <!-- Piano roll + lane overlay -->
-        <div class="piano-roll" ref="rollRef">
+        <div class="piano-roll" ref="rollRef" @contextmenu.prevent>
           <canvas ref="canvasRef" class="roll-canvas"
             @mousedown="onMouseDown"
             @mousemove="onMouseMove"
             @mouseup="onMouseUp"
             @mouseleave="onMouseLeave"
-            @contextmenu.prevent
             @wheel.prevent="onWheel"
           />
 
@@ -1678,6 +1731,33 @@ watch(() => props.file, async (f) => {
               style="font-size:10px;width:160px"
               @update:model-value="markDirty()"
             />
+          </div>
+
+          <!-- TS dialog overlay (click-away to close) -->
+          <div v-if="tsDialog" class="ts-overlay" @mousedown="tsDialog = null" />
+
+          <!-- TS popup -->
+          <div v-if="tsDialog" class="ts-popup"
+               :style="{ left: tsDialog.x + 'px', top: tsDialog.y + 'px' }"
+               @mousedown.stop>
+            <div class="ts-popup-title">
+              {{ tsDialog.isNew ? 'Add Time Signature' : 'Edit Time Signature' }}
+            </div>
+            <div class="ts-popup-row">
+              <input ref="tsNumInputRef" class="ts-input" type="number" min="1" max="32"
+                     v-model.number="tsEditNum"
+                     @keydown.enter="commitTsDialog" @keydown.escape="tsDialog = null" />
+              <span class="ts-sep">/</span>
+              <select class="ts-input ts-den" v-model.number="tsEditDen"
+                      @keydown.enter="commitTsDialog" @keydown.escape="tsDialog = null">
+                <option v-for="d in [1,2,4,8,16,32]" :key="d" :value="d">{{ d }}</option>
+              </select>
+            </div>
+            <div class="ts-popup-actions">
+              <button class="ts-btn ts-ok" @click="commitTsDialog">OK</button>
+              <button class="ts-btn" @click="tsDialog = null">Cancel</button>
+              <button v-if="tsDialog.tick !== 0" class="ts-btn ts-del" @click="deleteTsDialog">Delete</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1940,4 +2020,75 @@ watch(() => props.file, async (f) => {
   padding: 0 6px;
   background: rgba(10,10,20,0.75);
 }
+
+/* ── TS popup ───────────────────────────────────────────────── */
+.ts-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+}
+
+.ts-popup {
+  position: absolute;
+  z-index: 10;
+  background: #1a1a2e;
+  border: 1px solid #3a3a5a;
+  border-radius: 4px;
+  padding: 8px 10px;
+  min-width: 154px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+}
+
+.ts-popup-title {
+  font-size: 10px;
+  font-weight: bold;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #66cc99;
+  margin-bottom: 7px;
+}
+
+.ts-popup-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.ts-input {
+  background: #0d0d1e;
+  border: 1px solid #3a3a5a;
+  border-radius: 3px;
+  color: #c8c8e0;
+  padding: 3px 5px;
+  font-size: 13px;
+  font-family: monospace;
+  text-align: center;
+  width: 44px;
+}
+.ts-den { width: 48px; cursor: pointer; }
+.ts-input:focus { outline: 1px solid #66cc99; }
+
+.ts-sep { color: #8888bb; font-size: 16px; }
+
+.ts-popup-actions { display: flex; gap: 4px; }
+
+.ts-btn {
+  flex: 1;
+  padding: 3px 2px;
+  font-size: 11px;
+  border: 1px solid #3a3a5a;
+  border-radius: 3px;
+  background: #252540;
+  color: #c8c8e0;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.ts-btn:hover { background: #30305a; }
+
+.ts-ok { background: #1a3a2a; border-color: #66cc99; color: #66cc99; }
+.ts-ok:hover { background: #204a36; }
+
+.ts-del { color: #ff7777; border-color: #553333; }
+.ts-del:hover { background: #3a2020; }
 </style>
