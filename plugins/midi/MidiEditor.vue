@@ -268,6 +268,14 @@ function trackProgramAt(track, tick) {
 }
 
 // ── MIDI parser ───────────────────────────────────────────────────────────────
+function decodeMidiText(bytes) {
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes) } catch {}
+  for (const enc of ['shift-jis', 'gbk', 'big5', 'euc-kr', 'windows-1252']) {
+    try { return new TextDecoder(enc, { fatal: true }).decode(bytes) } catch {}
+  }
+  return new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+}
+
 function readVarLen(buf, pos) {
   let val = 0, b
   do { b = buf[pos++]; val = (val << 7) | (b & 0x7F) } while (b & 0x80)
@@ -315,7 +323,7 @@ function parseMidi(buffer) {
         const ml = readVarLen(buf, pos); pos = ml.end
         const md = buf.slice(pos, pos + ml.value); pos += ml.value
         if (mt === 0x51 && ml.value === 3) events.push({ tick, type:'tempo', tempo:(md[0]<<16)|(md[1]<<8)|md[2] })
-        else if (mt === 0x03) events.push({ tick, type:'trackName', name: new TextDecoder('utf-8',{fatal:false}).decode(md) })
+        else if (mt === 0x03) events.push({ tick, type:'trackName', name: decodeMidiText(md) })
         else if (mt === 0x58) events.push({ tick, type:'timeSig', num:md[0], den:1<<md[1] })
         else if (mt === 0x2F) break
         continue
