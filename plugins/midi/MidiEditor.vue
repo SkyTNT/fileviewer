@@ -20,8 +20,8 @@ const vuetifyTheme = useTheme()
 const isDark = computed(() => vuetifyTheme.global.current.value.dark)
 
 const colors = computed(() => isDark.value ? {
-  bg:           '#16161e', bgBlack:      '#0f0f18',
-  bgDark:       '#0c0c18', bgDarker:     '#0a0a14',
+  bgBlack:      'rgba(0,0,0,0.30)',
+  bgDark:       'rgba(0,0,0,0.22)', bgDarker:     'rgba(0,0,0,0.35)',
   gridQ:        '#1e1e36', gridBeat:     '#20203a', gridBar:     '#333352',
   border:       '#2a2a40', borderHard:   '#3a3a5a',
   cursor:       '#ff4455',
@@ -34,8 +34,8 @@ const colors = computed(() => isDark.value ? {
   bpmDotStroke: '#ffaabb', bpmText:      '#ddaacc',
   pcText:       '#bbccee', pcDotFirst:   '#aaddff',
 } : {
-  bg:           '#f4f4fc', bgBlack:      '#e4e4f2',
-  bgDark:       '#ebebf5', bgDarker:     '#e0e0ec',
+  bgBlack:      'rgba(0,0,0,0.065)',
+  bgDark:       'rgba(0,0,0,0.045)', bgDarker:     'rgba(0,0,0,0.08)',
   gridQ:        '#d8d8ec', gridBeat:     '#ccccdd', gridBar:     '#aaaac0',
   border:       '#c8c8dc', borderHard:   '#9090aa',
   cursor:       '#dd2233',
@@ -579,6 +579,7 @@ function draw() {
   }
   const ctx = canvas.getContext('2d')
   ctx.save(); ctx.resetTransform(); ctx.scale(dpr, dpr)
+  ctx.clearRect(0, 0, W, H)
 
   const C = colors.value
   const primaryRgb = getComputedStyle(canvas).getPropertyValue('--v-theme-primary').trim() || '136,187,255'
@@ -591,7 +592,6 @@ function draw() {
   const beatPx = zoomX.value * BASE_PPB
 
   // ── Background stripes ──────────────────────────────────────────────────────
-  ctx.fillStyle = C.bg; ctx.fillRect(KEYS_W, RULER_H, noteW, noteH)
   for (let n = 0; n < 128; n++) {
     const y = RULER_H + noteToY(n) - scrollY.value
     if (y + rh < RULER_H || y > RULER_H + noteH) continue
