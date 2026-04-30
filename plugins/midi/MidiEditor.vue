@@ -26,10 +26,17 @@ const IS_BLACK = [false,true,false,true,false,false,true,false,true,false,true,f
 const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
 const TRACK_COLORS = ['#4ade80','#60a5fa','#f87171','#fb923c','#a78bfa','#34d399','#f472b6','#facc15','#22d3ee','#e879f9']
 const QUANTIZE_OPTS = [
-  {title:'1/4',  value: 4 },
-  {title:'1/8',  value: 8 },
-  {title:'1/16', value: 16},
-  {title:'1/32', value: 32},
+  { title: 'Off',    value: null  },
+  { title: '1/4',   value: 1     },
+  { title: '1/8',   value: 1/2   },
+  { title: '1/16',  value: 1/4   },
+  { title: '1/32',  value: 1/8   },
+  { title: '1/4T',  value: 2/3   },
+  { title: '1/8T',  value: 1/3   },
+  { title: '1/16T', value: 1/6   },
+  { title: '1/4×5', value: 4/5   },
+  { title: '1/8×5', value: 2/5   },
+  { title: '1/16×5',value: 1/5   },
 ]
 const BPM_MIN = 20, BPM_MAX = 320
 const CC_NAMES = {
@@ -107,7 +114,7 @@ const DEFAULT_SF_URL = '/api/midi/soundfont/default'
 const sfUrlInput = ref(localStorage.getItem('fv-midi-soundfont') || DEFAULT_SF_URL)
 const showSFDialog = ref(false)
 
-const quantize   = ref(16)
+const quantize   = ref(1/4)
 const activeTrack = ref(0)
 const zoomX      = ref(1.0)
 const zoomY      = ref(1.0)
@@ -160,11 +167,17 @@ function rowHeight() { return NOTE_H * zoomY.value }
 function noteToY(note) { return (127 - note) * rowHeight() }
 function yToNote(y) { return Math.max(0, Math.min(127, 127 - Math.floor(y / rowHeight()))) }
 
-function quantizeTick(tick) {
-  const q = ppq.value * 4 / quantize.value
-  return Math.round(tick / q) * q
+function gridTicks() {
+  return quantize.value != null ? Math.max(1, Math.round(ppq.value * quantize.value)) : 0
 }
-function defaultDuration() { return Math.max(1, ppq.value * 4 / quantize.value) }
+function quantizeTick(tick) {
+  const q = gridTicks()
+  return q > 0 ? Math.round(tick / q) * q : tick
+}
+function defaultDuration() {
+  const q = gridTicks()
+  return Math.max(1, q > 0 ? q : Math.round(ppq.value / 4))
+}
 
 function ticksToSeconds(tick) {
   const sorted = [...tempos.value].sort((a, b) => a.tick - b.tick)
@@ -478,6 +491,38 @@ function buildMidiBytes() {
   return new Uint8Array(out)
 }
 
+// ── Bar iterator ───────────────────────────────────────────────────────────────
+// Calls cb({tick, barNum, num, den, barTicks}) for each bar start in [firstTick, lastTick].
+// Handles multiple time signature changes. Includes one bar before firstTick for edge rendering.
+function forEachBar(firstTick, lastTick, ppqV, cb) {
+  const tsList = [...timeSigs.value].sort((a, b) => a.tick - b.tick)
+  if (!tsList.length) tsList.push({ tick: 0, num: 4, den: 4 })
+  let globalBarNum = 1
+  for (let si = 0; si < tsList.length; si++) {
+    const ts        = tsList[si]
+    const segStart  = ts.tick
+    const nextStart = si + 1 < tsList.length ? tsList[si + 1].tick : Infinity
+    const barTicks  = ppqV * ts.num * (4 / ts.den)
+    if (nextStart !== Infinity && nextStart <= firstTick) {
+      globalBarNum += Math.ceil((nextStart - segStart) / barTicks)
+      continue
+    }
+    const skip = firstTick > segStart
+      ? Math.max(0, Math.floor((firstTick - segStart) / barTicks) - 1)
+      : 0
+    let bt = segStart + skip * barTicks
+    let bn = globalBarNum + skip
+    while (bt <= lastTick) {
+      if (nextStart !== Infinity && bt >= nextStart) break
+      cb({ tick: bt, barNum: bn, num: ts.num, den: ts.den, barTicks })
+      bt += barTicks
+      bn++
+    }
+    if (nextStart !== Infinity)
+      globalBarNum += Math.ceil((nextStart - segStart) / barTicks)
+  }
+}
+
 // ── Canvas drawing ─────────────────────────────────────────────────────────────
 function draw() {
   const canvas = canvasRef.value
@@ -493,14 +538,11 @@ function draw() {
   const ctx = canvas.getContext('2d')
   ctx.save(); ctx.resetTransform(); ctx.scale(dpr, dpr)
 
-  const noteW = W - KEYS_W
-  const noteH = H - RULER_H - VEL_H
-  const rh    = rowHeight()
-  const ppqV  = ppq.value
-  const tsNum = timeSigs.value[0]?.num ?? 4
-  const tsDen = timeSigs.value[0]?.den ?? 4
+  const noteW  = W - KEYS_W
+  const noteH  = H - RULER_H - VEL_H
+  const rh     = rowHeight()
+  const ppqV   = ppq.value
   const beatPx = zoomX.value * BASE_PPB
-  const barTicks = ppqV * tsNum * (4 / tsDen)
 
   // ── Background stripes ──────────────────────────────────────────────────────
   ctx.fillStyle = '#16161e'; ctx.fillRect(KEYS_W, RULER_H, noteW, noteH)
@@ -520,39 +562,38 @@ function draw() {
   // ── Grid lines ──────────────────────────────────────────────────────────────
   const firstTick = pxToTicks(scrollX.value)
   const lastTick  = pxToTicks(scrollX.value + noteW)
-  let barN = Math.floor(firstTick / barTicks)
-  while (true) {
-    const startTick = barN * barTicks
-    if (startTick > lastTick) break
-    const bx = KEYS_W + ticksToPx(startTick) - scrollX.value
+
+  // Quantize grid (faintest layer)
+  const q   = gridTicks()
+  const qPx = q > 0 ? ticksToPx(q) : 0
+  if (q > 0 && qPx >= 3) {
+    ctx.strokeStyle = '#1e1e36'; ctx.lineWidth = 0.5
+    const firstQ = Math.floor(firstTick / q) * q
+    for (let qt = firstQ; qt <= lastTick; qt += q) {
+      const qx = KEYS_W + ticksToPx(qt) - scrollX.value
+      if (qx <= KEYS_W || qx > W) continue
+      ctx.beginPath(); ctx.moveTo(qx + 0.5, RULER_H); ctx.lineTo(qx + 0.5, RULER_H + noteH); ctx.stroke()
+    }
+  }
+
+  // Beat lines then bar lines (overwrite quantize lines with stronger strokes)
+  forEachBar(firstTick, lastTick, ppqV, ({ tick: barTick, barTicks, num, den }) => {
+    if (beatPx >= 12) {
+      const beats = num * (4 / den)
+      for (let b = 1; b < beats; b++) {
+        const bbx = KEYS_W + ticksToPx(barTick + b * ppqV) - scrollX.value
+        if (bbx > KEYS_W && bbx <= W) {
+          ctx.strokeStyle = '#20203a'; ctx.lineWidth = 0.5
+          ctx.beginPath(); ctx.moveTo(bbx + 0.5, RULER_H); ctx.lineTo(bbx + 0.5, RULER_H + noteH); ctx.stroke()
+        }
+      }
+    }
+    const bx = KEYS_W + ticksToPx(barTick) - scrollX.value
     if (bx >= KEYS_W && bx <= W) {
       ctx.strokeStyle = '#333352'; ctx.lineWidth = 1
-      ctx.beginPath(); ctx.moveTo(bx+0.5,RULER_H); ctx.lineTo(bx+0.5,RULER_H+noteH); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(bx + 0.5, RULER_H); ctx.lineTo(bx + 0.5, RULER_H + noteH); ctx.stroke()
     }
-    if (beatPx >= 12) {
-      for (let b = 1; b < tsNum * (4/tsDen); b++) {
-        const bbt = startTick + b * ppqV
-        const bbx = KEYS_W + ticksToPx(bbt) - scrollX.value
-        if (bbx >= KEYS_W && bbx <= W) {
-          ctx.strokeStyle = '#20203a'; ctx.lineWidth = 0.5
-          ctx.beginPath(); ctx.moveTo(bbx+0.5,RULER_H); ctx.lineTo(bbx+0.5,RULER_H+noteH); ctx.stroke()
-        }
-      }
-    }
-    if (beatPx >= 60) {
-      for (let b = 0; b < tsNum * (4/tsDen); b++) {
-        for (let s = 1; s < 4; s++) {
-          const st = startTick + b * ppqV + s * ppqV / 4
-          const sx = KEYS_W + ticksToPx(st) - scrollX.value
-          if (sx >= KEYS_W && sx <= W) {
-            ctx.strokeStyle = '#1a1a2e'; ctx.lineWidth = 0.5
-            ctx.beginPath(); ctx.moveTo(sx+0.5,RULER_H); ctx.lineTo(sx+0.5,RULER_H+noteH); ctx.stroke()
-          }
-        }
-      }
-    }
-    barN++
-  }
+  })
 
   // ── Notes ───────────────────────────────────────────────────────────────────
   for (let ti = 0; ti < trackData.value.length; ti++) {
@@ -595,29 +636,35 @@ function draw() {
 
   // ── Ruler ────────────────────────────────────────────────────────────────────
   ctx.fillStyle = '#0c0c18'; ctx.fillRect(KEYS_W, 0, noteW, RULER_H)
-  barN = Math.floor(firstTick / barTicks)
-  while (true) {
-    const startTick = barN * barTicks
-    if (startTick > lastTick) break
-    const bx = KEYS_W + ticksToPx(startTick) - scrollX.value
-    if (bx >= KEYS_W && bx <= W) {
-      ctx.strokeStyle = '#3a3a5a'; ctx.lineWidth = 1
-      ctx.beginPath(); ctx.moveTo(bx+0.5,0); ctx.lineTo(bx+0.5,RULER_H); ctx.stroke()
-      if (ticksToPx(barTicks) > 24) {
-        ctx.fillStyle = '#8888bb'; ctx.font = '10px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
-        ctx.fillText(String(barN + 1), bx + 3, RULER_H / 2)
-      }
-    }
+  forEachBar(firstTick, lastTick, ppqV, ({ tick: barTick, barNum, num, den, barTicks }) => {
+    const bx = KEYS_W + ticksToPx(barTick) - scrollX.value
     if (beatPx >= 24) {
-      for (let b = 1; b < tsNum * (4/tsDen); b++) {
-        const bbx = KEYS_W + ticksToPx(startTick + b * ppqV) - scrollX.value
-        if (bbx >= KEYS_W && bbx <= W) {
+      const beats = num * (4 / den)
+      for (let b = 1; b < beats; b++) {
+        const bbx = KEYS_W + ticksToPx(barTick + b * ppqV) - scrollX.value
+        if (bbx > KEYS_W && bbx <= W) {
           ctx.strokeStyle = '#28284a'; ctx.lineWidth = 0.5
-          ctx.beginPath(); ctx.moveTo(bbx+0.5,RULER_H*0.6); ctx.lineTo(bbx+0.5,RULER_H); ctx.stroke()
+          ctx.beginPath(); ctx.moveTo(bbx + 0.5, RULER_H * 0.6); ctx.lineTo(bbx + 0.5, RULER_H); ctx.stroke()
         }
       }
     }
-    barN++
+    if (bx < KEYS_W || bx > W) return
+    ctx.strokeStyle = '#3a3a5a'; ctx.lineWidth = 1
+    ctx.beginPath(); ctx.moveTo(bx + 0.5, 0); ctx.lineTo(bx + 0.5, RULER_H); ctx.stroke()
+    if (ticksToPx(barTicks) > 24) {
+      ctx.fillStyle = '#8888bb'; ctx.font = '10px monospace'
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
+      ctx.fillText(String(barNum), bx + 3, RULER_H * 0.72)
+    }
+  })
+
+  // Time signature labels — one per TS change, at its bar position
+  for (const ts of [...timeSigs.value].sort((a, b) => a.tick - b.tick)) {
+    const tx = KEYS_W + ticksToPx(ts.tick) - scrollX.value
+    if (tx < KEYS_W || tx > W) continue
+    ctx.fillStyle = '#66cc99'; ctx.font = 'bold 9px sans-serif'
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
+    ctx.fillText(`${ts.num}/${ts.den}`, tx + 3, RULER_H * 0.3)
   }
 
   // ── Piano keys ───────────────────────────────────────────────────────────────
@@ -996,7 +1043,7 @@ function eraseCcAtPos(x) {
   const track = trackData.value[activeTrack.value]
   if (!track) return
   const tick = pxToTicks(x - KEYS_W + scrollX.value)
-  const q = ppq.value * 4 / quantize.value
+  const q = gridTicks() || Math.round(ppq.value / 4)
   const qi = Math.round(tick / q)
   const before = track.ccEvents.length
   track.ccEvents = track.ccEvents.filter(e =>
@@ -1023,7 +1070,7 @@ function erasePcAtPos(x) {
   const track = trackData.value[activeTrack.value]
   if (!track) return
   const tick = pxToTicks(x - KEYS_W + scrollX.value)
-  const q = ppq.value * 4 / quantize.value
+  const q = gridTicks() || Math.round(ppq.value / 4)
   const qi = Math.round(tick / q)
   const before = track.pcEvents.length
   track.pcEvents = track.pcEvents.filter(e => Math.round(e.tick / q) !== qi)
@@ -1225,15 +1272,22 @@ function onMouseLeave() {
 function onWheel(e) {
   const rect = canvasRef.value.getBoundingClientRect()
   const x = e.clientX - rect.left
+  const y = e.clientY - rect.top
   const noteH = rect.height - RULER_H - VEL_H
   const noteW = rect.width  - KEYS_W
 
-  if (e.ctrlKey) {
-    const oldZoom = zoomX.value
-    const factor  = e.deltaY < 0 ? 1.15 : 1/1.15
-    zoomX.value   = Math.max(0.1, Math.min(16, oldZoom * factor))
+  if (e.ctrlKey && e.altKey) {
+    // Y zoom anchored to mouse Y
+    const contentY = y - RULER_H + scrollY.value
+    const factor   = e.deltaY < 0 ? 1.15 : 1/1.15
+    zoomY.value    = Math.max(0.3, Math.min(4, zoomY.value * factor))
+    scrollY.value  = Math.max(0, Math.min(128 * rowHeight() - noteH, contentY * factor - (y - RULER_H)))
+  } else if (e.ctrlKey) {
+    // X zoom anchored to mouse X — compute tick BEFORE changing zoom
     const tickAtMouse = pxToTicks(x - KEYS_W + scrollX.value)
-    scrollX.value = Math.max(0, ticksToPx(tickAtMouse) - (x - KEYS_W))
+    const factor      = e.deltaY < 0 ? 1.15 : 1/1.15
+    zoomX.value       = Math.max(0.1, Math.min(16, zoomX.value * factor))
+    scrollX.value     = Math.max(0, ticksToPx(tickAtMouse) - (x - KEYS_W))
   } else if (e.shiftKey) {
     const maxSX = Math.max(0, ticksToPx(totalTicks.value) + 200 - noteW)
     scrollX.value = Math.max(0, Math.min(maxSX, scrollX.value + e.deltaY * 0.8))
@@ -1524,7 +1578,7 @@ watch(() => props.file, async (f) => {
         />
 
         <v-select v-model="quantize" :items="QUANTIZE_OPTS"
-          hide-details density="compact" variant="outlined" style="width:82px;flex-shrink:0" />
+          hide-details density="compact" variant="outlined" style="width:96px;flex-shrink:0" />
 
         <v-btn size="small" icon density="compact" @click="zoomX = Math.max(0.1, +(zoomX-0.25).toFixed(2))">
           <v-icon size="14">mdi-magnify-minus-outline</v-icon>
@@ -1646,7 +1700,7 @@ watch(() => props.file, async (f) => {
           <div v-if="sfError" class="text-error text-body-2 mt-2">{{ sfError }}</div>
           <v-alert type="info" variant="tonal" density="compact" class="mt-3 text-caption">
             Free SoundFonts: download GeneralUser GS or MuseScore_General.sf3 and specify the path.
-            Scroll: wheel · Pan X: Shift+wheel · Zoom: Ctrl+wheel
+            Scroll: wheel · Pan X: Shift+wheel · Zoom X: Ctrl+wheel · Zoom Y: Ctrl+Alt+wheel
           </v-alert>
         </v-card-text>
         <v-card-actions>
