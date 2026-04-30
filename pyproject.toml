@@ -34,6 +34,7 @@ include = ["kernel*", "plugins*", "static*"]
 [tool.setuptools.package-data]
 static = ["**/*"]
 "*" = ["*.toml"]
+"plugins.midi" = ["soundfonts/*"]
 
 [tool.setuptools]
 py-modules = ["cli", "server", "config"]
