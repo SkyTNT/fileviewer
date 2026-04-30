@@ -16,11 +16,11 @@ const http     = services?.get('network.http')
 const eventBus = services?.get('event.bus')
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const KEYS_W  = 72    // piano key strip width
-const RULER_H = 32    // top ruler height
-const VEL_H   = 72    // bottom velocity lane height
-const NOTE_H  = 9     // base pixels per semitone
-const BASE_PPB = 120  // base pixels per beat at zoom 1x
+const KEYS_W  = 72
+const RULER_H = 32
+const VEL_H   = 80
+const NOTE_H  = 9
+const BASE_PPB = 120
 
 const IS_BLACK = [false,true,false,true,false,false,true,false,true,false,true,false]
 const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
@@ -31,6 +31,21 @@ const QUANTIZE_OPTS = [
   {title:'1/16', value: 16},
   {title:'1/32', value: 32},
 ]
+const BPM_MIN = 20, BPM_MAX = 320
+const CC_NAMES = {
+  0:'Bank Select', 1:'Modulation', 2:'Breath', 4:'Foot', 7:'Volume',
+  10:'Pan', 11:'Expression', 64:'Sustain', 65:'Portamento',
+  71:'Resonance', 72:'Release', 73:'Attack', 74:'Filter Cutoff',
+  91:'Reverb', 93:'Chorus',
+}
+const CC_ITEMS = Array.from({length:128}, (_,i) => ({
+  value: i,
+  title: CC_NAMES[i] ? `${i}: ${CC_NAMES[i]}` : `CC ${i}`,
+}))
+const CHANNEL_ITEMS = Array.from({length:16}, (_,i) => ({
+  value: i,
+  title: i === 9 ? 'Channel 10 (Drum)' : `Channel ${i + 1}`,
+}))
 
 const GM_INSTRUMENTS = [
   'Acoustic Grand Piano','Bright Acoustic Piano','Electric Grand Piano','Honky-tonk Piano',
@@ -59,26 +74,32 @@ const GM_INSTRUMENTS = [
 ]
 const GM_ITEMS = GM_INSTRUMENTS.map((name, i) => ({ title: `${i + 1}. ${name}`, value: i }))
 
+const GM_DRUM_KITS = {
+  0:'Standard Kit', 8:'Room Kit', 16:'Power Kit', 24:'Electronic Kit',
+  25:'TR-808 Kit', 32:'Jazz Kit', 40:'Brush Kit', 48:'Orchestra Kit', 56:'Sound FX Kit',
+}
+const GM_DRUM_ITEMS = Array.from({length: 128}, (_, i) => ({
+  title: `${i}. ${GM_DRUM_KITS[i] ?? `Kit ${i}`}`,
+  value: i,
+}))
+
 // ── State ─────────────────────────────────────────────────────────────────────
 const loading   = ref(true)
 const error     = ref(null)
 const saving    = ref(false)
 
-// MIDI data
 const ppq       = ref(480)
 const tempos    = ref([{ tick: 0, tempo: 500000 }])
 const timeSigs  = ref([{ tick: 0, num: 4, den: 4 }])
-const trackData = ref([])   // { index, name, channel, color, muted, solo, notes, events }
+const trackData = ref([])
 const totalTicks = ref(0)
 
-// Playback
 const playing     = ref(false)
 const currentTick = ref(0)
 const looping     = ref(false)
 const loopStart   = ref(0)
 const loopEnd     = ref(0)
 
-// SoundFont
 const sfLoaded   = ref(false)
 const sfLoading  = ref(false)
 const sfError    = ref(null)
@@ -86,7 +107,6 @@ const DEFAULT_SF_URL = '/api/midi/soundfont/default'
 const sfUrlInput = ref(localStorage.getItem('fv-midi-soundfont') || DEFAULT_SF_URL)
 const showSFDialog = ref(false)
 
-// Editor view
 const quantize   = ref(16)
 const activeTrack = ref(0)
 const zoomX      = ref(1.0)
@@ -94,21 +114,21 @@ const zoomY      = ref(1.0)
 const scrollX    = ref(0)
 const scrollY    = ref(0)
 
-// Canvas refs
+// Lane mode
+const laneMode = ref('velocity')  // 'velocity' | 'cc' | 'bpm' | 'pc'
+const ccNumber = ref(7)
+
 const canvasRef  = ref(null)
 const rollRef    = ref(null)
 
-// SpessaSynth instances (non-reactive)
 let audioCtx = null
 let synth    = null
 let seq      = null
 
-// Animation state
 let animFrameId  = null
 let rafDirtyId   = null
 
-// Drag interaction state
-let drag = null  // { type, startX, startY, startTick, startNote, note, track, origStart, origNote }
+let drag = null
 let noteIdSeq = 0
 
 // ── Computed ──────────────────────────────────────────────────────────────────
@@ -134,12 +154,8 @@ const positionDisplay = computed(() => {
 })
 
 // ── Unit conversions ──────────────────────────────────────────────────────────
-function ticksToPx(ticks) {
-  return ticks * zoomX.value * BASE_PPB / ppq.value
-}
-function pxToTicks(px) {
-  return Math.round(px * ppq.value / (zoomX.value * BASE_PPB))
-}
+function ticksToPx(ticks) { return ticks * zoomX.value * BASE_PPB / ppq.value }
+function pxToTicks(px) { return Math.round(px * ppq.value / (zoomX.value * BASE_PPB)) }
 function rowHeight() { return NOTE_H * zoomY.value }
 function noteToY(note) { return (127 - note) * rowHeight() }
 function yToNote(y) { return Math.max(0, Math.min(127, 127 - Math.floor(y / rowHeight()))) }
@@ -170,6 +186,30 @@ function secondsToTicks(sec) {
     time += dt; lastTick = tc.tick; lastTempo = tc.tempo
   }
   return lastTick + Math.round((sec - time) * 1e6 / lastTempo * ppq.value)
+}
+
+// ── Lane Y helpers ─────────────────────────────────────────────────────────────
+function bpmToLaneY(bpm, laneH) {
+  return 2 + (1 - (bpm - BPM_MIN) / (BPM_MAX - BPM_MIN)) * (laneH - 4)
+}
+function laneYToBpm(y, laneH) {
+  return Math.max(BPM_MIN, Math.min(BPM_MAX, Math.round(
+    BPM_MIN + (1 - (y - 2) / (laneH - 4)) * (BPM_MAX - BPM_MIN)
+  )))
+}
+function laneYToCcVal(y, laneH) {
+  return Math.max(0, Math.min(127, Math.round(127 * (1 - (y - 2) / (laneH - 4)))))
+}
+function laneYToPcProg(y, laneH) {
+  return Math.max(0, Math.min(127, Math.round(127 * (1 - (y - 2) / (laneH - 4)))))
+}
+function trackProgramAt(track, tick) {
+  let prog = track.program ?? 0
+  for (const ev of (track.pcEvents || [])) {
+    if (ev.tick <= tick) prog = ev.program
+    else break
+  }
+  return prog
 }
 
 // ── MIDI parser ───────────────────────────────────────────────────────────────
@@ -256,7 +296,7 @@ function buildTracks(parsed) {
   for (let ti = 0; ti < parsed.tracks.length; ti++) {
     const evs = parsed.tracks[ti]
     const pending = new Map()
-    const notes = [], otherEvs = []
+    const notes = [], otherEvs = [], ccEventsArr = [], pcEventsArr = []
     let name = ti === 0 ? 'Conductor' : `Track ${ti}`
     let primaryChannel = 0
     let program = 0
@@ -266,8 +306,8 @@ function buildTracks(parsed) {
       if (ev.type === 'tempo')    { result.tempos.push({ tick: ev.tick, tempo: ev.tempo }); continue }
       if (ev.type === 'timeSig')  { result.timeSigs.push({ tick: ev.tick, num: ev.num, den: ev.den }); continue }
       if (ev.type === 'pc') {
-        if (ev.tick === 0) program = ev.program   // capture initial patch; skip re-adding at tick 0
-        else if (ev.rawBytes) otherEvs.push({ tick: ev.tick, rawBytes: ev.rawBytes })
+        if (ev.tick === 0) program = ev.program
+        else pcEventsArr.push({ tick: ev.tick, program: ev.program })
         continue
       }
       if (ev.type === 'noteOn') {
@@ -283,16 +323,22 @@ function buildTracks(parsed) {
         }
         continue
       }
+      if (ev.type === 'cc') {
+        ccEventsArr.push({ tick: ev.tick, controller: ev.controller, value: ev.value })
+        continue
+      }
       if (ev.rawBytes) otherEvs.push({ tick: ev.tick, rawBytes: ev.rawBytes })
     }
 
+    ccEventsArr.sort((a, b) => a.tick - b.tick)
+    pcEventsArr.sort((a, b) => a.tick - b.tick)
     result.tracks.push({
       index: ti, name: name.trim() || `Track ${ti + 1}`,
       channel: primaryChannel,
       program,
       color: TRACK_COLORS[ti % TRACK_COLORS.length],
       muted: false, solo: false,
-      notes, events: otherEvs,
+      notes, events: otherEvs, ccEvents: ccEventsArr, pcEvents: pcEventsArr,
     })
   }
 
@@ -317,7 +363,6 @@ function buildMidiBytes() {
   const numTracks = tracks.length
   const out = []
 
-  // Header
   out.push(0x4D,0x54,0x68,0x64, 0,0,0,6, 0, numTracks > 1 ? 1 : 0,
     (numTracks>>8)&0xFF, numTracks&0xFF,
     (ppq.value>>8)&0xFF, ppq.value&0xFF)
@@ -326,13 +371,11 @@ function buildMidiBytes() {
     const track = tracks[ti]
     const evList = []
 
-    // Track name
     if (track.name) {
       const nb = [...new TextEncoder().encode(track.name)]
       evList.push({ tick:0, prio:0, bytes:[0xFF,0x03,...writeVarLen(nb.length),...nb] })
     }
 
-    // Tempo & time signature (conductor track = track 0)
     if (ti === 0) {
       for (const tc of tempos.value) {
         const t = Math.round(tc.tempo)
@@ -343,22 +386,29 @@ function buildMidiBytes() {
       }
     }
 
-    // Program change (skip channel 9 = GM drums)
-    if (track.channel !== 9) {
+    {
       const ch = track.channel & 0x0F
       evList.push({ tick: 0, prio: 0, bytes: [0xC0 | ch, (track.program ?? 0) & 0x7F] })
     }
 
-    // Preserved non-note events
     for (const ev of track.events) {
       evList.push({ tick: ev.tick, prio:1, bytes: ev.rawBytes })
     }
 
-    // Notes
+    // CC events
+    const ch = track.channel & 0x0F
+    for (const ev of (track.ccEvents || [])) {
+      evList.push({ tick: ev.tick, prio:1, bytes: [0xB0|ch, ev.controller & 0x7F, ev.value & 0x7F] })
+    }
+    // PC events (tick > 0)
+    for (const ev of (track.pcEvents || [])) {
+      evList.push({ tick: ev.tick, prio:0, bytes: [0xC0|ch, ev.program & 0x7F] })
+    }
+
     for (const note of track.notes) {
-      const ch = note.channel & 0x0F, n = note.note & 0x7F, v = Math.max(1, note.velocity & 0x7F)
-      evList.push({ tick: note.startTick, prio:2, bytes:[0x90|ch, n, v] })
-      evList.push({ tick: note.endTick,   prio:1, bytes:[0x80|ch, n, 0x40] })
+      const nch = note.channel & 0x0F, n = note.note & 0x7F, v = Math.max(1, note.velocity & 0x7F)
+      evList.push({ tick: note.startTick, prio:2, bytes:[0x90|nch, n, v] })
+      evList.push({ tick: note.endTick,   prio:1, bytes:[0x80|nch, n, 0x40] })
     }
 
     evList.sort((a,b) => a.tick !== b.tick ? a.tick - b.tick : a.prio - b.prio)
@@ -413,7 +463,6 @@ function draw() {
       ctx.fillStyle = '#0f0f18'
       ctx.fillRect(KEYS_W, y, noteW, rh - 0.5)
     }
-    // C note marker line
     if (n % 12 === 0) {
       ctx.strokeStyle = '#2a2a40'; ctx.lineWidth = 0.5
       ctx.beginPath(); ctx.moveTo(KEYS_W, y - 0.25); ctx.lineTo(W, y - 0.25); ctx.stroke()
@@ -484,7 +533,6 @@ function draw() {
     }
   }
 
-
   // ── Playback cursor ──────────────────────────────────────────────────────────
   const cx = KEYS_W + ticksToPx(currentTick.value) - scrollX.value
   if (cx >= KEYS_W && cx <= W) {
@@ -543,24 +591,156 @@ function draw() {
   ctx.strokeStyle = '#3a3a5a'; ctx.lineWidth = 1
   ctx.beginPath(); ctx.moveTo(KEYS_W-0.5,RULER_H); ctx.lineTo(KEYS_W-0.5,RULER_H+noteH); ctx.stroke()
 
-  // ── Velocity lane ─────────────────────────────────────────────────────────────
+  // ── Bottom lane (velocity / CC / BPM) ────────────────────────────────────────
   const velY = RULER_H + noteH
   ctx.fillStyle = '#0c0c18'; ctx.fillRect(KEYS_W, velY, noteW, VEL_H)
   ctx.strokeStyle = '#2a2a44'; ctx.lineWidth = 1
   ctx.beginPath(); ctx.moveTo(KEYS_W, velY+0.5); ctx.lineTo(W, velY+0.5); ctx.stroke()
-  for (let ti = 0; ti < trackData.value.length; ti++) {
-    const track = trackData.value[ti]
-    if (soloActive.value ? !track.solo : track.muted) continue
-    for (const note of track.notes) {
-      const vx = KEYS_W + ticksToPx(note.startTick) - scrollX.value
-      if (vx < KEYS_W || vx > W) continue
-      const bh = Math.max(2, (note.velocity / 127) * (VEL_H - 6))
-      ctx.fillStyle = note.selected ? '#ffffff' : track.color
-      ctx.globalAlpha = 0.75
-      ctx.fillRect(vx - 1, velY + VEL_H - bh, 3, bh)
+
+  if (laneMode.value === 'velocity') {
+    for (let ti = 0; ti < trackData.value.length; ti++) {
+      const track = trackData.value[ti]
+      if (soloActive.value ? !track.solo : track.muted) continue
+      for (const note of track.notes) {
+        const vx = KEYS_W + ticksToPx(note.startTick) - scrollX.value
+        if (vx < KEYS_W || vx > W) continue
+        const bh = Math.max(2, (note.velocity / 127) * (VEL_H - 6))
+        ctx.fillStyle = note.selected ? '#ffffff' : track.color
+        ctx.globalAlpha = 0.75
+        ctx.fillRect(vx - 1, velY + VEL_H - bh, 3, bh)
+      }
+    }
+    ctx.globalAlpha = 1
+
+  } else if (laneMode.value === 'cc') {
+    const track = trackData.value[activeTrack.value]
+    if (track) {
+      const color = track.color
+      const evs = (track.ccEvents || []).filter(e => e.controller === ccNumber.value)
+      const sorted = [...evs].sort((a, b) => a.tick - b.tick)
+
+      // Step line
+      if (sorted.length > 0) {
+        ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.5
+        ctx.beginPath()
+        let px2 = KEYS_W, py2 = velY + VEL_H
+        // find initial value
+        const firstEv = sorted[0]
+        py2 = velY + 2 + (1 - firstEv.value / 127) * (VEL_H - 4)
+        px2 = KEYS_W
+        ctx.moveTo(px2, py2)
+        for (const ev of sorted) {
+          const ex = KEYS_W + ticksToPx(ev.tick) - scrollX.value
+          const ey = velY + 2 + (1 - ev.value / 127) * (VEL_H - 4)
+          ctx.lineTo(ex, py2)
+          ctx.lineTo(ex, ey)
+          px2 = ex; py2 = ey
+        }
+        ctx.lineTo(W, py2)
+        ctx.stroke()
+        ctx.globalAlpha = 1
+      }
+
+      // Bars
+      for (const ev of sorted) {
+        const ex = KEYS_W + ticksToPx(ev.tick) - scrollX.value
+        if (ex < KEYS_W || ex > W) continue
+        const bh = Math.max(2, (ev.value / 127) * (VEL_H - 6))
+        ctx.fillStyle = color; ctx.globalAlpha = 0.85
+        ctx.fillRect(ex - 1, velY + VEL_H - bh, 3, bh)
+        ctx.globalAlpha = 1
+      }
+    }
+
+  } else if (laneMode.value === 'pc') {
+    const track = trackData.value[activeTrack.value]
+    if (track) {
+      const color = track.color
+      const allPc = [{ tick: 0, program: track.program ?? 0 }, ...(track.pcEvents || [])]
+        .sort((a, b) => a.tick - b.tick)
+      const isDrum = track.channel === 9
+
+      // Step line
+      ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.5
+      ctx.beginPath()
+      let prevPy = velY + 2 + (1 - allPc[0].program / 127) * (VEL_H - 4)
+      ctx.moveTo(KEYS_W, prevPy)
+      for (const ev of allPc) {
+        const ex = KEYS_W + ticksToPx(ev.tick) - scrollX.value
+        const ey = velY + 2 + (1 - ev.program / 127) * (VEL_H - 4)
+        ctx.lineTo(ex, prevPy); ctx.lineTo(ex, ey)
+        prevPy = ey
+      }
+      ctx.lineTo(W, prevPy); ctx.stroke(); ctx.globalAlpha = 1
+
+      // Dots + labels
+      for (const ev of allPc) {
+        const ex = KEYS_W + ticksToPx(ev.tick) - scrollX.value
+        if (ex < KEYS_W - 8 || ex > W + 8) continue
+        const ey = velY + 2 + (1 - ev.program / 127) * (VEL_H - 4)
+        ctx.fillStyle = ev.tick === 0 ? '#aaddff' : color
+        ctx.beginPath(); ctx.arc(ex, ey, 3, 0, Math.PI * 2); ctx.fill()
+        if (ex > KEYS_W + 4) {
+          const name = isDrum
+            ? (GM_DRUM_KITS[ev.program] ?? `Kit ${ev.program}`)
+            : (GM_INSTRUMENTS[ev.program] ?? `Program ${ev.program}`)
+          ctx.fillStyle = '#bbccee'; ctx.font = '8px sans-serif'
+          ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
+          ctx.fillText(`${ev.program}: ${name}`, ex + 6, ey)
+        }
+      }
+    }
+
+  } else if (laneMode.value === 'bpm') {
+    // BPM reference lines
+    ctx.setLineDash([4, 4])
+    for (const refBpm of [60, 90, 120, 150, 180, 240]) {
+      if (refBpm <= BPM_MIN || refBpm >= BPM_MAX) continue
+      const ry = velY + bpmToLaneY(refBpm, VEL_H)
+      ctx.strokeStyle = '#252535'; ctx.lineWidth = 0.5
+      ctx.beginPath(); ctx.moveTo(KEYS_W, ry); ctx.lineTo(W, ry); ctx.stroke()
+      ctx.fillStyle = '#3a3a55'; ctx.font = '8px monospace'; ctx.textAlign = 'left'
+      ctx.fillText(`${refBpm}`, KEYS_W + 2, ry - 2)
+    }
+    ctx.setLineDash([])
+
+    // Step curve
+    const sorted = [...tempos.value].sort((a, b) => a.tick - b.tick)
+    if (sorted.length > 0) {
+      ctx.strokeStyle = '#f472b6'; ctx.lineWidth = 1.5
+      ctx.beginPath()
+      const firstBpm = 60000000 / sorted[0].tempo
+      let prevY = velY + bpmToLaneY(firstBpm, VEL_H)
+      ctx.moveTo(KEYS_W, prevY)
+      for (const tc of sorted) {
+        const tx = KEYS_W + ticksToPx(tc.tick) - scrollX.value
+        const bpm = 60000000 / tc.tempo
+        const ty = velY + bpmToLaneY(bpm, VEL_H)
+        ctx.lineTo(tx, prevY)
+        ctx.lineTo(tx, ty)
+        prevY = ty
+      }
+      ctx.lineTo(W, prevY)
+      ctx.stroke()
+
+      // Dots + labels
+      for (const tc of sorted) {
+        const tx = KEYS_W + ticksToPx(tc.tick) - scrollX.value
+        if (tx < KEYS_W - 8 || tx > W + 8) continue
+        const bpm = Math.round(60000000 / tc.tempo)
+        const ty = velY + bpmToLaneY(bpm, VEL_H)
+        ctx.fillStyle = tc.tick === 0 ? '#ff88aa' : '#f472b6'
+        ctx.beginPath(); ctx.arc(tx, ty, 4, 0, Math.PI * 2); ctx.fill()
+        ctx.strokeStyle = '#ffaabb'; ctx.lineWidth = 1
+        ctx.stroke()
+        if (tx > KEYS_W + 4) {
+          ctx.fillStyle = '#ddaacc'; ctx.font = 'bold 9px monospace'
+          ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
+          ctx.fillText(`${bpm}`, tx + 7, ty)
+        }
+      }
     }
   }
-  ctx.globalAlpha = 1
 
   // ── Corners ───────────────────────────────────────────────────────────────────
   ctx.fillStyle = '#0a0a14'
@@ -578,13 +758,12 @@ function adjustColor(hex, amount) {
   return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`
 }
 
-
 function markDirty() {
   if (animFrameId || rafDirtyId) return
   rafDirtyId = requestAnimationFrame(() => { rafDirtyId = null; draw() })
 }
 
-// ── Animation loop (during playback) ─────────────────────────────────────────
+// ── Animation loop ─────────────────────────────────────────────────────────────
 function startAnimation() {
   if (animFrameId) return
   function loop() {
@@ -640,7 +819,6 @@ function stopPreview() {
   }
 }
 
-// Ruler right-click: sustain all notes active at a given tick until mouseup
 let rulerChordNotes = []
 
 function playChordAtTick(tick) {
@@ -653,11 +831,9 @@ function playChordAtTick(tick) {
         next.push({ channel: n.channel, note: n.note, velocity: n.velocity })
     }
   }
-  // Stop notes that dropped out
   const nextSet = new Set(next.map(n => `${n.channel}-${n.note}`))
   for (const { channel, note } of rulerChordNotes)
     if (!nextSet.has(`${channel}-${note}`)) try { synth.noteOff(channel, note) } catch {}
-  // Start notes that entered
   const prevSet = new Set(rulerChordNotes.map(n => `${n.channel}-${n.note}`))
   for (const { channel, note, velocity } of next)
     if (!prevSet.has(`${channel}-${note}`)) try { synth.noteOn(channel, note, velocity) } catch {}
@@ -727,10 +903,83 @@ function noteAtVelPos(x) {
   return closest
 }
 
+function findNearestTempoPx(x) {
+  for (const tc of tempos.value) {
+    const tx = KEYS_W + ticksToPx(tc.tick) - scrollX.value
+    if (Math.abs(tx - x) < 8) return tc
+  }
+  return null
+}
+
+function drawCcAtPos(x, y) {
+  const rect = canvasRef.value?.getBoundingClientRect()
+  if (!rect) return
+  const track = trackData.value[activeTrack.value]
+  if (!track) return
+  const tick = quantizeTick(Math.max(0, pxToTicks(x - KEYS_W + scrollX.value)))
+  const laneY = y - (rect.height - VEL_H)
+  const val = laneYToCcVal(laneY, VEL_H)
+  const idx = track.ccEvents.findIndex(e => e.controller === ccNumber.value && e.tick === tick)
+  if (idx >= 0) {
+    track.ccEvents[idx].value = val
+  } else {
+    track.ccEvents.push({ tick, controller: ccNumber.value, value: val })
+    track.ccEvents.sort((a, b) => a.tick - b.tick)
+  }
+  markDirty()
+}
+
+function eraseCcAtPos(x) {
+  const track = trackData.value[activeTrack.value]
+  if (!track) return
+  const tick = pxToTicks(x - KEYS_W + scrollX.value)
+  const q = ppq.value * 4 / quantize.value
+  const qi = Math.round(tick / q)
+  const before = track.ccEvents.length
+  track.ccEvents = track.ccEvents.filter(e =>
+    e.controller !== ccNumber.value || Math.round(e.tick / q) !== qi
+  )
+  if (track.ccEvents.length !== before) markDirty()
+}
+
+function drawPcAtPos(x, y) {
+  const rect = canvasRef.value?.getBoundingClientRect()
+  if (!rect) return
+  const track = trackData.value[activeTrack.value]
+  if (!track) return
+  const tick = Math.max(1, quantizeTick(pxToTicks(x - KEYS_W + scrollX.value)))
+  const laneY = y - (rect.height - VEL_H)
+  const prog = laneYToPcProg(laneY, VEL_H)
+  const idx = track.pcEvents.findIndex(e => e.tick === tick)
+  if (idx >= 0) track.pcEvents[idx].program = prog
+  else { track.pcEvents.push({ tick, program: prog }); track.pcEvents.sort((a, b) => a.tick - b.tick) }
+  markDirty()
+}
+
+function erasePcAtPos(x) {
+  const track = trackData.value[activeTrack.value]
+  if (!track) return
+  const tick = pxToTicks(x - KEYS_W + scrollX.value)
+  const q = ppq.value * 4 / quantize.value
+  const qi = Math.round(tick / q)
+  const before = track.pcEvents.length
+  track.pcEvents = track.pcEvents.filter(e => Math.round(e.tick / q) !== qi)
+  if (track.pcEvents.length !== before) markDirty()
+}
+
+function findNearestPcPx(x) {
+  const track = trackData.value[activeTrack.value]
+  if (!track) return null
+  for (const ev of (track.pcEvents || [])) {
+    const ex = KEYS_W + ticksToPx(ev.tick) - scrollX.value
+    if (Math.abs(ex - x) < 8) return ev
+  }
+  return null
+}
+
 function onMouseDown(e) {
   const { x, y } = canvasCoords(e)
 
-  // Ruler: left drag = seek, right drag = audition chord
   if (y < RULER_H && x >= KEYS_W) {
     const tick = Math.max(0, pxToTicks(x - KEYS_W + scrollX.value))
     currentTick.value = tick
@@ -745,13 +994,51 @@ function onMouseDown(e) {
     return
   }
 
-  // Velocity lane
   if (inVelArea(x, y)) {
-    if (e.button === 0) {
-      const hit = noteAtVelPos(x)
-      if (hit) {
-        previewNote(hit.note.channel, hit.note.note, hit.note.velocity)
-        drag = { type: 'velocity', note: hit.note }
+    if (laneMode.value === 'velocity') {
+      if (e.button === 0) {
+        const hit = noteAtVelPos(x)
+        if (hit) {
+          previewNote(hit.note.channel, hit.note.note, hit.note.velocity)
+          drag = { type: 'velocity', note: hit.note }
+        }
+      }
+    } else if (laneMode.value === 'cc') {
+      if (e.button === 2) {
+        eraseCcAtPos(x)
+      } else if (e.button === 0) {
+        drag = { type: 'cc-draw' }
+        drawCcAtPos(x, y)
+      }
+    } else if (laneMode.value === 'pc') {
+      if (e.button === 2) {
+        erasePcAtPos(x)
+      } else if (e.button === 0) {
+        drag = { type: 'pc-draw' }
+        drawPcAtPos(x, y)
+      }
+    } else if (laneMode.value === 'bpm') {
+      const tick = Math.max(0, pxToTicks(x - KEYS_W + scrollX.value))
+      const rect = canvasRef.value.getBoundingClientRect()
+      const laneY = y - (rect.height - VEL_H)
+      const bpm = laneYToBpm(laneY, VEL_H)
+      if (e.button === 2) {
+        const nearest = findNearestTempoPx(x)
+        if (nearest && nearest.tick !== 0) {
+          tempos.value = tempos.value.filter(t => t !== nearest)
+          markDirty()
+        }
+      } else if (e.button === 0) {
+        const nearest = findNearestTempoPx(x)
+        if (nearest) {
+          drag = { type: 'bpm-move', tempo: nearest }
+        } else {
+          const newTempo = { tick: Math.max(1, tick), tempo: Math.round(60000000 / bpm) }
+          tempos.value.push(newTempo)
+          tempos.value.sort((a, b) => a.tick - b.tick)
+          drag = { type: 'bpm-move', tempo: newTempo }
+          markDirty()
+        }
       }
     }
     return
@@ -759,7 +1046,6 @@ function onMouseDown(e) {
 
   if (!inNoteArea(x, y)) return
 
-  // Right click: delete
   if (e.button === 2) {
     const hit = noteAtPos(x, y)
     if (hit) {
@@ -773,7 +1059,6 @@ function onMouseDown(e) {
 
   if (e.button !== 0) return
 
-  // Right-edge resize
   const edge = noteResizeEdge(x, y)
   if (edge) {
     drag = { type: 'resize', startX: x, note: edge.note }
@@ -782,12 +1067,10 @@ function onMouseDown(e) {
 
   const hit = noteAtPos(x, y)
   if (hit) {
-    // Click existing note: move it
     previewNote(hit.note.channel, hit.note.note, hit.note.velocity)
     drag = { type: 'move', startX: x, startY: y, note: hit.note,
              origStart: hit.note.startTick, origNote: hit.note.note }
   } else {
-    // Click empty: create note, then allow moving
     const st = quantizeTick(pxToTicks(x - KEYS_W + scrollX.value))
     const n  = yToNote(y - RULER_H + scrollY.value)
     const at = activeTrack.value < trackData.value.length ? activeTrack.value : 0
@@ -843,6 +1126,22 @@ function onMouseMove(e) {
       previewNote(drag.note.channel, drag.note.note, newVel, true)
       markDirty()
     }
+  } else if (drag.type === 'cc-draw') {
+    if (inVelArea(x, y)) drawCcAtPos(x, y)
+  } else if (drag.type === 'pc-draw') {
+    if (inVelArea(x, y)) drawPcAtPos(x, y)
+  } else if (drag.type === 'bpm-move') {
+    const rect = canvasRef.value?.getBoundingClientRect()
+    if (!rect) return
+    const laneY = y - (rect.height - VEL_H)
+    const bpm = laneYToBpm(laneY, VEL_H)
+    drag.tempo.tempo = Math.round(60000000 / bpm)
+    if (drag.tempo.tick !== 0) {
+      const tick = Math.max(1, pxToTicks(x - KEYS_W + scrollX.value))
+      drag.tempo.tick = tick
+      tempos.value = [...tempos.value].sort((a, b) => a.tick - b.tick)
+    }
+    markDirty()
   }
 }
 
@@ -855,7 +1154,8 @@ function onMouseUp() {
 function onMouseLeave() {
   stopPreview()
   stopRulerPreview()
-  if (drag?.type !== 'move' && drag?.type !== 'resize' && drag?.type !== 'ruler') drag = null
+  const keepTypes = ['move', 'resize', 'ruler', 'cc-draw', 'pc-draw', 'bpm-move']
+  if (!keepTypes.includes(drag?.type)) drag = null
 }
 
 function onWheel(e) {
@@ -884,7 +1184,10 @@ function updateCursor(x, y) {
   if (!canvasRef.value) return
   let cursor = 'default'
   if (inVelArea(x, y)) {
-    cursor = noteAtVelPos(x) ? 'ns-resize' : 'default'
+    if (laneMode.value === 'velocity') cursor = noteAtVelPos(x) ? 'ns-resize' : 'default'
+    else if (laneMode.value === 'cc') cursor = 'crosshair'
+    else if (laneMode.value === 'pc') cursor = findNearestPcPx(x) ? 'grab' : 'crosshair'
+    else if (laneMode.value === 'bpm') cursor = findNearestTempoPx(x) ? 'grab' : 'crosshair'
   } else if (inNoteArea(x, y)) {
     if (noteResizeEdge(x, y)) cursor = 'ew-resize'
     else if (noteAtPos(x, y)) cursor = 'grab'
@@ -1004,7 +1307,6 @@ async function startPlayback() {
     seq = new Sequencer(synth)
     seq.loadNewSongList([{ binary: midiBytes.buffer }])
     const startSec = ticksToSeconds(currentTick.value)
-    // Wait for song to load, then seek and play
     seq.eventHandler.addEvent('songChange', 'play-on-load', () => {
       seq.eventHandler.removeEvent('songChange', 'play-on-load')
       if (startSec > 0) seq.currentTime = startSec
@@ -1063,19 +1365,41 @@ function setBpm(val) {
   else tempos.value.unshift({ tick: 0, tempo })
 }
 
-// ── Lifecycle ─────────────────────────────────────────────────────────────────
-let ro = null
-
 function changeProgram(track, program) {
-  track.program = program
+  const tick = currentTick.value
+  let activeEv = null
+  for (const ev of (track.pcEvents || [])) {
+    if (ev.tick <= tick) activeEv = ev
+    else break
+  }
+  if (activeEv) activeEv.program = program
+  else track.program = program
   if (synth && sfLoaded.value) {
     try { synth.programChange(track.channel, program) } catch {}
   }
+  markDirty()
+}
+
+function changeChannel(track, ch) {
+  const newCh = ch & 0x0F
+  if (newCh === track.channel) return
+  const oldCh = track.channel
+  for (const note of track.notes) {
+    if (note.channel === oldCh) note.channel = newCh
+  }
+  track.channel = newCh
+  if (synth && sfLoaded.value) {
+    try { synth.programChange(newCh, track.program ?? 0) } catch {}
+  }
+  markDirty()
 }
 
 function onKey({ key, raw }) {
   if (key === ' ') { raw.preventDefault(); togglePlay() }
 }
+
+// ── Lifecycle ─────────────────────────────────────────────────────────────────
+let ro = null
 
 onMounted(async () => {
   await nextTick()
@@ -1105,7 +1429,6 @@ watch(() => props.file, async (f) => {
 
 <template>
   <div class="midi-editor">
-    <!-- Loading / Error overlays -->
     <div v-if="loading" class="overlay">
       <v-progress-circular indeterminate color="primary" />
     </div>
@@ -1117,7 +1440,6 @@ watch(() => props.file, async (f) => {
     <template v-else>
       <!-- ── Top bar ───────────────────────────────────────────────────────── -->
       <div class="top-bar">
-        <!-- Transport -->
         <v-btn-group density="compact" variant="outlined">
           <v-btn size="small" icon="mdi-skip-backward" @click="stopPlayback" />
           <v-btn size="small" :icon="playing ? 'mdi-pause' : 'mdi-play'"
@@ -1135,11 +1457,9 @@ watch(() => props.file, async (f) => {
           style="width:100px;flex-shrink:0"
         />
 
-        <!-- Quantize -->
         <v-select v-model="quantize" :items="QUANTIZE_OPTS"
           hide-details density="compact" variant="outlined" style="width:82px;flex-shrink:0" />
 
-        <!-- Zoom -->
         <v-btn size="small" icon density="compact" @click="zoomX = Math.max(0.1, +(zoomX-0.25).toFixed(2))">
           <v-icon size="14">mdi-magnify-minus-outline</v-icon>
         </v-btn>
@@ -1174,16 +1494,25 @@ watch(() => props.file, async (f) => {
             <div class="tl-color" :style="{background: track.color}" />
             <div class="tl-info">
               <div class="tl-name">{{ track.name }}</div>
-              <v-select
-                v-if="track.channel !== 9"
-                :model-value="track.program ?? 0"
-                :items="GM_ITEMS"
-                hide-details density="compact" variant="plain"
-                class="tl-program"
-                @update:model-value="changeProgram(track, $event)"
-                @click.stop
-              />
-              <div v-else class="tl-drum-label">Drums</div>
+              <div class="tl-controls" @click.stop>
+                <!-- Channel selector -->
+                <v-select
+                  :model-value="track.channel"
+                  :items="CHANNEL_ITEMS"
+                  hide-details density="compact" variant="plain"
+                  class="tl-channel"
+                  @update:model-value="changeChannel(track, $event)"
+                />
+                <!-- Instrument selector (follows playhead position) -->
+                <v-select
+                  :model-value="trackProgramAt(track, currentTick)"
+                  :items="track.channel === 9 ? GM_DRUM_ITEMS : GM_ITEMS"
+                  hide-details density="compact" variant="plain"
+                  class="tl-program"
+                  @update:model-value="changeProgram(track, $event)"
+                />
+
+              </div>
             </div>
             <v-btn density="compact" :icon="track.muted ? 'mdi-volume-off' : 'mdi-volume-high'"
               size="x-small" variant="text"
@@ -1195,7 +1524,7 @@ watch(() => props.file, async (f) => {
           </div>
         </div>
 
-        <!-- Piano roll canvas -->
+        <!-- Piano roll + lane overlay -->
         <div class="piano-roll" ref="rollRef">
           <canvas ref="canvasRef" class="roll-canvas"
             @mousedown="onMouseDown"
@@ -1205,6 +1534,31 @@ watch(() => props.file, async (f) => {
             @contextmenu.prevent
             @wheel.prevent="onWheel"
           />
+
+          <!-- Lane mode controls (sits over the piano-keys column of the bottom lane) -->
+          <div class="lane-overlay" style="pointer-events:none">
+            <div class="lane-mode-btns" style="pointer-events:auto">
+              <button class="lane-btn" :class="{active: laneMode==='velocity'}"
+                @click="laneMode='velocity'; markDirty()">VEL</button>
+              <button class="lane-btn" :class="{active: laneMode==='cc'}"
+                @click="laneMode='cc'; markDirty()">CC</button>
+              <button class="lane-btn" :class="{active: laneMode==='bpm'}"
+                @click="laneMode='bpm'; markDirty()">BPM</button>
+              <button class="lane-btn" :class="{active: laneMode==='pc'}"
+                @click="laneMode='pc'; markDirty()">PC</button>
+            </div>
+          </div>
+
+          <!-- CC number selector -->
+          <div v-if="laneMode==='cc'" class="cc-selector-overlay" style="pointer-events:auto">
+            <v-select
+              v-model="ccNumber"
+              :items="CC_ITEMS"
+              hide-details density="compact" variant="outlined"
+              style="font-size:10px;width:160px"
+              @update:model-value="markDirty()"
+            />
+          </div>
         </div>
       </div>
     </template>
@@ -1304,7 +1658,7 @@ watch(() => props.file, async (f) => {
 
 /* ── Track list ─────────────────────────────────────────────── */
 .track-list {
-  width: 168px;
+  width: 180px;
   flex-shrink: 0;
   background: #0d0d18;
   border-right: 1px solid #2a2a40;
@@ -1329,14 +1683,14 @@ watch(() => props.file, async (f) => {
   border-bottom: 1px solid #1a1a28;
   cursor: pointer;
   transition: background 0.12s;
-  min-height: 48px;
+  min-height: 56px;
 }
 .tl-row:hover { background: #16162a; }
 .tl-row--active { background: #1c1c34; }
 
 .tl-color {
   width: 4px;
-  height: 32px;
+  height: 40px;
   border-radius: 2px;
   flex-shrink: 0;
 }
@@ -1358,9 +1712,36 @@ watch(() => props.file, async (f) => {
   line-height: 1.3;
 }
 
+.tl-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.tl-channel {
+  font-size: 10px !important;
+}
+
+.tl-channel :deep(.v-field__input) {
+  font-size: 10px !important;
+  padding: 0 0 0 2px !important;
+  min-height: unset !important;
+}
+
+.tl-channel :deep(.v-field__prepend-inner) {
+  padding: 0 2px 0 0 !important;
+  font-size: 9px;
+  opacity: 0.5;
+  align-self: center;
+}
+
+.tl-channel :deep(.v-field) {
+  --v-field-padding-top: 0;
+  --v-field-padding-bottom: 0;
+}
+
 .tl-program {
   font-size: 10px !important;
-  margin-top: 1px;
 }
 
 .tl-program :deep(.v-field__input) {
@@ -1377,7 +1758,6 @@ watch(() => props.file, async (f) => {
 .tl-drum-label {
   font-size: 10px;
   color: #666688;
-  margin-top: 2px;
 }
 
 /* ── Piano roll ─────────────────────────────────────────────── */
@@ -1392,5 +1772,52 @@ watch(() => props.file, async (f) => {
   width: 100%;
   height: 100%;
   cursor: crosshair;
+}
+
+/* ── Lane overlay ─────────────────────────────────────────────── */
+.lane-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 72px;   /* KEYS_W */
+  height: 80px;  /* VEL_H */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10,10,20,0.85);
+}
+
+.lane-mode-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lane-btn {
+  font-size: 9px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid #333352;
+  background: #1a1a2e;
+  color: #7070a0;
+  cursor: pointer;
+  line-height: 1.4;
+  letter-spacing: 0.05em;
+  transition: background 0.1s, color 0.1s;
+}
+.lane-btn:hover { background: #222240; color: #aaaacc; }
+.lane-btn.active { background: #2a2a60; color: #aaaaff; border-color: #5555aa; }
+
+.cc-selector-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 72px;   /* KEYS_W */
+  height: 80px; /* VEL_H */
+  width: 170px;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  background: rgba(10,10,20,0.75);
 }
 </style>
