@@ -1,0 +1,12 @@
+[plugin]
+id       = "midi"
+version  = "1.0.0"
+name     = "MIDI Editor"
+enabled  = true
+
+[plugin.provides]
+services = []
+
+[plugin.requires]
+services = ["fs.read"]
+plugins  = []

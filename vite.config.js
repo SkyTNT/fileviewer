@@ -56,6 +56,7 @@ export default defineConfig({
           if (id.includes('node_modules')) {
             if (id.includes('vuetify')) return 'vuetify'
             if (id.includes('codemirror') || id.includes('@codemirror')) return 'codemirror'
+            if (id.includes('spessasynth')) return 'spessasynth'
             return 'vendor'
           }
         }

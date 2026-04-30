@@ -13,5 +13,6 @@ export async function setup(ctx) {
   ft.register('video',     'mdi-play-circle-outline',    'deep-purple')
   ft.register('audio',     'mdi-music-note',             'pink')
   ft.register('archive',   'mdi-archive-outline',        'orange')
+  ft.register('midi',      'mdi-music-note',             'deep-purple')
   ft.register('unknown',   'mdi-file-outline',           null)
 }

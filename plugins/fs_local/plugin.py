@@ -77,7 +77,15 @@ def _get_file_type(path: Path) -> str:
     for compound in (".tar.gz", ".tar.bz2", ".tar.xz"):
         if name_lower.endswith(compound):
             return "archive"
-    return _EXT_TO_TYPE.get(path.suffix.lower(), "unknown")
+    ext = path.suffix.lower()
+    t = _EXT_TO_TYPE.get(ext)
+    if t is not None:
+        return t
+    if _file_type_registry is not None:
+        t = _file_type_registry.get_type(ext)
+        if t is not None:
+            return t
+    return "unknown"
 
 
 
