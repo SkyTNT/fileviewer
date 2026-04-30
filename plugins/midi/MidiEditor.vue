@@ -183,6 +183,28 @@ let noteIdSeq = 0
 // ── Computed ──────────────────────────────────────────────────────────────────
 const soloActive = computed(() => trackData.value.some(t => t.solo))
 
+const ccItemsSorted = computed(() => {
+  const track = trackData.value[activeTrack.value]
+  const counts = new Map()
+  if (track) {
+    for (const ev of (track.ccEvents || [])) {
+      counts.set(ev.controller, (counts.get(ev.controller) || 0) + 1)
+    }
+  }
+  const withEvents = []
+  const withoutEvents = []
+  for (let i = 0; i < 128; i++) {
+    const count = counts.get(i) || 0
+    const baseName = CC_NAMES[i] ? `CC ${i}: ${CC_NAMES[i]}` : `CC ${i}`
+    const item = { value: i, title: baseName, inUse: count > 0, count }
+    if (count > 0) withEvents.push(item)
+    else withoutEvents.push(item)
+  }
+  withEvents.sort((a, b) => b.count - a.count)
+  if (withEvents.length === 0) return withoutEvents
+  return [...withEvents, { type: 'divider' }, ...withoutEvents]
+})
+
 const currentBpm = computed(() => {
   const sorted = [...tempos.value].sort((a, b) => a.tick - b.tick)
   let last = 500000
@@ -1712,6 +1734,31 @@ watch(isDark, () => nextTick(draw))
         <v-select v-model="quantize" :items="QUANTIZE_OPTS"
           hide-details density="compact" variant="outlined" style="width:96px;flex-shrink:0" />
 
+        <v-select v-if="laneMode==='cc'"
+          v-model="ccNumber"
+          :items="ccItemsSorted"
+          hide-details density="compact" variant="outlined"
+          style="width:160px;flex-shrink:0"
+          @update:model-value="markDirty()"
+        >
+          <template #item="{ item, props }">
+            <v-list-item v-bind="props">
+              <template #title>
+                <span class="cc-item-label">
+                  <span class="cc-dot" :class="{ 'cc-dot--active': item.raw.inUse }" />
+                  {{ item.raw.title }}
+                </span>
+              </template>
+            </v-list-item>
+          </template>
+          <template #selection="{ item }">
+            <span class="cc-item-label">
+              <span class="cc-dot" :class="{ 'cc-dot--active': item.raw?.inUse }" />
+              {{ item.raw?.title }}
+            </span>
+          </template>
+        </v-select>
+
         <div class="zoom-group">
           <v-btn size="small" icon density="compact" variant="text"
             @click="zoomX = Math.max(0.1, +(zoomX-0.25).toFixed(2))">
@@ -1817,17 +1864,6 @@ watch(isDark, () => nextTick(draw))
               <button v-ripple class="lane-btn" :class="{active: laneMode==='pc'}"
                 @click="laneMode='pc'; markDirty()">PC</button>
             </div>
-          </div>
-
-          <!-- CC number selector -->
-          <div v-if="laneMode==='cc'" class="cc-selector-overlay" style="pointer-events:auto">
-            <v-select
-              v-model="ccNumber"
-              :items="CC_ITEMS"
-              hide-details density="compact" variant="outlined"
-              style="font-size:10px;width:160px"
-              @update:model-value="markDirty()"
-            />
           </div>
 
           <!-- TS dialog overlay (click-away to close) -->
@@ -2177,17 +2213,23 @@ watch(isDark, () => nextTick(draw))
   background: rgba(var(--v-theme-primary), 0.22);
 }
 
-.cc-selector-overlay {
-  position: absolute;
-  bottom: 0;
-  left: 72px;   /* KEYS_W */
-  height: 80px; /* VEL_H */
-  width: 170px;
+.cc-item-label {
   display: flex;
   align-items: center;
-  padding: 0 8px;
-  background: rgba(var(--v-theme-surface), 0.88);
-  backdrop-filter: blur(4px);
+  gap: 6px;
+}
+
+.cc-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: transparent;
+}
+
+.cc-dot--active {
+  background: rgb(var(--v-theme-primary));
 }
 
 /* ── TS popup ───────────────────────────────────────────────── */
