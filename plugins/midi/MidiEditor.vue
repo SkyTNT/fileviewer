@@ -1708,33 +1708,38 @@ watch(isDark, () => nextTick(draw))
             <div class="tl-color" :style="{background: track.color}" />
             <div class="tl-info">
               <div class="tl-name">{{ track.name }}</div>
-              <div class="tl-controls" @click.stop>
-                <!-- Channel selector -->
+              <div class="tl-controls" :class="{ 'tl-controls--disabled': activeTrack !== track.index }">
                 <v-select
                   :model-value="track.channel"
                   :items="CHANNEL_ITEMS"
                   hide-details density="compact" variant="plain"
                   class="tl-channel"
+                  :disabled="activeTrack !== track.index"
                   @update:model-value="changeChannel(track, $event)"
-                />
-                <!-- Instrument selector (follows playhead position) -->
+                  @click.stop
+                >
+                  <template #selection="{ item }">Ch{{ item.value + 1 }}</template>
+                </v-select>
                 <v-select
                   :model-value="trackProgramAt(track, currentTick)"
                   :items="track.channel === 9 ? GM_DRUM_ITEMS : GM_ITEMS"
                   hide-details density="compact" variant="plain"
                   class="tl-program"
+                  :disabled="activeTrack !== track.index"
                   @update:model-value="changeProgram(track, $event)"
+                  @click.stop
                 />
-
               </div>
             </div>
-            <v-btn density="compact" :icon="track.muted ? 'mdi-volume-off' : 'mdi-volume-high'"
-              size="x-small" variant="text"
-              :color="track.muted ? 'error' : undefined"
-              @click.stop="track.muted = !track.muted; markDirty()" />
-            <v-btn density="compact" icon="mdi-star" size="x-small" variant="text"
-              :color="track.solo ? 'warning' : undefined"
-              @click.stop="track.solo = !track.solo; markDirty()" />
+            <div class="tl-btns" @click.stop>
+              <v-btn density="compact" :icon="track.muted ? 'mdi-volume-off' : 'mdi-volume-high'"
+                size="x-small" variant="text"
+                :color="track.muted ? 'error' : undefined"
+                @click="track.muted = !track.muted; markDirty()" />
+              <v-btn density="compact" icon="mdi-star" size="x-small" variant="text"
+                :color="track.solo ? 'warning' : undefined"
+                @click="track.solo = !track.solo; markDirty()" />
+            </div>
           </div>
         </div>
 
@@ -1919,20 +1924,21 @@ watch(isDark, () => nextTick(draw))
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 6px;
+  padding: 4px 4px 4px 6px;
   border-bottom: 1px solid rgba(var(--v-border-color), 0.3);
   cursor: pointer;
   transition: background 0.12s;
-  min-height: 56px;
+  min-height: 34px;
 }
 .tl-row:hover { background: rgba(var(--v-theme-on-surface), 0.05); }
 .tl-row--active { background: rgba(var(--v-theme-primary), 0.12); }
 
 .tl-color {
-  width: 4px;
-  height: 40px;
+  width: 3px;
+  align-self: stretch;
   border-radius: 2px;
   flex-shrink: 0;
+  margin: 4px 0;
 }
 
 .tl-info {
@@ -1941,6 +1947,7 @@ watch(isDark, () => nextTick(draw))
   display: flex;
   flex-direction: column;
   justify-content: center;
+  gap: 1px;
 }
 
 .tl-name {
@@ -1948,31 +1955,43 @@ watch(isDark, () => nextTick(draw))
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 11px;
-  color: rgba(var(--v-theme-on-surface), 0.8);
+  color: rgba(var(--v-theme-on-surface), 0.85);
   line-height: 1.3;
+}
+
+.tl-btns {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
 }
 
 .tl-controls {
   display: flex;
-  flex-direction: column;
-  gap: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+}
+
+.tl-controls--disabled {
+  pointer-events: none;
+  opacity: 0.55;
 }
 
 .tl-channel {
+  flex: 0 0 auto;
   font-size: 10px !important;
 }
 
 .tl-channel :deep(.v-field__input) {
   font-size: 10px !important;
-  padding: 0 0 0 2px !important;
+  padding: 0 2px !important;
   min-height: unset !important;
+  min-width: unset !important;
+  width: auto !important;
 }
 
-.tl-channel :deep(.v-field__prepend-inner) {
-  padding: 0 2px 0 0 !important;
-  font-size: 9px;
-  opacity: 0.5;
-  align-self: center;
+.tl-channel :deep(.v-field__append-inner) {
+  display: none;
 }
 
 .tl-channel :deep(.v-field) {
@@ -1981,6 +2000,8 @@ watch(isDark, () => nextTick(draw))
 }
 
 .tl-program {
+  flex: 1;
+  min-width: 0;
   font-size: 10px !important;
 }
 
@@ -1988,6 +2009,10 @@ watch(isDark, () => nextTick(draw))
   font-size: 10px !important;
   padding: 0 !important;
   min-height: unset !important;
+}
+
+.tl-program :deep(.v-field__append-inner) {
+  display: none;
 }
 
 .tl-program :deep(.v-field) {
