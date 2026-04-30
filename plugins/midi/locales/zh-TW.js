@@ -4,6 +4,8 @@ export default {
     soundFont: '音色庫',
     loadSoundFont: '載入音色庫',
     save: '儲存',
+    saved: '已儲存',
+    saveFailed: '儲存失敗',
     bpm: 'BPM',
     tracks: '軌道',
     tool: { select: '選取', pencil: '繪製', eraser: '刪除' },

@@ -1407,8 +1407,10 @@ async function saveMidi() {
     const bytes = buildMidiBytes()
     const b64   = bytesToBase64(bytes)
     await midiApi.save(props.file.path, b64)
+    eventBus?.emit('notification:show', { msg: t('midi.saved'), color: 'success' })
   } catch (e) {
-    error.value = `Save failed: ${e.message}`
+    const detail = e.response?.data?.detail ?? e.message
+    eventBus?.emit('notification:show', { msg: `${t('midi.saveFailed')}: ${detail}`, color: 'error' })
   } finally {
     saving.value = false
   }

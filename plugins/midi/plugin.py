@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, Query, HTTPException, Depends
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
-from config import validate_path
+from config import validate_path, require_write
 
 PLUGIN_ID = "midi"
 router = APIRouter()
@@ -22,7 +22,10 @@ def get_midi_raw(path: str = Query(...)):
     from urllib.parse import quote
     encoded = quote(file_path.name, safe='')
     return FileResponse(str(file_path), media_type="audio/midi",
-                        headers={"Content-Disposition": f"inline; filename*=UTF-8''{encoded}"})
+                        headers={
+                            "Content-Disposition": f"inline; filename*=UTF-8''{encoded}",
+                            "Cache-Control": "no-cache",
+                        })
 
 
 @router.get("/soundfont/default")
@@ -33,9 +36,6 @@ def get_default_soundfont():
                         headers={"Content-Disposition": f'inline; filename="{_DEFAULT_SF.name}"'})
 
 
-def _require_write():
-    if os.environ.get("FILE_VIEWER_WRITE", "").lower() in ("", "0", "false", "no"):
-        raise HTTPException(status_code=403, detail="Write mode not enabled")
 
 
 class SaveMidiRequest(BaseModel):
@@ -43,8 +43,9 @@ class SaveMidiRequest(BaseModel):
     data: str  # base64-encoded MIDI bytes
 
 
-@router.post("/save", dependencies=[Depends(_require_write)])
+@router.post("/save")
 def save_midi(req: SaveMidiRequest):
+    require_write()
     file_path = validate_path(req.path)
     if file_path.suffix.lower() not in MIDI_EXTENSIONS:
         raise HTTPException(status_code=400, detail="Not a MIDI file")

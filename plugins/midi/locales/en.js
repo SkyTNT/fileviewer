@@ -4,6 +4,8 @@ export default {
     soundFont: 'SoundFont',
     loadSoundFont: 'Load SoundFont',
     save: 'Save',
+    saved: 'Saved',
+    saveFailed: 'Save failed',
     bpm: 'BPM',
     tracks: 'Tracks',
     tool: { select: 'Select', pencil: 'Draw', eraser: 'Erase' },
