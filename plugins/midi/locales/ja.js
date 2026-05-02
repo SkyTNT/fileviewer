@@ -61,6 +61,8 @@ export default {
     mCtrlAltWheelDesc: '縦ズーム',
     mRulerLeft: 'ルーラーをクリック',
     mRulerLeftDesc: '再生位置を設定',
+    mRulerCtrlDrag: 'Ctrl+ドラッグ（ルーラー）',
+    mRulerCtrlDragDesc: 'ループ区間を設定（クォンタイズにスナップ）',
     mRulerRight: 'ルーラーを右クリック',
     mRulerRightDesc: '拍子記号を追加/編集',
     lVel: 'ノートベロシティ（音量）1–127',

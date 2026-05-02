@@ -61,6 +61,8 @@ export default {
     mCtrlAltWheelDesc: 'Zoom vertically',
     mRulerLeft: 'Click on ruler',
     mRulerLeftDesc: 'Set playback position',
+    mRulerCtrlDrag: 'Ctrl+drag on ruler',
+    mRulerCtrlDragDesc: 'Set loop region (snaps to quantize grid)',
     mRulerRight: 'Right-click on ruler',
     mRulerRightDesc: 'Add/edit time signature',
     lVel: 'Note velocity (volume), range 1–127',

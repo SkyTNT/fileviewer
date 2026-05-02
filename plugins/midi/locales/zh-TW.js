@@ -61,6 +61,8 @@ export default {
     mCtrlAltWheelDesc: '垂直縮放',
     mRulerLeft: '點擊標尺',
     mRulerLeftDesc: '設定播放位置',
+    mRulerCtrlDrag: 'Ctrl+拖動標尺',
+    mRulerCtrlDragDesc: '設定循環區間（按量化吸附）',
     mRulerRight: '右鍵點擊標尺',
     mRulerRightDesc: '新增 / 編輯拍號',
     lVel: '音符力度（音量），範圍 1–127',

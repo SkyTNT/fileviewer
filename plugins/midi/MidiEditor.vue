@@ -142,9 +142,10 @@ const totalTicks = ref(0)
 const playing      = ref(false)
 const currentTick  = ref(0)
 const trackLoudness = ref({})
-const looping     = ref(false)
-const loopStart   = ref(0)
-const loopEnd     = ref(0)
+const looping          = ref(false)
+const loopStart        = ref(0)
+const loopEnd          = ref(0)
+const loopRegionActive = ref(false)
 
 const sfLoaded   = ref(false)
 const sfLoading  = ref(false)
@@ -175,7 +176,8 @@ const helpMouseRows = computed(() => [
   { key: t('midi.mShiftWheel'),   desc: t('midi.mShiftWheelDesc') },
   { key: t('midi.mCtrlWheel'),    desc: t('midi.mCtrlWheelDesc') },
   { key: t('midi.mCtrlAltWheel'), desc: t('midi.mCtrlAltWheelDesc') },
-  { key: t('midi.mRulerLeft'),    desc: t('midi.mRulerLeftDesc') },
+  { key: t('midi.mRulerLeft'),     desc: t('midi.mRulerLeftDesc') },
+  { key: t('midi.mRulerCtrlDrag'), desc: t('midi.mRulerCtrlDragDesc') },
   { key: t('midi.mRulerRight'),   desc: t('midi.mRulerRightDesc') },
 ])
 
@@ -947,6 +949,16 @@ function draw() {
     }
   })
 
+  // ── Loop region (note area) ──────────────────────────────────────────────────
+  if (loopRegionActive.value && loopStart.value < loopEnd.value) {
+    const lx1 = Math.max(KEYS_W, KEYS_W + ticksToPx(loopStart.value) - scrollX.value)
+    const lx2 = Math.min(W,      KEYS_W + ticksToPx(loopEnd.value)   - scrollX.value)
+    if (lx1 < lx2) {
+      ctx.fillStyle = 'rgba(80,155,255,0.08)'
+      ctx.fillRect(lx1, RULER_H, lx2 - lx1, noteH)
+    }
+  }
+
   // ── Notes ───────────────────────────────────────────────────────────────────
   // Draw non-active tracks first, active track last so its notes render on top
   const trackOrder = [
@@ -992,6 +1004,19 @@ function draw() {
 
   // ── Ruler ────────────────────────────────────────────────────────────────────
   ctx.fillStyle = C.bgDark; ctx.fillRect(KEYS_W, 0, noteW, RULER_H)
+  if (loopRegionActive.value && loopStart.value < loopEnd.value) {
+    const lx1 = KEYS_W + ticksToPx(loopStart.value) - scrollX.value
+    const lx2 = KEYS_W + ticksToPx(loopEnd.value)   - scrollX.value
+    const rx1 = Math.max(KEYS_W, lx1), rx2 = Math.min(W, lx2)
+    if (rx1 < rx2) {
+      ctx.fillStyle = looping.value ? 'rgba(80,155,255,0.32)' : 'rgba(80,155,255,0.16)'
+      ctx.fillRect(rx1, 0, rx2 - rx1, RULER_H)
+    }
+    ctx.strokeStyle = 'rgba(80,155,255,0.85)'; ctx.lineWidth = 1.5
+    if (lx1 >= KEYS_W && lx1 <= W) { ctx.beginPath(); ctx.moveTo(lx1 + 0.5, 0); ctx.lineTo(lx1 + 0.5, H); ctx.stroke() }
+    if (lx2 >= KEYS_W && lx2 <= W) { ctx.beginPath(); ctx.moveTo(lx2 + 0.5, 0); ctx.lineTo(lx2 + 0.5, H); ctx.stroke() }
+    ctx.lineWidth = 1
+  }
   forEachBar(firstTick, lastTick, ppqV, ({ tick: barTick, barNum, num, den, barTicks }) => {
     const bx = KEYS_W + ticksToPx(barTick) - scrollX.value
     if (beatPx >= 24) {
@@ -1223,6 +1248,9 @@ function startAnimation() {
       } else {
         const t = seq.currentHighResolutionTime || seq.currentTime || 0
         currentTick.value = secondsToTicks(t)
+        if (looping.value && loopRegionActive.value && loopStart.value < loopEnd.value
+            && currentTick.value >= loopEnd.value)
+          seq.currentTime = ticksToSeconds(loopStart.value)
         ensureCursorVisible()
         updateTrackLoudness()
       }
@@ -1478,6 +1506,15 @@ function onMouseDown(e) {
       openTsDialog(x, tickToBarStart(tick))
       return
     }
+    if (e.button === 0 && e.ctrlKey) {
+      const snapTick = quantizeTick(tick)
+      loopStart.value = snapTick
+      loopEnd.value = snapTick
+      loopRegionActive.value = true
+      drag = { type: 'ruler-loop', anchorTick: snapTick }
+      markDirty()
+      return
+    }
     currentTick.value = tick
     markDirty()
     if (e.button === 0) {
@@ -1621,6 +1658,14 @@ function onMouseMove(e) {
   const { x, y } = canvasCoords(e)
   if (!drag) { updateCursor(x, y, e); return }
 
+  if (drag.type === 'ruler-loop') {
+    const snapTick = quantizeTick(Math.max(0, pxToTicks(x - KEYS_W + scrollX.value)))
+    loopStart.value = Math.min(drag.anchorTick, snapTick)
+    loopEnd.value   = Math.max(drag.anchorTick, snapTick)
+    markDirty()
+    return
+  }
+
   if (drag.type === 'ruler') {
     const tick = Math.max(0, pxToTicks(x - KEYS_W + scrollX.value))
     if (currentTick.value !== tick) {
@@ -1744,6 +1789,8 @@ function onMouseMove(e) {
 function onMouseUp() {
   stopPreview()
   stopRulerPreview()
+  if (drag?.type === 'ruler-loop' && loopStart.value >= loopEnd.value)
+    loopRegionActive.value = false
   if (drag?.type === 'box-select') {
     const x1 = Math.min(drag.startX, drag.curX)
     const x2 = Math.max(drag.startX, drag.curX)
@@ -1761,7 +1808,7 @@ function onMouseUp() {
 function onMouseLeave() {
   stopPreview()
   stopRulerPreview()
-  const keepTypes = ['move', 'resize', 'ruler', 'vel-draw', 'lane-draw', 'box-select', 'lane-box-select', 'lane-move']
+  const keepTypes = ['move', 'resize', 'ruler', 'ruler-loop', 'vel-draw', 'lane-draw', 'box-select', 'lane-box-select', 'lane-move']
   if (!keepTypes.includes(drag?.type)) drag = null
 }
 
@@ -1827,7 +1874,7 @@ function updateCursor(x, y, e) {
     else if (noteAtPos(x, y)) cursor = 'grab'
     else cursor = 'crosshair'
   } else if (y < RULER_H && x >= KEYS_W) {
-    cursor = 'col-resize'
+    cursor = e?.ctrlKey ? 'crosshair' : 'col-resize'
   }
   canvasRef.value.style.cursor = cursor
 }
