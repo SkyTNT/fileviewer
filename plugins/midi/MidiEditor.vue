@@ -186,6 +186,7 @@ const bottomLaneHeight  = ref(VEL_H_DEFAULT)
 
 // ── Clipboard ─────────────────────────────────────────────────────────────────
 let clipboard = { minTick: 0, notes: [] }
+let laneClipboard = { type: null, minTick: 0, events: [] }
 
 // ── Undo / Redo ───────────────────────────────────────────────────────────────
 const MAX_UNDO = 100
@@ -329,21 +330,7 @@ function secondsToTicks(sec) {
   return lastTick + Math.round((sec - time) * 1e6 / lastTempo * ppq.value)
 }
 
-// ── Lane Y helpers ─────────────────────────────────────────────────────────────
-function bpmToLaneY(bpm, laneH) {
-  return 2 + (1 - (bpm - BPM_MIN) / (BPM_MAX - BPM_MIN)) * (laneH - 4)
-}
-function laneYToBpm(y, laneH) {
-  return Math.max(BPM_MIN, Math.min(BPM_MAX, Math.round(
-    BPM_MIN + (1 - (y - 2) / (laneH - 4)) * (BPM_MAX - BPM_MIN)
-  )))
-}
-function laneYToCcVal(y, laneH) {
-  return Math.max(0, Math.min(127, Math.round(127 * (1 - (y - 2) / (laneH - 4)))))
-}
-function laneYToPcProg(y, laneH) {
-  return Math.max(0, Math.min(127, Math.round(127 * (1 - (y - 2) / (laneH - 4)))))
-}
+// ── Unified curve lane helpers ────────────────────────────────────────────────
 function trackProgramAt(track, tick) {
   let prog = track.program ?? 0
   for (const ev of (track.pcEvents || [])) {
@@ -351,6 +338,162 @@ function trackProgramAt(track, tick) {
     else break
   }
   return prog
+}
+
+// norm=0 (min) … 1 (max)  ↔  canvas Y
+function laneNormToCanvasY(norm, velY, laneH) {
+  return velY + 2 + (1 - norm) * (laneH - 4)
+}
+function laneCanvasYToNorm(cy, velY, laneH) {
+  return Math.max(0, Math.min(1, 1 - (cy - velY - 2) / (laneH - 4)))
+}
+
+function laneEvNorm(ev) {
+  if (laneMode.value === 'bpm') return (Math.round(60000000 / ev.tempo) - BPM_MIN) / (BPM_MAX - BPM_MIN)
+  if (laneMode.value === 'pc')  return (ev.program ?? 0) / 127
+  return ev.value / 127   // cc
+}
+function laneEvRaw(ev) {
+  if (laneMode.value === 'bpm') return Math.round(60000000 / ev.tempo)
+  if (laneMode.value === 'pc')  return ev.program ?? 0
+  return ev.value
+}
+function laneNormToRaw(norm) {
+  if (laneMode.value === 'bpm') return Math.round(BPM_MIN + norm * (BPM_MAX - BPM_MIN))
+  return Math.round(norm * 127)    // cc / pc
+}
+function laneEvLabel(ev) {
+  if (laneMode.value === 'bpm') return String(Math.round(60000000 / ev.tempo))
+  if (laneMode.value === 'pc') {
+    const prog = ev.program ?? 0
+    const track = trackData.value[activeTrack.value]
+    const isDrum = track?.channel === 9
+    const name = isDrum ? (GM_DRUM_KITS[prog] ?? `Kit ${prog}`) : (GM_INSTRUMENTS[prog] ?? `Prog ${prog}`)
+    return `${prog}: ${name}`
+  }
+  return String(ev.value)
+}
+function laneRefLines() {
+  if (laneMode.value === 'bpm')
+    return [60, 90, 120, 150, 180, 240]
+      .filter(b => b >= BPM_MIN && b <= BPM_MAX)
+      .map(b => ({ norm: (b - BPM_MIN) / (BPM_MAX - BPM_MIN), label: String(b) }))
+  return [0, 0.25, 0.5, 0.75, 1].map(n => ({ norm: n, label: String(Math.round(n * 127)) }))
+}
+function laneGetEvents() {
+  if (laneMode.value === 'bpm') return tempos.value
+  const track = trackData.value[activeTrack.value]
+  if (!track) return []
+  if (laneMode.value === 'cc') return track.ccEvents.filter(e => e.controller === ccNumber.value)
+  return track.pcEvents   // pc
+}
+function laneGetDisplayEvents() {
+  if (laneMode.value === 'pc') {
+    const track = trackData.value[activeTrack.value]
+    if (!track) return []
+    return [{ tick: 0, program: track.program ?? 0, selected: false }, ...track.pcEvents]
+  }
+  return laneGetEvents()
+}
+function laneUpsert(tick, rawVal) {
+  if (laneMode.value === 'cc') {
+    const track = trackData.value[activeTrack.value]
+    if (!track) return null
+    const t = quantizeTick(Math.max(0, tick))
+    const idx = track.ccEvents.findIndex(e => e.controller === ccNumber.value && e.tick === t)
+    const val = Math.max(0, Math.min(127, Math.round(rawVal)))
+    if (idx >= 0) { track.ccEvents[idx].value = val; return track.ccEvents[idx] }
+    const ev = { tick: t, controller: ccNumber.value, value: val, selected: false }
+    track.ccEvents.push(ev); track.ccEvents.sort((a, b) => a.tick - b.tick); return ev
+  } else if (laneMode.value === 'bpm') {
+    const t = quantizeTick(Math.max(0, tick))
+    const bpmVal = Math.max(BPM_MIN, Math.min(BPM_MAX, Math.round(rawVal)))
+    const existing = tempos.value.find(tc => tc.tick === t)
+    if (existing) { existing.tempo = Math.round(60000000 / bpmVal); return existing }
+    const ev = { tick: t, tempo: Math.round(60000000 / bpmVal), selected: false }
+    tempos.value.push(ev); tempos.value.sort((a, b) => a.tick - b.tick); return ev
+  } else if (laneMode.value === 'pc') {
+    const track = trackData.value[activeTrack.value]
+    if (!track) return null
+    const t = quantizeTick(Math.max(1, tick))
+    const prog = Math.max(0, Math.min(127, Math.round(rawVal)))
+    const idx = track.pcEvents.findIndex(e => e.tick === t)
+    if (idx >= 0) { track.pcEvents[idx].program = prog; return track.pcEvents[idx] }
+    const ev = { tick: t, program: prog, selected: false }
+    track.pcEvents.push(ev); track.pcEvents.sort((a, b) => a.tick - b.tick); return ev
+  }
+  return null
+}
+function laneEraseAt(x) {
+  const tick = pxToTicks(x - KEYS_W + scrollX.value)
+  const q = gridTicks() || Math.round(ppq.value / 4)
+  const qi = Math.round(tick / q)
+  if (laneMode.value === 'cc') {
+    const track = trackData.value[activeTrack.value]
+    if (!track) return
+    const b = track.ccEvents.length
+    track.ccEvents = track.ccEvents.filter(e => !(e.controller === ccNumber.value && Math.round(e.tick / q) === qi))
+    if (track.ccEvents.length !== b) markDirty()
+  } else if (laneMode.value === 'bpm') {
+    const b = tempos.value.length
+    tempos.value = tempos.value.filter(t => t.tick === 0 || Math.round(t.tick / q) !== qi)
+    if (tempos.value.length !== b) markDirty()
+  } else if (laneMode.value === 'pc') {
+    const track = trackData.value[activeTrack.value]
+    if (!track) return
+    const b = track.pcEvents.length
+    track.pcEvents = track.pcEvents.filter(e => Math.round(e.tick / q) !== qi)
+    if (track.pcEvents.length !== b) markDirty()
+  }
+}
+function laneEraseRange(tick1, tick2) {
+  if (laneMode.value === 'cc') {
+    const track = trackData.value[activeTrack.value]
+    if (!track) return
+    track.ccEvents = track.ccEvents.filter(e => !(e.controller === ccNumber.value && e.tick >= tick1 && e.tick <= tick2))
+  } else if (laneMode.value === 'bpm') {
+    tempos.value = tempos.value.filter(t => t.tick === 0 || t.tick < tick1 || t.tick > tick2)
+  } else if (laneMode.value === 'pc') {
+    const track = trackData.value[activeTrack.value]
+    if (!track) return
+    track.pcEvents = track.pcEvents.filter(e => e.tick < tick1 || e.tick > tick2)
+  }
+}
+function laneSortEvents() {
+  if (laneMode.value === 'bpm') { tempos.value = [...tempos.value].sort((a, b) => a.tick - b.tick); return }
+  const track = trackData.value[activeTrack.value]
+  if (!track) return
+  if (laneMode.value === 'cc') track.ccEvents.sort((a, b) => a.tick - b.tick)
+  else if (laneMode.value === 'pc') track.pcEvents.sort((a, b) => a.tick - b.tick)
+}
+function findNearestLaneEv(x, y) {
+  const rect = canvasRef.value?.getBoundingClientRect()
+  if (!rect) return null
+  const laneH = bottomLaneHeight.value
+  const velY = rect.height - laneH
+  let closest = null, best = Infinity
+  for (const ev of laneGetDisplayEvents()) {
+    const ex = KEYS_W + ticksToPx(ev.tick) - scrollX.value
+    const ey = laneNormToCanvasY(laneEvNorm(ev), velY, laneH)
+    const d = Math.sqrt((ex - x) ** 2 + (ey - y) ** 2)
+    if (d < best && d < 12) { closest = ev; best = d }
+  }
+  return closest
+}
+function findNearestSelectedLaneEv(x, y) {
+  const rect = canvasRef.value?.getBoundingClientRect()
+  if (!rect) return null
+  const laneH = bottomLaneHeight.value
+  const velY = rect.height - laneH
+  let closest = null, best = Infinity
+  for (const ev of laneGetEvents()) {
+    if (!ev.selected) continue
+    const ex = KEYS_W + ticksToPx(ev.tick) - scrollX.value
+    const ey = laneNormToCanvasY(laneEvNorm(ev), velY, laneH)
+    const d = Math.sqrt((ex - x) ** 2 + (ey - y) ** 2)
+    if (d < best && d < 12) { closest = ev; best = d }
+  }
+  return closest
 }
 
 // ── MIDI parser ───────────────────────────────────────────────────────────────
@@ -457,14 +600,14 @@ function buildTracks(parsed) {
 
     for (const ev of evs) {
       if (ev.type === 'trackName') { name = ev.name; continue }
-      if (ev.type === 'tempo')    { result.tempos.push({ tick: ev.tick, tempo: ev.tempo }); continue }
+      if (ev.type === 'tempo')    { result.tempos.push({ tick: ev.tick, tempo: ev.tempo, selected: false }); continue }
       if (ev.type === 'timeSig')  { result.timeSigs.push({ tick: ev.tick, num: ev.num, den: ev.den }); continue }
       if (ev.type === 'pc') {
         const ch = ev.channel
         if (ev.tick === 0) channelProgram.set(ch, ev.program)
         else {
           if (!channelPcEvents.has(ch)) channelPcEvents.set(ch, [])
-          channelPcEvents.get(ch).push({ tick: ev.tick, program: ev.program })
+          channelPcEvents.get(ch).push({ tick: ev.tick, program: ev.program, selected: false })
         }
         continue
       }
@@ -485,7 +628,7 @@ function buildTracks(parsed) {
       if (ev.type === 'cc') {
         const ch = ev.channel
         if (!channelCcEvents.has(ch)) channelCcEvents.set(ch, [])
-        channelCcEvents.get(ch).push({ tick: ev.tick, controller: ev.controller, value: ev.value })
+        channelCcEvents.get(ch).push({ tick: ev.tick, controller: ev.controller, value: ev.value, selected: false })
         continue
       }
       if (ev.rawBytes) {
@@ -539,7 +682,7 @@ function buildTracks(parsed) {
     }
   }
 
-  if (result.tempos.length === 0) result.tempos.push({ tick: 0, tempo: 500000 })
+  if (result.tempos.length === 0) result.tempos.push({ tick: 0, tempo: 500000, selected: false })
   if (result.timeSigs.length === 0) result.timeSigs.push({ tick: 0, num: 4, den: 4 })
   result.tempos.sort((a, b) => a.tick - b.tick)
   result.timeSigs.sort((a, b) => a.tick - b.tick)
@@ -876,137 +1019,64 @@ function draw() {
     }
     ctx.globalAlpha = 1
 
-  } else if (laneMode.value === 'cc') {
+  } else {
+    // ── Unified curve lane (CC / BPM / PC) ───────────────────────────────────────
     const track = trackData.value[activeTrack.value]
-    if (track) {
-      const color = track.color
-      const evs = (track.ccEvents || []).filter(e => e.controller === ccNumber.value)
-      const sorted = [...evs].sort((a, b) => a.tick - b.tick)
+    const laneColor = laneMode.value === 'bpm' ? C.bpmLine : (track?.color ?? '#888888')
+    const displayEvs = laneGetDisplayEvents().slice().sort((a, b) => a.tick - b.tick)
 
-      // Step line
-      if (sorted.length > 0) {
-        ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.5
-        ctx.beginPath()
-        let px2 = KEYS_W, py2 = velY + VEL_H
-        // find initial value
-        const firstEv = sorted[0]
-        py2 = velY + 2 + (1 - firstEv.value / 127) * (VEL_H - 4)
-        px2 = KEYS_W
-        ctx.moveTo(px2, py2)
-        for (const ev of sorted) {
-          const ex = KEYS_W + ticksToPx(ev.tick) - scrollX.value
-          const ey = velY + 2 + (1 - ev.value / 127) * (VEL_H - 4)
-          ctx.lineTo(ex, py2)
-          ctx.lineTo(ex, ey)
-          px2 = ex; py2 = ey
-        }
-        ctx.lineTo(W, py2)
-        ctx.stroke()
-        ctx.globalAlpha = 1
-      }
-
-      // Bars
-      for (const ev of sorted) {
-        const ex = KEYS_W + ticksToPx(ev.tick) - scrollX.value
-        if (ex < KEYS_W || ex > W) continue
-        const bh = Math.max(2, (ev.value / 127) * (VEL_H - 6))
-        ctx.fillStyle = color; ctx.globalAlpha = 0.85
-        ctx.fillRect(ex - 1, velY + VEL_H - bh, 3, bh)
-        ctx.globalAlpha = 1
-      }
-    }
-
-  } else if (laneMode.value === 'pc') {
-    const track = trackData.value[activeTrack.value]
-    if (track) {
-      const color = track.color
-      const allPc = [{ tick: 0, program: track.program ?? 0 }, ...(track.pcEvents || [])]
-        .sort((a, b) => a.tick - b.tick)
-      const isDrum = track.channel === 9
-
-      // Step line
-      ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.5
-      ctx.beginPath()
-      let prevPy = velY + 2 + (1 - allPc[0].program / 127) * (VEL_H - 4)
-      ctx.moveTo(KEYS_W, prevPy)
-      for (const ev of allPc) {
-        const ex = KEYS_W + ticksToPx(ev.tick) - scrollX.value
-        const ey = velY + 2 + (1 - ev.program / 127) * (VEL_H - 4)
-        ctx.lineTo(ex, prevPy); ctx.lineTo(ex, ey)
-        prevPy = ey
-      }
-      ctx.lineTo(W, prevPy); ctx.stroke(); ctx.globalAlpha = 1
-
-      // Dots + labels
-      for (const ev of allPc) {
-        const ex = KEYS_W + ticksToPx(ev.tick) - scrollX.value
-        if (ex < KEYS_W - 8 || ex > W + 8) continue
-        const ey = velY + 2 + (1 - ev.program / 127) * (VEL_H - 4)
-        ctx.fillStyle = ev.tick === 0 ? C.pcDotFirst : color
-        ctx.beginPath(); ctx.arc(ex, ey, 3, 0, Math.PI * 2); ctx.fill()
-        if (ex > KEYS_W + 4) {
-          const name = isDrum
-            ? (GM_DRUM_KITS[ev.program] ?? `Kit ${ev.program}`)
-            : (GM_INSTRUMENTS[ev.program] ?? `Program ${ev.program}`)
-          ctx.fillStyle = C.pcText; ctx.font = '8px sans-serif'
-          ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
-          ctx.fillText(`${ev.program}: ${name}`, ex + 6, ey)
-        }
-      }
-    }
-
-  } else if (laneMode.value === 'bpm') {
-    // BPM reference lines
+    // Reference grid lines
     ctx.setLineDash([4, 4])
-    for (const refBpm of [60, 90, 120, 150, 180, 240]) {
-      if (refBpm <= BPM_MIN || refBpm >= BPM_MAX) continue
-      const ry = velY + bpmToLaneY(refBpm, VEL_H)
+    for (const ref of laneRefLines()) {
+      const ry = laneNormToCanvasY(ref.norm, velY, VEL_H)
       ctx.strokeStyle = C.bpmRefLine; ctx.lineWidth = 0.5
       ctx.beginPath(); ctx.moveTo(KEYS_W, ry); ctx.lineTo(W, ry); ctx.stroke()
-      ctx.fillStyle = C.bpmRefText; ctx.font = '8px monospace'; ctx.textAlign = 'left'
-      ctx.fillText(`${refBpm}`, KEYS_W + 2, ry - 2)
+      ctx.fillStyle = C.bpmRefText; ctx.font = '8px monospace'
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'
+      ctx.fillText(ref.label, KEYS_W + 2, ry - 2)
     }
     ctx.setLineDash([])
 
-    // Step curve
-    const sorted = [...tempos.value].sort((a, b) => a.tick - b.tick)
-    if (sorted.length > 0) {
-      ctx.strokeStyle = C.bpmLine; ctx.lineWidth = 1.5
+    // Step line
+    if (displayEvs.length > 0) {
+      ctx.strokeStyle = laneColor; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.55
       ctx.beginPath()
-      const firstBpm = 60000000 / sorted[0].tempo
-      let prevY = velY + bpmToLaneY(firstBpm, VEL_H)
+      let prevY = laneNormToCanvasY(laneEvNorm(displayEvs[0]), velY, VEL_H)
       ctx.moveTo(KEYS_W, prevY)
-      for (const tc of sorted) {
-        const tx = KEYS_W + ticksToPx(tc.tick) - scrollX.value
-        const bpm = 60000000 / tc.tempo
-        const ty = velY + bpmToLaneY(bpm, VEL_H)
-        ctx.lineTo(tx, prevY)
-        ctx.lineTo(tx, ty)
-        prevY = ty
+      for (const ev of displayEvs) {
+        const ex = KEYS_W + ticksToPx(ev.tick) - scrollX.value
+        const ey = laneNormToCanvasY(laneEvNorm(ev), velY, VEL_H)
+        ctx.lineTo(ex, prevY); ctx.lineTo(ex, ey)
+        prevY = ey
       }
       ctx.lineTo(W, prevY)
-      ctx.stroke()
+      ctx.stroke(); ctx.globalAlpha = 1
+    }
 
-      // Dots + labels
-      for (const tc of sorted) {
-        const tx = KEYS_W + ticksToPx(tc.tick) - scrollX.value
-        if (tx < KEYS_W - 8 || tx > W + 8) continue
-        const bpm = Math.round(60000000 / tc.tempo)
-        const ty = velY + bpmToLaneY(bpm, VEL_H)
-        ctx.fillStyle = tc.tick === 0 ? C.bpmDotFirst : C.bpmLine
-        ctx.beginPath(); ctx.arc(tx, ty, 4, 0, Math.PI * 2); ctx.fill()
-        ctx.strokeStyle = C.bpmDotStroke; ctx.lineWidth = 1
-        ctx.stroke()
-        if (tx > KEYS_W + 4) {
-          ctx.fillStyle = C.bpmText; ctx.font = 'bold 9px monospace'
-          ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
-          ctx.fillText(`${bpm}`, tx + 7, ty)
-        }
+    // Dots + labels
+    for (const ev of displayEvs) {
+      const ex = KEYS_W + ticksToPx(ev.tick) - scrollX.value
+      if (ex < KEYS_W - 12 || ex > W + 12) continue
+      const ey = laneNormToCanvasY(laneEvNorm(ev), velY, VEL_H)
+      if (ev.selected) {
+        ctx.fillStyle = '#ffffff'
+        ctx.beginPath(); ctx.arc(ex, ey, 5, 0, Math.PI * 2); ctx.fill()
+        ctx.strokeStyle = '#ffffaa'; ctx.lineWidth = 1.5; ctx.stroke()
+      } else {
+        const isBase = ev.tick === 0 && laneMode.value !== 'cc'
+        ctx.fillStyle = isBase ? C.bpmDotFirst : laneColor
+        ctx.beginPath(); ctx.arc(ex, ey, 3.5, 0, Math.PI * 2); ctx.fill()
+      }
+      if (ex > KEYS_W + 4) {
+        ctx.fillStyle = ev.selected ? '#ffffaa' : C.textDim
+        ctx.font = laneMode.value === 'bpm' ? 'bold 8px monospace' : '8px sans-serif'
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
+        ctx.fillText(laneEvLabel(ev), ex + 6, ey)
       }
     }
   }
 
-  // ── Box selection ────────────────────────────────────────────────────────────
+  // ── Box selection (notes) ─────────────────────────────────────────────────────
   if (drag?.type === 'box-select') {
     const sx = Math.min(drag.startX, drag.curX)
     const sy = Math.min(drag.startY, drag.curY)
@@ -1015,6 +1085,26 @@ function draw() {
     ctx.save()
     ctx.beginPath()
     ctx.rect(KEYS_W, RULER_H, noteW, noteH)
+    ctx.clip()
+    ctx.strokeStyle = '#88aaff'
+    ctx.lineWidth = 1
+    ctx.setLineDash([4, 3])
+    ctx.strokeRect(sx + 0.5, sy + 0.5, sw, sh)
+    ctx.fillStyle = 'rgba(100,140,255,0.08)'
+    ctx.fillRect(sx, sy, sw, sh)
+    ctx.setLineDash([])
+    ctx.restore()
+  }
+
+  // ── Lane box selection ────────────────────────────────────────────────────────
+  if (drag?.type === 'lane-box-select') {
+    const sx = Math.min(drag.startX, drag.curX)
+    const sy = Math.min(drag.startY, drag.curY)
+    const sw = Math.abs(drag.curX - drag.startX)
+    const sh = Math.abs(drag.curY - drag.startY)
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(KEYS_W, velY, noteW, VEL_H)
     ctx.clip()
     ctx.strokeStyle = '#88aaff'
     ctx.lineWidth = 1
@@ -1239,80 +1329,6 @@ function setVelAtRange(x1, x2, y) {
   if (changed) markDirty()
 }
 
-function findNearestTempoPx(x) {
-  for (const tc of tempos.value) {
-    const tx = KEYS_W + ticksToPx(tc.tick) - scrollX.value
-    if (Math.abs(tx - x) < 8) return tc
-  }
-  return null
-}
-
-function drawCcAtPos(x, y) {
-  const rect = canvasRef.value?.getBoundingClientRect()
-  if (!rect) return
-  const track = trackData.value[activeTrack.value]
-  if (!track) return
-  const tick = quantizeTick(Math.max(0, pxToTicks(x - KEYS_W + scrollX.value)))
-  const laneY = y - (rect.height - bottomLaneHeight.value)
-  const val = laneYToCcVal(laneY, bottomLaneHeight.value)
-  const idx = track.ccEvents.findIndex(e => e.controller === ccNumber.value && e.tick === tick)
-  if (idx >= 0) {
-    track.ccEvents[idx].value = val
-  } else {
-    track.ccEvents.push({ tick, controller: ccNumber.value, value: val })
-    track.ccEvents.sort((a, b) => a.tick - b.tick)
-  }
-  markDirty()
-}
-
-function eraseCcAtPos(x) {
-  const track = trackData.value[activeTrack.value]
-  if (!track) return
-  const tick = pxToTicks(x - KEYS_W + scrollX.value)
-  const q = gridTicks() || Math.round(ppq.value / 4)
-  const qi = Math.round(tick / q)
-  const before = track.ccEvents.length
-  track.ccEvents = track.ccEvents.filter(e =>
-    e.controller !== ccNumber.value || Math.round(e.tick / q) !== qi
-  )
-  if (track.ccEvents.length !== before) markDirty()
-}
-
-function drawPcAtPos(x, y) {
-  const rect = canvasRef.value?.getBoundingClientRect()
-  if (!rect) return
-  const track = trackData.value[activeTrack.value]
-  if (!track) return
-  const tick = Math.max(1, quantizeTick(pxToTicks(x - KEYS_W + scrollX.value)))
-  const laneY = y - (rect.height - bottomLaneHeight.value)
-  const prog = laneYToPcProg(laneY, bottomLaneHeight.value)
-  const idx = track.pcEvents.findIndex(e => e.tick === tick)
-  if (idx >= 0) track.pcEvents[idx].program = prog
-  else { track.pcEvents.push({ tick, program: prog }); track.pcEvents.sort((a, b) => a.tick - b.tick) }
-  markDirty()
-}
-
-function erasePcAtPos(x) {
-  const track = trackData.value[activeTrack.value]
-  if (!track) return
-  const tick = pxToTicks(x - KEYS_W + scrollX.value)
-  const q = gridTicks() || Math.round(ppq.value / 4)
-  const qi = Math.round(tick / q)
-  const before = track.pcEvents.length
-  track.pcEvents = track.pcEvents.filter(e => Math.round(e.tick / q) !== qi)
-  if (track.pcEvents.length !== before) markDirty()
-}
-
-function findNearestPcPx(x) {
-  const track = trackData.value[activeTrack.value]
-  if (!track) return null
-  for (const ev of (track.pcEvents || [])) {
-    const ex = KEYS_W + ticksToPx(ev.tick) - scrollX.value
-    if (Math.abs(ex - x) < 8) return ev
-  }
-  return null
-}
-
 // ── Time-signature popup ──────────────────────────────────────────────────────
 function tickToBarStart(tick) {
   const tsList = [...timeSigs.value].sort((a, b) => a.tick - b.tick)
@@ -1387,47 +1403,35 @@ function onMouseDown(e) {
         drag = { type: 'vel-draw', lastX: x }
         setVelAtRange(x, x, y)
       }
-    } else if (laneMode.value === 'cc') {
+    } else {
+      // ── Unified CC / BPM / PC ───────────────────────────────────────────────
       if (e.button === 2) {
         pushUndo()
-        eraseCcAtPos(x)
+        laneEraseAt(x)
       } else if (e.button === 0) {
-        pushUndo()
-        drag = { type: 'cc-draw' }
-        drawCcAtPos(x, y)
-      }
-    } else if (laneMode.value === 'pc') {
-      if (e.button === 2) {
-        pushUndo()
-        erasePcAtPos(x)
-      } else if (e.button === 0) {
-        pushUndo()
-        drag = { type: 'pc-draw' }
-        drawPcAtPos(x, y)
-      }
-    } else if (laneMode.value === 'bpm') {
-      const tick = Math.max(0, pxToTicks(x - KEYS_W + scrollX.value))
-      const rect = canvasRef.value.getBoundingClientRect()
-      const laneY = y - (rect.height - bottomLaneHeight.value)
-      const bpm = laneYToBpm(laneY, bottomLaneHeight.value)
-      if (e.button === 2) {
-        const nearest = findNearestTempoPx(x)
-        if (nearest && nearest.tick !== 0) {
-          pushUndo()
-          tempos.value = tempos.value.filter(t => t !== nearest)
-          markDirty()
-        }
-      } else if (e.button === 0) {
-        pushUndo()
-        const nearest = findNearestTempoPx(x)
-        if (nearest) {
-          drag = { type: 'bpm-move', tempo: nearest }
+        if (e.ctrlKey) {
+          if (!e.shiftKey) deselectAllLane()
+          drag = { type: 'lane-box-select', startX: x, startY: y, curX: x, curY: y, additive: e.shiftKey }
         } else {
-          const newTempo = { tick: Math.max(1, tick), tempo: Math.round(60000000 / bpm) }
-          tempos.value.push(newTempo)
-          tempos.value.sort((a, b) => a.tick - b.tick)
-          drag = { type: 'bpm-move', tempo: newTempo }
-          markDirty()
+          const selEv = findNearestSelectedLaneEv(x, y)
+          if (selEv) {
+            // Drag all selected events
+            pushUndo()
+            const sel = getLaneSelectedEvents()
+            drag = { type: 'lane-move', laneType: laneMode.value, startX: x, startY: y,
+              origPositions: sel.map(ev => ({ ev, origTick: ev.tick, origVal: laneEvRaw(ev) })) }
+          } else {
+            // Draw / paint
+            pushUndo()
+            deselectAllLane()
+            const rect = canvasRef.value.getBoundingClientRect()
+            const laneH = bottomLaneHeight.value
+            const laneYBase = rect.height - laneH
+            const rawVal = laneNormToRaw(laneCanvasYToNorm(y, laneYBase, laneH))
+            laneUpsert(pxToTicks(x - KEYS_W + scrollX.value), rawVal)
+            drag = { type: 'lane-draw', lastX: x }
+            markDirty()
+          }
         }
       }
     }
@@ -1562,20 +1566,48 @@ function onMouseMove(e) {
       setVelAtRange(drag.lastX, x, y)
       drag.lastX = x
     }
-  } else if (drag.type === 'cc-draw') {
-    if (inVelArea(x, y)) drawCcAtPos(x, y)
-  } else if (drag.type === 'pc-draw') {
-    if (inVelArea(x, y)) drawPcAtPos(x, y)
-  } else if (drag.type === 'bpm-move') {
-    const rect = canvasRef.value?.getBoundingClientRect()
-    if (!rect) return
-    const laneY = y - (rect.height - bottomLaneHeight.value)
-    const bpm = laneYToBpm(laneY, bottomLaneHeight.value)
-    drag.tempo.tempo = Math.round(60000000 / bpm)
-    if (drag.tempo.tick !== 0) {
-      const tick = Math.max(1, pxToTicks(x - KEYS_W + scrollX.value))
-      drag.tempo.tick = tick
+  } else if (drag.type === 'lane-draw') {
+    if (inVelArea(x, y)) {
+      const rect = canvasRef.value?.getBoundingClientRect()
+      if (!rect) return
+      const laneH = bottomLaneHeight.value
+      const laneYBase = rect.height - laneH
+      const tick1 = pxToTicks(Math.min(drag.lastX, x) - KEYS_W + scrollX.value)
+      const tick2 = pxToTicks(Math.max(drag.lastX, x) - KEYS_W + scrollX.value)
+      laneEraseRange(tick1, tick2)
+      const rawVal = laneNormToRaw(laneCanvasYToNorm(y, laneYBase, laneH))
+      laneUpsert(pxToTicks(x - KEYS_W + scrollX.value), rawVal)
+      drag.lastX = x
+      markDirty()
+    }
+  } else if (drag.type === 'lane-box-select') {
+    drag.curX = x; drag.curY = y
+    markDirty()
+  } else if (drag.type === 'lane-move') {
+    const laneH = bottomLaneHeight.value
+    const tickDelta = pxToTicks(x - drag.startX)
+    const dy = y - drag.startY
+    for (const orig of drag.origPositions) {
+      if (drag.laneType === 'cc') {
+        orig.ev.tick = quantizeTick(Math.max(0, orig.origTick + tickDelta))
+        orig.ev.value = Math.max(0, Math.min(127, Math.round(orig.origVal - dy * 127 / (laneH - 4))))
+      } else if (drag.laneType === 'bpm') {
+        const newBpm = Math.max(BPM_MIN, Math.min(BPM_MAX, Math.round(orig.origVal - dy * (BPM_MAX - BPM_MIN) / (laneH - 4))))
+        orig.ev.tempo = Math.round(60000000 / newBpm)
+        if (orig.ev.tick !== 0) orig.ev.tick = Math.max(1, quantizeTick(orig.origTick + tickDelta))
+      } else if (drag.laneType === 'pc') {
+        if (orig.ev.tick !== 0) orig.ev.tick = Math.max(1, quantizeTick(orig.origTick + tickDelta))
+        orig.ev.program = Math.max(0, Math.min(127, Math.round(orig.origVal - dy * 127 / (laneH - 4))))
+      }
+    }
+    if (drag.laneType === 'cc') {
+      const track = trackData.value[activeTrack.value]
+      if (track) track.ccEvents.sort((a, b) => a.tick - b.tick)
+    } else if (drag.laneType === 'bpm') {
       tempos.value = [...tempos.value].sort((a, b) => a.tick - b.tick)
+    } else if (drag.laneType === 'pc') {
+      const track = trackData.value[activeTrack.value]
+      if (track) track.pcEvents.sort((a, b) => a.tick - b.tick)
     }
     markDirty()
   }
@@ -1590,6 +1622,9 @@ function onMouseUp() {
     const y1 = Math.min(drag.startY, drag.curY)
     const y2 = Math.max(drag.startY, drag.curY)
     selectNotesInRect(x1, y1, x2, y2)
+  } else if (drag?.type === 'lane-box-select') {
+    if (!drag.additive) deselectAllLane()
+    selectLaneEventsInRect(drag.startX, drag.startY, drag.curX, drag.curY)
   }
   drag = null
   markDirty()
@@ -1598,7 +1633,7 @@ function onMouseUp() {
 function onMouseLeave() {
   stopPreview()
   stopRulerPreview()
-  const keepTypes = ['move', 'resize', 'ruler', 'vel-draw', 'cc-draw', 'pc-draw', 'bpm-move', 'box-select']
+  const keepTypes = ['move', 'resize', 'ruler', 'vel-draw', 'lane-draw', 'box-select', 'lane-box-select', 'lane-move']
   if (!keepTypes.includes(drag?.type)) drag = null
 }
 
@@ -1655,9 +1690,8 @@ function updateCursor(x, y, e) {
   let cursor = 'default'
   if (inVelArea(x, y)) {
     if (laneMode.value === 'velocity') cursor = 'crosshair'
-    else if (laneMode.value === 'cc') cursor = 'crosshair'
-    else if (laneMode.value === 'pc') cursor = findNearestPcPx(x) ? 'grab' : 'crosshair'
-    else if (laneMode.value === 'bpm') cursor = findNearestTempoPx(x) ? 'grab' : 'crosshair'
+    else if (e?.ctrlKey) cursor = 'crosshair'
+    else cursor = findNearestSelectedLaneEv(x, y) ? 'grab' : 'crosshair'
   } else if (inNoteArea(x, y)) {
     if (e?.ctrlKey) cursor = 'crosshair'
     else if (noteResizeEdge(x, y)) cursor = 'ew-resize'
@@ -1909,7 +1943,7 @@ function setBpm(val) {
   pushUndo()
   const tempo = Math.round(60000000 / bpmVal)
   if (tempos.value.length && tempos.value[0].tick === 0) tempos.value[0].tempo = tempo
-  else tempos.value.unshift({ tick: 0, tempo })
+  else tempos.value.unshift({ tick: 0, tempo, selected: false })
 }
 
 function changeProgram(track, program) {
@@ -1947,11 +1981,30 @@ function onKey({ key, ctrl, shift, raw }) {
   if (key === ' ') { raw.preventDefault(); togglePlay() }
   if (ctrl && key.toLowerCase() === 'z' && !shift) { raw.preventDefault(); undo(); return }
   if (ctrl && (key.toLowerCase() === 'y' || (shift && key.toLowerCase() === 'z'))) { raw.preventDefault(); redo(); return }
-  if (ctrl && key === 'a') { raw.preventDefault(); selectAll() }
-  if (ctrl && key === 'c') { raw.preventDefault(); copySelected() }
-  if (ctrl && key === 'v') { raw.preventDefault(); pasteNotes() }
-  if (key === 'Delete' || key === 'Backspace') { deleteSelected() }
-  if (key === 'Escape') { deselectAll(); markDirty() }
+
+  const isLaneMode = laneMode.value !== 'velocity'
+  const laneSel = isLaneMode && hasLaneSelection()
+
+  if (ctrl && key === 'a') {
+    raw.preventDefault()
+    if (isLaneMode) selectAllLane()
+    else selectAll()
+  }
+  if (ctrl && key === 'c') {
+    raw.preventDefault()
+    if (laneSel) copyLaneEvents()
+    else copySelected()
+  }
+  if (ctrl && key === 'v') {
+    raw.preventDefault()
+    if (laneClipboard.events?.length && laneClipboard.type === laneMode.value) pasteLaneEvents()
+    else pasteNotes()
+  }
+  if (key === 'Delete' || key === 'Backspace') {
+    if (laneSel) deleteLaneSelected()
+    else deleteSelected()
+  }
+  if (key === 'Escape') { deselectAll(); deselectAllLane(); markDirty() }
   if ((shift || ctrl) && (key === 'ArrowUp' || key === 'ArrowDown')) {
     raw.preventDefault()
     const delta = (key === 'ArrowUp' ? 1 : -1) * (ctrl ? 12 : 1)
@@ -1978,6 +2031,81 @@ function deleteSelected() {
 function selectAll() {
   for (const track of trackData.value)
     for (const n of track.notes) n.selected = true
+  markDirty()
+}
+
+// ── Lane selection / clipboard ────────────────────────────────────────────────
+function deselectAllLane() {
+  for (const track of trackData.value) {
+    for (const e of (track.ccEvents || [])) e.selected = false
+    for (const e of (track.pcEvents || [])) e.selected = false
+  }
+  for (const t of tempos.value) t.selected = false
+}
+
+function getLaneSelectedEvents() {
+  return laneGetEvents().filter(ev => ev.selected)
+}
+
+function hasLaneSelection() {
+  return laneMode.value !== 'velocity' && getLaneSelectedEvents().length > 0
+}
+
+function selectAllLane() {
+  for (const ev of laneGetEvents()) ev.selected = true
+  markDirty()
+}
+
+function selectLaneEventsInRect(x1, y1, x2, y2) {
+  const tick1 = pxToTicks(Math.min(x1, x2) - KEYS_W + scrollX.value)
+  const tick2 = pxToTicks(Math.max(x1, x2) - KEYS_W + scrollX.value)
+  const rect = canvasRef.value?.getBoundingClientRect()
+  if (!rect) return
+  const laneH = bottomLaneHeight.value
+  const velY = rect.height - laneH
+  const normLo = laneCanvasYToNorm(Math.max(y1, y2), velY, laneH)
+  const normHi = laneCanvasYToNorm(Math.min(y1, y2), velY, laneH)
+  for (const ev of laneGetEvents()) {
+    const norm = laneEvNorm(ev)
+    if (ev.tick >= tick1 && ev.tick <= tick2 && norm >= normLo && norm <= normHi)
+      ev.selected = true
+  }
+}
+
+function copyLaneEvents() {
+  const sel = getLaneSelectedEvents()
+  if (!sel.length) return
+  const minTick = Math.min(...sel.map(e => e.tick))
+  laneClipboard = { type: laneMode.value, minTick,
+    events: sel.map(e => ({ offset: e.tick - minTick, raw: laneEvRaw(e) })) }
+}
+
+function pasteLaneEvents() {
+  if (!laneClipboard.events?.length || laneClipboard.type !== laneMode.value) return
+  pushUndo()
+  deselectAllLane()
+  const insertTick = laneClipboard.minTick + defaultDuration()
+  for (const ev of laneClipboard.events) {
+    const uev = laneUpsert(insertTick + ev.offset, ev.raw)
+    if (uev) uev.selected = true
+  }
+  laneClipboard = { ...laneClipboard, minTick: insertTick }
+  markDirty()
+}
+
+function deleteLaneSelected() {
+  if (!hasLaneSelection()) return
+  pushUndo()
+  if (laneMode.value === 'cc') {
+    const track = trackData.value[activeTrack.value]
+    if (track) track.ccEvents = track.ccEvents.filter(e => !(e.controller === ccNumber.value && e.selected))
+  } else if (laneMode.value === 'bpm') {
+    tempos.value = tempos.value.filter(t => !t.selected || t.tick === 0)
+    if (tempos.value[0]) tempos.value[0].selected = false
+  } else if (laneMode.value === 'pc') {
+    const track = trackData.value[activeTrack.value]
+    if (track) track.pcEvents = track.pcEvents.filter(e => !e.selected)
+  }
   markDirty()
 }
 
