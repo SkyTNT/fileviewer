@@ -17,58 +17,6 @@ PLUGIN_ID = "fs_local"
 # ── File type registry (populated in setup) ──────────────────────────────────
 _file_type_registry = None
 
-IMAGE_EXTENSIONS   = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".svg", ".psd"}
-PARQUET_EXTENSIONS = {".parquet"}
-CSV_EXTENSIONS     = {".csv"}
-JSON_EXTENSIONS    = {".json"}
-JSONL_EXTENSIONS   = {".jsonl", ".ndjson"}
-TEXT_EXTENSIONS    = {
-    ".txt", ".md", ".rst", ".tex", ".log", ".ini", ".conf", ".cfg", ".env",
-    ".yaml", ".yml", ".toml", ".xml", ".html", ".htm", ".css",
-    ".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx",
-    ".py", ".sh", ".bash", ".zsh", ".fish", ".sql", ".r",
-    ".c", ".h", ".cpp", ".hpp", ".cc", ".cxx",
-    ".java", ".kt", ".kts", ".scala", ".go", ".rs", ".swift",
-    ".cs", ".vb", ".fs", ".rb", ".php", ".pl", ".lua",
-    ".dart", ".ex", ".exs", ".erl",
-    ".cmake", ".makefile", ".mk", ".dockerfile",
-    ".gitignore", ".gitattributes", ".editorconfig",
-    ".vue", ".svelte",
-}
-VIDEO_MIME_TYPES = {
-    '.mp4': 'video/mp4', '.webm': 'video/webm', '.ogv': 'video/ogg',
-    '.avi': 'video/x-msvideo', '.mov': 'video/quicktime', '.mkv': 'video/x-matroska',
-    '.flv': 'video/x-flv', '.wmv': 'video/x-ms-wmv', '.m4v': 'video/x-m4v',
-    '.ts': 'video/mp2t',
-}
-AUDIO_MIME_TYPES = {
-    '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.flac': 'audio/flac',
-    '.aac': 'audio/aac', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4',
-    '.opus': 'audio/opus', '.wma': 'audio/x-ms-wma',
-}
-ARCHIVE_EXTENSIONS = {".zip", ".tar", ".tgz", ".tbz2", ".txz"}
-try:
-    import py7zr as _py7zr  # noqa
-    ARCHIVE_EXTENSIONS.add(".7z")
-except ImportError:
-    pass
-
-_EXT_TO_TYPE: dict[str, str] = {
-    ext: t
-    for t, exts in [
-        ("image",   IMAGE_EXTENSIONS),
-        ("parquet", PARQUET_EXTENSIONS),
-        ("csv",     CSV_EXTENSIONS),
-        ("json",    JSON_EXTENSIONS),
-        ("jsonl",   JSONL_EXTENSIONS),
-        ("text",    TEXT_EXTENSIONS),
-        ("video",   VIDEO_MIME_TYPES),
-        ("audio",   AUDIO_MIME_TYPES),
-        ("archive", ARCHIVE_EXTENSIONS),
-    ]
-    for ext in exts
-}
-
 
 def _get_file_type(path: Path) -> str:
     if path.is_dir():
@@ -78,9 +26,6 @@ def _get_file_type(path: Path) -> str:
         if name_lower.endswith(compound):
             return "archive"
     ext = path.suffix.lower()
-    t = _EXT_TO_TYPE.get(ext)
-    if t is not None:
-        return t
     if _file_type_registry is not None:
         t = _file_type_registry.get_type(ext)
         if t is not None:
@@ -609,17 +554,7 @@ def _fs_resolve(path_str: str) -> Path:
 
 async def setup(ctx):
     global _file_type_registry
-    ft_registry = ctx.services.get("file-type.registry")
-    _file_type_registry = ft_registry
-    ft_registry.register("image",   list(IMAGE_EXTENSIONS),   PLUGIN_ID)
-    ft_registry.register("parquet", list(PARQUET_EXTENSIONS), PLUGIN_ID)
-    ft_registry.register("csv",     list(CSV_EXTENSIONS),     PLUGIN_ID)
-    ft_registry.register("json",    list(JSON_EXTENSIONS),    PLUGIN_ID)
-    ft_registry.register("jsonl",   list(JSONL_EXTENSIONS),   PLUGIN_ID)
-    ft_registry.register("text",    list(TEXT_EXTENSIONS),    PLUGIN_ID)
-    ft_registry.register("video",   list(VIDEO_MIME_TYPES),   PLUGIN_ID)
-    ft_registry.register("audio",   list(AUDIO_MIME_TYPES),   PLUGIN_ID)
-    ft_registry.register("archive", list(ARCHIVE_EXTENSIONS), PLUGIN_ID)
+    _file_type_registry = ctx.services.get("file-type.registry")
 
     ctx.services.register("fs.read",    _fs_read,    PLUGIN_ID)
     ctx.services.register("fs.write",   _fs_write,   PLUGIN_ID)
@@ -633,5 +568,3 @@ async def teardown(ctx):
     ctx.services.unregister("fs.read",    PLUGIN_ID)
     ctx.services.unregister("fs.write",   PLUGIN_ID)
     ctx.services.unregister("fs.resolve", PLUGIN_ID)
-    ft_registry = ctx.services.get("file-type.registry")
-    ft_registry.unregister_plugin(PLUGIN_ID)

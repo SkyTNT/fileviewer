@@ -318,7 +318,9 @@ async def setup(ctx):
         timeout=10.0,
         limits=httpx.Limits(max_connections=100),
     )
-    ctx.services.get("file-type.registry").register_enricher("image", _image_entry_enricher, PLUGIN_ID)
+    ft_registry = ctx.services.get("file-type.registry")
+    ft_registry.register("image", list(IMAGE_EXTENSIONS), PLUGIN_ID)
+    ft_registry.register_enricher("image", _image_entry_enricher, PLUGIN_ID)
     ctx.app.include_router(router, prefix="/api/images", tags=["images"])
 
 

@@ -347,6 +347,8 @@ async def get_media_thumbnail(request: Request, path: str = Query(...), size: in
 
 async def setup(ctx):
     ft_registry = ctx.services.get("file-type.registry")
+    ft_registry.register("video", list(VIDEO_MIME_TYPES), PLUGIN_ID)
+    ft_registry.register("audio", list(AUDIO_MIME_TYPES), PLUGIN_ID)
     ft_registry.register_enricher("video", _video_entry_enricher, PLUGIN_ID)
     ft_registry.register_enricher("audio", _audio_entry_enricher, PLUGIN_ID)
     ctx.app.include_router(router, prefix="/api/media", tags=["media"])

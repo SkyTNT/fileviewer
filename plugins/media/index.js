@@ -27,6 +27,8 @@ export async function setup(ctx) {
   i18n.extend('media', 'zh-TW', zhTW)
   i18n.extend('media', 'ja', ja)
 
+  ft.register('video', 'mdi-play-circle-outline', 'deep-purple')
+  ft.register('audio', 'mdi-music-note',          'pink')
   ft.registerDetailFields('video', (entry) => [
     entry.duration != null && { key: 'duration', label: 'media.duration', value: formatDuration(entry.duration) },
   ].filter(Boolean), 'media')

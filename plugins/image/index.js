@@ -26,6 +26,7 @@ export async function setup(ctx) {
   i18n.extend('image', 'ja', ja)
 
   const ft = await ctx.services.getAsync('file.types')
+  ft.register('image', 'mdi-image-outline', 'success')
   ft.registerDetailSection('image', {
     id: 'image-json-meta',
     component: markRaw(ImageMetaSection),

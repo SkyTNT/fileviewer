@@ -13,10 +13,11 @@ from config import validate_path, validate_abs_path
 PLUGIN_ID = "dataframe"
 router = APIRouter()
 
-JSONL_EXTENSIONS = {".jsonl", ".ndjson"}
-JSON_EXTENSIONS  = {".json"}
-CSV_EXTENSIONS   = {".csv"}
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".svg"}
+PARQUET_EXTENSIONS = {".parquet"}
+JSONL_EXTENSIONS   = {".jsonl", ".ndjson"}
+JSON_EXTENSIONS    = {".json"}
+CSV_EXTENSIONS     = {".csv"}
+IMAGE_EXTENSIONS   = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".svg"}
 
 _http_client = None
 
@@ -189,11 +190,17 @@ async def setup(ctx):
         timeout=10.0,
         limits=httpx.Limits(max_connections=100),
     )
+    ft_registry = ctx.services.get("file-type.registry")
+    ft_registry.register("parquet", list(PARQUET_EXTENSIONS), PLUGIN_ID)
+    ft_registry.register("csv",     list(CSV_EXTENSIONS),     PLUGIN_ID)
+    ft_registry.register("json",    list(JSON_EXTENSIONS),    PLUGIN_ID)
+    ft_registry.register("jsonl",   list(JSONL_EXTENSIONS),   PLUGIN_ID)
     ctx.app.include_router(router, prefix="/api/dataframe", tags=["dataframe"])
 
 
 async def teardown(ctx):
     global _http_client
+    ctx.services.get("file-type.registry").unregister_plugin(PLUGIN_ID)
     if _http_client:
         await _http_client.aclose()
         _http_client = None

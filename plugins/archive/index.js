@@ -15,7 +15,7 @@ export async function setup(ctx) {
   i18n.extend('archive', 'zh-TW', zhTW)
   i18n.extend('archive', 'ja', ja)
 
-  const [registry, explorerState, taskState, appConfig, winMgr, writeApi, http, httpStream, readSSE, openConflictDialog] =
+  const [registry, explorerState, taskState, appConfig, winMgr, writeApi, http, httpStream, readSSE, openConflictDialog, ft] =
     await Promise.all([
       ctx.services.getAsync('app.registry'),
       ctx.services.getAsync('explorer.state'),
@@ -27,7 +27,9 @@ export async function setup(ctx) {
       ctx.services.getAsync('network.httpStream'),
       ctx.services.getAsync('network.sse'),
       ctx.services.getAsync('fs-ops.conflict-dialog'),
+      ctx.services.getAsync('file.types'),
     ])
+  ft.register('archive', 'mdi-archive-outline', 'orange')
   const archiveApi         = createArchiveApi(http, httpStream)
   const archiveState       = createArchiveState(explorerState, taskState, winMgr, archiveApi, writeApi, readSSE, openConflictDialog)
   ctx.services.register('archive.state', archiveState, 'archive')

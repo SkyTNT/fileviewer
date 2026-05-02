@@ -16,11 +16,13 @@ export async function setup(ctx) {
   i18n.extend('text', 'zh-TW', zhTW)
   i18n.extend('text', 'ja', ja)
 
-  const [http, winMgr, registry] = await Promise.all([
+  const [http, winMgr, registry, ft] = await Promise.all([
     ctx.services.getAsync('network.http'),
     ctx.services.getAsync('window.manager'),
     ctx.services.getAsync('app.registry'),
+    ctx.services.getAsync('file.types'),
   ])
+  ft.register('text', 'mdi-file-document-outline', 'info')
   ctx.services.register('text.api', createTextApi(http), 'text')
 
   registry.register({

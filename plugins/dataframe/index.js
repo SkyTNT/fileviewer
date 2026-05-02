@@ -14,11 +14,16 @@ export async function setup(ctx) {
   i18n.extend('dataframe', 'zh-TW', zhTW)
   i18n.extend('dataframe', 'ja', ja)
 
-  const [http, winMgr, registry] = await Promise.all([
+  const [http, winMgr, registry, ft] = await Promise.all([
     ctx.services.getAsync('network.http'),
     ctx.services.getAsync('window.manager'),
     ctx.services.getAsync('app.registry'),
+    ctx.services.getAsync('file.types'),
   ])
+  ft.register('parquet', 'mdi-table-large',            'warning')
+  ft.register('csv',     'mdi-file-delimited-outline', 'teal')
+  ft.register('json',    'mdi-code-json',              'secondary')
+  ft.register('jsonl',   'mdi-code-json',              'secondary')
   ctx.services.register('dataframe.api', createDataframeApi(http), 'dataframe')
 
   registry.register({
