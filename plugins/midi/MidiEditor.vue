@@ -226,6 +226,8 @@ let analysers = null
 const showOscilloscope = ref(false)
 const oscCanvasRef = ref(null)
 
+const masterGain = ref(parseFloat(localStorage.getItem('fv-midi-gain') ?? '1'))
+
 let drag = null
 let uiDrag = null
 let noteIdSeq = 0
@@ -2130,6 +2132,7 @@ async function loadSoundFont() {
     await synth.soundBankManager.addSoundBank(sfBuf, 'default')
 
     sfLoaded.value = true
+    try { synth.setMasterParameter('masterGain', masterGain.value) } catch {}
     if (url !== DEFAULT_SF_URL) localStorage.setItem('fv-midi-soundfont', url)
     showSFDialog.value = false
   } catch (e) {
@@ -2579,6 +2582,10 @@ watch(() => props.file, async (f) => {
 
 watch(isDark, () => nextTick(draw))
 watch(showOscilloscope, () => nextTick(drawOscilloscope))
+watch(masterGain, v => {
+  localStorage.setItem('fv-midi-gain', v)
+  if (synth && sfLoaded.value) try { synth.setMasterParameter('masterGain', v) } catch {}
+})
 </script>
 
 <template>
@@ -2645,6 +2652,14 @@ watch(showOscilloscope, () => nextTick(drawOscilloscope))
         </v-select>
 
         <div style="flex:1" />
+
+        <div class="gain-control" :title="t('midi.masterGain')">
+          <v-icon size="18" class="gain-icon">mdi-volume-high</v-icon>
+          <v-slider v-model="masterGain" min="0" max="4" step="0.01"
+            hide-details density="compact" style="width:90px"
+          />
+          <span class="gain-value">{{ Math.round(masterGain * 100) }}%</span>
+        </div>
 
         <v-btn size="small" :color="showOscilloscope ? 'primary' : undefined" variant="tonal"
           icon="mdi-waveform" :title="t('midi.oscilloscope')" @click="showOscilloscope = !showOscilloscope" />
@@ -2935,6 +2950,27 @@ watch(showOscilloscope, () => nextTick(drawOscilloscope))
   color: rgb(var(--v-theme-primary));
   flex-shrink: 0;
   letter-spacing: 0.04em;
+}
+
+/* ── Gain control ───────────────────────────────────────────── */
+.gain-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+}
+
+.gain-icon {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.gain-value {
+  flex-shrink: 0;
+  font-size: 11px;
+  opacity: 0.7;
+  min-width: 34px;
+  text-align: right;
 }
 
 /* ── Oscilloscope panel ─────────────────────────────────────── */

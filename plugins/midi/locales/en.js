@@ -29,6 +29,7 @@ export default {
     sfConfigLabel: 'SoundFont URL or path',
     sfConfigPlaceholder: 'https://... or /path/to/soundfont.sf2',
     sfConfigHelp: 'Free SoundFonts: GeneralUser GS or MuseScore_General.sf3 — specify the path above.',
+    masterGain: 'Master Gain',
     oscilloscope: 'Oscilloscope',
     help: 'Help',
     helpTitle: 'MIDI Editor — Help',

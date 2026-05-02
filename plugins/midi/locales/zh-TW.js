@@ -29,6 +29,7 @@ export default {
     sfConfigLabel: 'SoundFont URL 或路徑',
     sfConfigPlaceholder: 'https://... 或 /path/to/soundfont.sf2',
     sfConfigHelp: '免費音色庫：GeneralUser GS 或 MuseScore_General.sf3 — 在上方輸入路徑。',
+    masterGain: '總音量',
     oscilloscope: '示波器',
     help: '說明',
     helpTitle: 'MIDI 編輯器 — 說明',
