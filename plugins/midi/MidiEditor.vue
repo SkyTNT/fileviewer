@@ -790,10 +790,19 @@ function draw() {
       for (const note of track.notes) {
         const vx = KEYS_W + ticksToPx(note.startTick) - scrollX.value
         if (vx < KEYS_W || vx > W) continue
+        const nw = Math.max(2, ticksToPx(note.endTick - note.startTick))
         const bh = Math.max(2, (note.velocity / 127) * (VEL_H - 6))
-        ctx.fillStyle = note.selected ? '#ffffff' : track.color
+        const barTop = velY + VEL_H - bh
+        const color = note.selected ? '#ffffff' : track.color
+        ctx.fillStyle = color
         ctx.globalAlpha = 0.75
-        ctx.fillRect(vx - 1, velY + VEL_H - bh, 3, bh)
+        ctx.fillRect(vx - 1, barTop, 3, bh)
+        ctx.strokeStyle = color
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.moveTo(vx + 1, barTop + 0.5)
+        ctx.lineTo(vx + nw, barTop + 0.5)
+        ctx.stroke()
       }
     }
     ctx.globalAlpha = 1
