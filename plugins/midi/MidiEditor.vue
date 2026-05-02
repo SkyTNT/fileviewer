@@ -180,6 +180,7 @@ let seq      = null
 let animFrameId  = null
 let rafDirtyId   = null
 let loudnessDecay = {}
+let seqInitCountdown = 0
 
 let drag = null
 let uiDrag = null
@@ -1184,10 +1185,14 @@ function startAnimation() {
   function loop() {
     if (seq) {
       if (seq.isFinished) { stopPlayback(); draw(); return }
-      const t = seq.currentHighResolutionTime ?? seq.currentTime ?? 0
-      currentTick.value = secondsToTicks(t)
-      ensureCursorVisible()
-      updateTrackLoudness()
+      if (seqInitCountdown > 0) {
+        seqInitCountdown--
+      } else {
+        const t = seq.currentHighResolutionTime || seq.currentTime || 0
+        currentTick.value = secondsToTicks(t)
+        ensureCursorVisible()
+        updateTrackLoudness()
+      }
     }
     draw()
     animFrameId = requestAnimationFrame(loop)
@@ -1944,6 +1949,7 @@ async function startPlayback() {
       seq.loopCount = looping.value ? -1 : 0
       seq.play()
       playing.value = true
+      seqInitCountdown = 5
       startAnimation()
     })
   } catch (e) {
