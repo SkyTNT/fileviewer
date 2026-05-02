@@ -2603,18 +2603,18 @@ watch(masterGain, v => {
       <!-- ── Top bar ───────────────────────────────────────────────────────── -->
       <div class="top-bar">
         <v-btn-group density="compact" variant="tonal" rounded="pill">
-          <v-btn size="small" icon="mdi-skip-backward" @click="stopPlayback" />
+          <v-btn size="small" icon="mdi-skip-backward" :title="t('midi.stop')" @click="stopPlayback" />
           <v-btn size="small" :icon="playing ? 'mdi-pause' : 'mdi-play'"
-            :color="playing ? 'primary' : undefined" @click="togglePlay" />
+            :color="playing ? 'primary' : undefined" :title="t('midi.kPlay')" @click="togglePlay" />
           <v-btn size="small" icon="mdi-repeat" :color="looping ? 'primary' : undefined"
-            @click="looping = !looping" />
+            :title="t('midi.loop')" @click="looping = !looping" />
           <v-btn size="small" icon="mdi-arrow-right-bold" :color="followPlayhead ? 'primary' : undefined"
-            @click="followPlayhead = !followPlayhead" />
+            :title="t('midi.followPlayhead')" @click="followPlayhead = !followPlayhead" />
         </v-btn-group>
 
         <v-btn-group density="compact" variant="tonal" rounded="pill">
-          <v-btn size="small" icon="mdi-undo" :disabled="!canUndo" @click="undo" />
-          <v-btn size="small" icon="mdi-redo" :disabled="!canRedo" @click="redo" />
+          <v-btn size="small" icon="mdi-undo" :disabled="!canUndo" :title="t('midi.kUndo')" @click="undo" />
+          <v-btn size="small" icon="mdi-redo" :disabled="!canRedo" :title="t('midi.kRedo')" @click="redo" />
         </v-btn-group>
 
         <div class="pos-display font-mono">{{ positionDisplay }}</div>
