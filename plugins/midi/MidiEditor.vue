@@ -180,6 +180,10 @@ let loudnessDecay = {}
 let drag = null
 let noteIdSeq = 0
 
+// ── Clipboard ─────────────────────────────────────────────────────────────────
+let clipboard = { minTick: 0, notes: [] }
+
+
 // ── Computed ──────────────────────────────────────────────────────────────────
 const soloActive = computed(() => trackData.value.some(t => t.solo))
 
@@ -941,6 +945,26 @@ function draw() {
     }
   }
 
+  // ── Box selection ────────────────────────────────────────────────────────────
+  if (drag?.type === 'box-select') {
+    const sx = Math.min(drag.startX, drag.curX)
+    const sy = Math.min(drag.startY, drag.curY)
+    const sw = Math.abs(drag.curX - drag.startX)
+    const sh = Math.abs(drag.curY - drag.startY)
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(KEYS_W, RULER_H, noteW, noteH)
+    ctx.clip()
+    ctx.strokeStyle = '#88aaff'
+    ctx.lineWidth = 1
+    ctx.setLineDash([4, 3])
+    ctx.strokeRect(sx + 0.5, sy + 0.5, sw, sh)
+    ctx.fillStyle = 'rgba(100,140,255,0.08)'
+    ctx.fillRect(sx, sy, sw, sh)
+    ctx.setLineDash([])
+    ctx.restore()
+  }
+
   // ── Corners ───────────────────────────────────────────────────────────────────
   ctx.fillStyle = C.bgDarker
   ctx.fillRect(0, 0, KEYS_W, RULER_H)
@@ -1088,30 +1112,39 @@ function inVelArea(x, y) {
   return !!rect && x >= KEYS_W && y >= rect.height - VEL_H && y < rect.height
 }
 
+// Returns all visible {track, note} pairs in top-to-bottom Z order (topmost first).
+// Matches the draw order: non-active tracks first, active track last → reverse to hit-test from top.
+function notesTopFirst() {
+  const result = []
+  const tracks = trackData.value
+  const nonActive = tracks.filter(t => t.index !== activeTrack.value)
+  const active    = tracks.filter(t => t.index === activeTrack.value)
+  for (const track of [...nonActive, ...active]) {
+    if (soloActive.value ? !track.solo : track.muted) continue
+    for (const n of track.notes) result.push({ track, note: n })
+  }
+  result.reverse()
+  return result
+}
+
 function noteAtPos(x, y) {
   if (!inNoteArea(x, y)) return null
   const tick = pxToTicks(x - KEYS_W + scrollX.value)
   const note = yToNote(y - RULER_H + scrollY.value)
-  for (const track of trackData.value) {
-    if (soloActive.value ? !track.solo : track.muted) continue
-    for (const n of track.notes) {
-      if (n.note === note && n.startTick <= tick && n.endTick > tick) return { track, note: n }
-    }
+  for (const item of notesTopFirst()) {
+    const n = item.note
+    if (n.note === note && n.startTick <= tick && n.endTick > tick) return item
   }
   return null
 }
 
 function noteResizeEdge(x, y) {
-  if (!inNoteArea(x, y)) return null
+  const hit = noteAtPos(x, y)
+  if (!hit) return null
   const tick = pxToTicks(x - KEYS_W + scrollX.value)
-  const note = yToNote(y - RULER_H + scrollY.value)
   const edgeTicks = Math.max(pxToTicks(8), ppq.value / 32)
-  for (const track of trackData.value) {
-    for (const n of track.notes) {
-      if (n.note === note && Math.abs(n.endTick - tick) < edgeTicks && n.startTick < tick)
-        return { track, note: n }
-    }
-  }
+  const n = hit.note
+  if (Math.abs(n.endTick - tick) < edgeTicks && n.startTick < tick) return hit
   return null
 }
 
@@ -1346,18 +1379,38 @@ function onMouseDown(e) {
 
   if (e.button !== 0) return
 
+  // Ctrl+drag in note area → box selection
+  if (e.ctrlKey && inNoteArea(x, y)) {
+    if (!e.shiftKey) deselectAll()
+    drag = { type: 'box-select', startX: x, startY: y, curX: x, curY: y, additive: e.shiftKey }
+    return
+  }
+
   const edge = noteResizeEdge(x, y)
   if (edge) {
-    drag = { type: 'resize', startX: x, note: edge.note }
+    const targets = edge.note.selected ? getAllSelected() : [edge.note]
+    drag = {
+      type: 'resize', note: edge.note, origEndTick: edge.note.endTick,
+      origPositions: targets.map(n => ({ note: n, endTick: n.endTick })),
+    }
     return
   }
 
   const hit = noteAtPos(x, y)
   if (hit) {
     previewNote(hit.note.channel, hit.note.note, hit.note.velocity)
-    drag = { type: 'move', startX: x, startY: y, note: hit.note,
-             origStart: hit.note.startTick, origNote: hit.note.note }
+    if (!hit.note.selected) {
+      deselectAll()
+      hit.note.selected = true
+    }
+    const selectedNotes = getAllSelected()
+    drag = {
+      type: 'move', startX: x, startY: y, note: hit.note,
+      origStart: hit.note.startTick, origNote: hit.note.note,
+      origPositions: selectedNotes.map(n => ({ note: n, startTick: n.startTick, noteNum: n.note })),
+    }
   } else {
+    deselectAll()
     const st = quantizeTick(pxToTicks(x - KEYS_W + scrollX.value))
     const n  = yToNote(y - RULER_H + scrollY.value)
     const at = activeTrack.value < trackData.value.length ? activeTrack.value : 0
@@ -1366,14 +1419,15 @@ function onMouseDown(e) {
                       endTick: st + defaultDuration(), velocity: 100, selected: false }
     if (trackData.value[at]) trackData.value[at].notes.push(newNote)
     previewNote(ch, n, 100)
-    drag = { type: 'move', startX: x, startY: y, note: newNote, origStart: st, origNote: n }
+    drag = { type: 'move', startX: x, startY: y, note: newNote, origStart: st, origNote: n,
+             origPositions: [{ note: newNote, startTick: st, noteNum: n }] }
     markDirty()
   }
 }
 
 function onMouseMove(e) {
   const { x, y } = canvasCoords(e)
-  if (!drag) { updateCursor(x, y); return }
+  if (!drag) { updateCursor(x, y, e); return }
 
   if (drag.type === 'ruler') {
     const tick = Math.max(0, pxToTicks(x - KEYS_W + scrollX.value))
@@ -1386,21 +1440,45 @@ function onMouseMove(e) {
     return
   }
 
+  if (drag.type === 'box-select') {
+    drag.curX = x; drag.curY = y
+    markDirty()
+    return
+  }
+
   if (drag.type === 'move') {
-    const newTick = Math.max(0, quantizeTick(drag.origStart + pxToTicks(x - drag.startX)))
-    const newNote = Math.max(0, Math.min(127, drag.origNote + Math.round((drag.startY - y) / rowHeight())))
-    const dur = drag.note.endTick - drag.note.startTick
-    if (drag.note.note !== newNote) previewNote(drag.note.channel, newNote, drag.note.velocity, true)
-    if (drag.note.startTick !== newTick || drag.note.note !== newNote) {
-      drag.note.startTick = newTick
-      drag.note.endTick   = newTick + dur
-      drag.note.note      = newNote
+    const tickDelta = pxToTicks(x - drag.startX)
+    const noteDelta = Math.round((drag.startY - y) / rowHeight())
+    const anchorNewTick = Math.max(0, quantizeTick(drag.origStart + tickDelta))
+    const anchorNewNote = Math.max(0, Math.min(127, drag.origNote + noteDelta))
+    const anchorTickShift = anchorNewTick - drag.origStart
+    const anchorNoteShift = anchorNewNote - drag.origNote
+
+    if (drag.note.note !== anchorNewNote) previewNote(drag.note.channel, anchorNewNote, drag.note.velocity, true)
+
+    const positions = drag.origPositions ?? [{ note: drag.note, startTick: drag.origStart, noteNum: drag.origNote }]
+    let changed = false
+    for (const orig of positions) {
+      const newTick = Math.max(0, orig.startTick + anchorTickShift)
+      const newNoteNum = Math.max(0, Math.min(127, orig.noteNum + anchorNoteShift))
+      const dur = orig.note.endTick - orig.note.startTick
+      if (orig.note.startTick !== newTick || orig.note.note !== newNoteNum) {
+        orig.note.startTick = newTick
+        orig.note.endTick   = newTick + dur
+        orig.note.note      = newNoteNum
+        changed = true
+      }
+    }
+    if (changed) markDirty()
+  } else if (drag.type === 'resize') {
+    const newEndTick = Math.max(drag.note.startTick + ppq.value / 32,
+                                quantizeTick(pxToTicks(x - KEYS_W + scrollX.value)))
+    const delta = newEndTick - drag.origEndTick
+    if (delta !== 0) {
+      for (const orig of drag.origPositions)
+        orig.note.endTick = Math.max(orig.note.startTick + ppq.value / 32, orig.endTick + delta)
       markDirty()
     }
-  } else if (drag.type === 'resize') {
-    const tick = Math.max(drag.note.startTick + ppq.value / 32,
-                          quantizeTick(pxToTicks(x - KEYS_W + scrollX.value)))
-    if (drag.note.endTick !== tick) { drag.note.endTick = tick; markDirty() }
   } else if (drag.type === 'erase') {
     const hit = noteAtPos(x, y)
     if (hit) { removeNote(hit.track, hit.note); markDirty() }
@@ -1431,6 +1509,13 @@ function onMouseMove(e) {
 function onMouseUp() {
   stopPreview()
   stopRulerPreview()
+  if (drag?.type === 'box-select') {
+    const x1 = Math.min(drag.startX, drag.curX)
+    const x2 = Math.max(drag.startX, drag.curX)
+    const y1 = Math.min(drag.startY, drag.curY)
+    const y2 = Math.max(drag.startY, drag.curY)
+    selectNotesInRect(x1, y1, x2, y2)
+  }
   drag = null
   markDirty()
 }
@@ -1438,7 +1523,7 @@ function onMouseUp() {
 function onMouseLeave() {
   stopPreview()
   stopRulerPreview()
-  const keepTypes = ['move', 'resize', 'ruler', 'vel-draw', 'cc-draw', 'pc-draw', 'bpm-move']
+  const keepTypes = ['move', 'resize', 'ruler', 'vel-draw', 'cc-draw', 'pc-draw', 'bpm-move', 'box-select']
   if (!keepTypes.includes(drag?.type)) drag = null
 }
 
@@ -1463,13 +1548,20 @@ function onWheel(e) {
     scrollX.value     = Math.max(0, ticksToPx(tickAtMouse) - (x - KEYS_W))
   } else if (e.altKey) {
     e.preventDefault()
-    let target = null
-    if (inVelArea(x, y)) target = noteAtVelPos(x)
-    else if (inNoteArea(x, y)) target = noteAtPos(x, y)
-    if (target) {
-      const delta = e.deltaY < 0 ? 4 : -4
-      target.note.velocity = Math.max(1, Math.min(127, target.note.velocity + delta))
+    const delta = e.deltaY < 0 ? 4 : -4
+    const selected = getAllSelected()
+    if (selected.length) {
+      for (const n of selected)
+        n.velocity = Math.max(1, Math.min(127, n.velocity + delta))
       markDirty()
+    } else {
+      let target = null
+      if (inVelArea(x, y)) target = noteAtVelPos(x)
+      else if (inNoteArea(x, y)) target = noteAtPos(x, y)
+      if (target) {
+        target.note.velocity = Math.max(1, Math.min(127, target.note.velocity + delta))
+        markDirty()
+      }
     }
   } else if (e.shiftKey) {
     const maxSX = Math.max(0, ticksToPx(totalTicks.value) + 200 - noteW)
@@ -1481,7 +1573,7 @@ function onWheel(e) {
   markDirty()
 }
 
-function updateCursor(x, y) {
+function updateCursor(x, y, e) {
   if (!canvasRef.value) return
   let cursor = 'default'
   if (inVelArea(x, y)) {
@@ -1490,7 +1582,8 @@ function updateCursor(x, y) {
     else if (laneMode.value === 'pc') cursor = findNearestPcPx(x) ? 'grab' : 'crosshair'
     else if (laneMode.value === 'bpm') cursor = findNearestTempoPx(x) ? 'grab' : 'crosshair'
   } else if (inNoteArea(x, y)) {
-    if (noteResizeEdge(x, y)) cursor = 'ew-resize'
+    if (e?.ctrlKey) cursor = 'crosshair'
+    else if (noteResizeEdge(x, y)) cursor = 'ew-resize'
     else if (noteAtPos(x, y)) cursor = 'grab'
     else cursor = 'crosshair'
   } else if (y < RULER_H && x >= KEYS_W) {
@@ -1502,6 +1595,73 @@ function updateCursor(x, y) {
 function removeNote(track, note) {
   const i = track.notes.indexOf(note)
   if (i >= 0) track.notes.splice(i, 1)
+}
+
+function deselectAll() {
+  for (const track of trackData.value)
+    for (const n of track.notes) n.selected = false
+}
+
+function getAllSelected() {
+  const result = []
+  for (const track of trackData.value)
+    for (const n of track.notes) if (n.selected) result.push(n)
+  return result
+}
+
+function selectNotesInRect(x1, y1, x2, y2) {
+  const tick1 = pxToTicks(x1 - KEYS_W + scrollX.value)
+  const tick2 = pxToTicks(x2 - KEYS_W + scrollX.value)
+  const note1 = yToNote(y2 - RULER_H + scrollY.value)
+  const note2 = yToNote(y1 - RULER_H + scrollY.value)
+  for (const track of trackData.value) {
+    if (soloActive.value ? !track.solo : track.muted) continue
+    for (const n of track.notes) {
+      if (n.note >= note1 && n.note <= note2 && n.startTick < tick2 && n.endTick > tick1)
+        n.selected = true
+    }
+  }
+}
+
+function copySelected() {
+  const selected = getAllSelected()
+  if (!selected.length) return
+  const minTick = Math.min(...selected.map(n => n.startTick))
+  clipboard = {
+    minTick,
+    notes: selected.map(n => ({
+      trackIndex: trackData.value.findIndex(t => t.notes.includes(n)),
+      note: n.note,
+      startOffset: n.startTick - minTick,
+      duration: n.endTick - n.startTick,
+      velocity: n.velocity,
+      channel: n.channel,
+    })),
+  }
+}
+
+function pasteNotes() {
+  if (!clipboard.notes?.length) return
+  deselectAll()
+  const step = defaultDuration()
+  const insertTick = clipboard.minTick + step
+  for (const c of clipboard.notes) {
+    const trackIndex = c.trackIndex >= 0 && c.trackIndex < trackData.value.length
+      ? c.trackIndex
+      : (activeTrack.value < trackData.value.length ? activeTrack.value : 0)
+    const track = trackData.value[trackIndex]
+    if (!track) continue
+    const startTick = insertTick + c.startOffset
+    const newNote = {
+      id: ++noteIdSeq, channel: c.channel, note: c.note,
+      startTick, endTick: startTick + c.duration,
+      velocity: c.velocity, selected: true,
+    }
+    track.notes.push(newNote)
+  }
+  // shift clipboard base so repeated pastes keep moving right
+  clipboard = { ...clipboard, minTick: insertTick }
+  markDirty()
 }
 
 // ── Loading ───────────────────────────────────────────────────────────────────
@@ -1701,8 +1861,38 @@ function changeChannel(track, ch) {
   markDirty()
 }
 
-function onKey({ key, raw }) {
+function onKey({ key, ctrl, shift, raw }) {
   if (key === ' ') { raw.preventDefault(); togglePlay() }
+  if (ctrl && key === 'a') { raw.preventDefault(); selectAll() }
+  if (ctrl && key === 'c') { raw.preventDefault(); copySelected() }
+  if (ctrl && key === 'v') { raw.preventDefault(); pasteNotes() }
+  if (key === 'Delete' || key === 'Backspace') { deleteSelected() }
+  if (key === 'Escape') { deselectAll(); markDirty() }
+  if ((shift || ctrl) && (key === 'ArrowUp' || key === 'ArrowDown')) {
+    raw.preventDefault()
+    const delta = (key === 'ArrowUp' ? 1 : -1) * (ctrl ? 12 : 1)
+    shiftPitch(delta)
+  }
+}
+
+function shiftPitch(delta) {
+  const selected = getAllSelected()
+  const targets = selected.length ? selected : trackData.value.flatMap(t => t.notes)
+  for (const n of targets)
+    n.note = Math.max(0, Math.min(127, n.note + delta))
+  markDirty()
+}
+
+function deleteSelected() {
+  for (const track of trackData.value)
+    track.notes = track.notes.filter(n => !n.selected)
+  markDirty()
+}
+
+function selectAll() {
+  for (const track of trackData.value)
+    for (const n of track.notes) n.selected = true
+  markDirty()
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
