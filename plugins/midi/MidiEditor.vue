@@ -1470,7 +1470,7 @@ function onMouseDown(e) {
             const laneYBase = rect.height - laneH
             const rawVal = laneNormToRaw(laneCanvasYToNorm(y, laneYBase, laneH))
             laneUpsert(pxToTicks(x - KEYS_W + scrollX.value), rawVal)
-            drag = { type: 'lane-draw', lastX: x }
+            drag = { type: 'lane-draw', lastX: x, lastY: y }
             markDirty()
           }
         }
@@ -1613,12 +1613,27 @@ function onMouseMove(e) {
       if (!rect) return
       const laneH = bottomLaneHeight.value
       const laneYBase = rect.height - laneH
-      const tick1 = pxToTicks(Math.min(drag.lastX, x) - KEYS_W + scrollX.value)
-      const tick2 = pxToTicks(Math.max(drag.lastX, x) - KEYS_W + scrollX.value)
-      laneEraseRange(tick1, tick2)
-      const rawVal = laneNormToRaw(laneCanvasYToNorm(y, laneYBase, laneH))
-      laneUpsert(pxToTicks(x - KEYS_W + scrollX.value), rawVal)
+      const dx = x - drag.lastX
+      if (dx !== 0) {
+        // Exclude drag.lastX from the erase range to preserve the point placed by the previous event.
+        // Without this, slow drags (small dx) erase the previous point and leave isolated single points.
+        const tick1 = pxToTicks((dx > 0 ? drag.lastX + 1 : x) - KEYS_W + scrollX.value)
+        const tick2 = pxToTicks((dx > 0 ? x : drag.lastX - 1) - KEYS_W + scrollX.value)
+        laneEraseRange(tick1, tick2)
+      }
+      const steps = Math.abs(dx)
+      if (steps <= 1) {
+        laneUpsert(pxToTicks(x - KEYS_W + scrollX.value), laneNormToRaw(laneCanvasYToNorm(y, laneYBase, laneH)))
+      } else {
+        const dir = dx > 0 ? 1 : -1
+        for (let sx = drag.lastX + dir; dir > 0 ? sx <= x : sx >= x; sx += dir) {
+          const t = (sx - drag.lastX) / dx
+          const sy = drag.lastY + t * (y - drag.lastY)
+          laneUpsert(pxToTicks(sx - KEYS_W + scrollX.value), laneNormToRaw(laneCanvasYToNorm(sy, laneYBase, laneH)))
+        }
+      }
       drag.lastX = x
+      drag.lastY = y
       markDirty()
     }
   } else if (drag.type === 'lane-box-select') {
