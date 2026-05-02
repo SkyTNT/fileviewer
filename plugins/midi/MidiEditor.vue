@@ -1113,6 +1113,23 @@ function noteAtVelPos(x) {
   return closest
 }
 
+function setVelAtRange(x1, x2, y) {
+  const rect = canvasRef.value?.getBoundingClientRect()
+  if (!rect) return
+  const newVel = Math.max(1, Math.min(127, Math.round((rect.height - y) / (VEL_H - 6) * 127)))
+  const xMin = Math.min(x1, x2) - 4
+  const xMax = Math.max(x1, x2) + 4
+  let changed = false
+  for (const track of trackData.value) {
+    if (soloActive.value ? !track.solo : track.muted) continue
+    for (const n of track.notes) {
+      const nx = KEYS_W + ticksToPx(n.startTick) - scrollX.value
+      if (nx >= xMin && nx <= xMax) { n.velocity = newVel; changed = true }
+    }
+  }
+  if (changed) markDirty()
+}
+
 function findNearestTempoPx(x) {
   for (const tc of tempos.value) {
     const tx = KEYS_W + ticksToPx(tc.tick) - scrollX.value
@@ -1255,11 +1272,8 @@ function onMouseDown(e) {
   if (inVelArea(x, y)) {
     if (laneMode.value === 'velocity') {
       if (e.button === 0) {
-        const hit = noteAtVelPos(x)
-        if (hit) {
-          previewNote(hit.note.channel, hit.note.note, hit.note.velocity)
-          drag = { type: 'velocity', note: hit.note }
-        }
+        drag = { type: 'vel-draw', lastX: x }
+        setVelAtRange(x, x, y)
       }
     } else if (laneMode.value === 'cc') {
       if (e.button === 2) {
@@ -1375,14 +1389,10 @@ function onMouseMove(e) {
   } else if (drag.type === 'erase') {
     const hit = noteAtPos(x, y)
     if (hit) { removeNote(hit.track, hit.note); markDirty() }
-  } else if (drag.type === 'velocity') {
-    const rect = canvasRef.value?.getBoundingClientRect()
-    if (!rect) return
-    const newVel = Math.max(1, Math.min(127, Math.round((rect.height - y) / (VEL_H - 6) * 127)))
-    if (drag.note.velocity !== newVel) {
-      drag.note.velocity = newVel
-      previewNote(drag.note.channel, drag.note.note, newVel, true)
-      markDirty()
+  } else if (drag.type === 'vel-draw') {
+    if (inVelArea(x, y)) {
+      setVelAtRange(drag.lastX, x, y)
+      drag.lastX = x
     }
   } else if (drag.type === 'cc-draw') {
     if (inVelArea(x, y)) drawCcAtPos(x, y)
@@ -1413,7 +1423,7 @@ function onMouseUp() {
 function onMouseLeave() {
   stopPreview()
   stopRulerPreview()
-  const keepTypes = ['move', 'resize', 'ruler', 'cc-draw', 'pc-draw', 'bpm-move']
+  const keepTypes = ['move', 'resize', 'ruler', 'vel-draw', 'cc-draw', 'pc-draw', 'bpm-move']
   if (!keepTypes.includes(drag?.type)) drag = null
 }
 
@@ -1436,6 +1446,16 @@ function onWheel(e) {
     const factor      = e.deltaY < 0 ? 1.15 : 1/1.15
     zoomX.value       = Math.max(0.1, Math.min(16, zoomX.value * factor))
     scrollX.value     = Math.max(0, ticksToPx(tickAtMouse) - (x - KEYS_W))
+  } else if (e.altKey) {
+    e.preventDefault()
+    let target = null
+    if (inVelArea(x, y)) target = noteAtVelPos(x)
+    else if (inNoteArea(x, y)) target = noteAtPos(x, y)
+    if (target) {
+      const delta = e.deltaY < 0 ? 4 : -4
+      target.note.velocity = Math.max(1, Math.min(127, target.note.velocity + delta))
+      markDirty()
+    }
   } else if (e.shiftKey) {
     const maxSX = Math.max(0, ticksToPx(totalTicks.value) + 200 - noteW)
     scrollX.value = Math.max(0, Math.min(maxSX, scrollX.value + e.deltaY * 0.8))
@@ -1450,7 +1470,7 @@ function updateCursor(x, y) {
   if (!canvasRef.value) return
   let cursor = 'default'
   if (inVelArea(x, y)) {
-    if (laneMode.value === 'velocity') cursor = noteAtVelPos(x) ? 'ns-resize' : 'default'
+    if (laneMode.value === 'velocity') cursor = 'crosshair'
     else if (laneMode.value === 'cc') cursor = 'crosshair'
     else if (laneMode.value === 'pc') cursor = findNearestPcPx(x) ? 'grab' : 'crosshair'
     else if (laneMode.value === 'bpm') cursor = findNearestTempoPx(x) ? 'grab' : 'crosshair'
