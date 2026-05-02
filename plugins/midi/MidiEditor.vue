@@ -329,6 +329,10 @@ function quantizeTick(tick) {
   const q = gridTicks()
   return q > 0 ? Math.round(tick / q) * q : tick
 }
+function quantizeTickFloor(tick) {
+  const q = gridTicks()
+  return q > 0 ? Math.floor(tick / q) * q : tick
+}
 function defaultDuration() {
   const q = gridTicks()
   return Math.max(1, q > 0 ? q : Math.round(ppq.value / 4))
@@ -1168,6 +1172,7 @@ function markDirty() {
 }
 
 watch(activeTrack, markDirty)
+watch(quantize, markDirty)
 
 // ── Animation loop ─────────────────────────────────────────────────────────────
 function startAnimation() {
@@ -1432,6 +1437,8 @@ function onMouseDown(e) {
         pushUndo()
         drag = { type: 'vel-draw', lastX: x }
         setVelAtRange(x, x, y)
+        const velHit = noteAtVelPos(x)
+        if (velHit) previewNote(velHit.note.channel, velHit.note.note, velHit.note.velocity)
       }
     } else {
       // ── Unified CC / BPM / PC ───────────────────────────────────────────────
@@ -1519,7 +1526,7 @@ function onMouseDown(e) {
   } else {
     pushUndo()
     deselectAll()
-    const st = quantizeTick(pxToTicks(x - KEYS_W + scrollX.value))
+    const st = quantizeTickFloor(pxToTicks(x - KEYS_W + scrollX.value))
     const n  = yToNote(y - RULER_H + scrollY.value)
     const at = activeTrack.value < trackData.value.length ? activeTrack.value : 0
     const ch = trackData.value[at]?.channel ?? 0
@@ -1702,6 +1709,7 @@ function onWheel(e) {
       if (target) {
         pushUndo()
         target.note.velocity = Math.max(1, Math.min(127, target.note.velocity + delta))
+        previewNote(target.note.channel, target.note.note, target.note.velocity, true)
         markDirty()
       }
     }
