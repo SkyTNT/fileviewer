@@ -63,6 +63,11 @@ const BASE_PPB = 120
 const IS_BLACK = [false,true,false,true,false,false,true,false,true,false,true,false]
 const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
 const TRACK_COLORS = ['#4ade80','#60a5fa','#f87171','#fb923c','#a78bfa','#34d399','#f472b6','#facc15','#22d3ee','#e879f9']
+const OSC_CHANNEL_COLORS = [
+  '#4ade80','#60a5fa','#f87171','#fb923c','#a78bfa','#34d399',
+  '#f472b6','#facc15','#22d3ee','#e879f9','#38bdf8','#a3e635',
+  '#fb7185','#fbbf24','#c084fc','#2dd4bf',
+]
 const QUANTIZE_OPTS = computed(() => [
   { title: t('midi.quantizeOff'), value: null  },
   { title: '1/4',   value: 1     },
@@ -216,6 +221,10 @@ let animFrameId  = null
 let rafDirtyId   = null
 let loudnessDecay = {}
 let seqInitCountdown = 0
+let analysers = null
+
+const showOscilloscope = ref(false)
+const oscCanvasRef = ref(null)
 
 let drag = null
 let uiDrag = null
@@ -1267,6 +1276,7 @@ function startAnimation() {
       }
     }
     draw()
+    drawOscilloscope()
     animFrameId = requestAnimationFrame(loop)
   }
   animFrameId = requestAnimationFrame(loop)
@@ -1274,6 +1284,54 @@ function startAnimation() {
 
 function stopAnimation() {
   if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null }
+}
+
+function drawOscilloscope() {
+  if (!showOscilloscope.value || !analysers) return
+  const canvas = oscCanvasRef.value
+  if (!canvas) return
+  const dpr = window.devicePixelRatio || 1
+  const rect = canvas.getBoundingClientRect()
+  const W = rect.width, H = rect.height
+  if (!W || !H) return
+  if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(H * dpr)) {
+    canvas.width = Math.round(W * dpr)
+    canvas.height = Math.round(H * dpr)
+  }
+  const ctx = canvas.getContext('2d')
+  ctx.save(); ctx.resetTransform(); ctx.scale(dpr, dpr)
+  ctx.clearRect(0, 0, W, H)
+  const GAIN = 2
+  const colW = W / 16
+  const buf = new Float32Array(analysers[0].frequencyBinCount)
+  for (let i = 0; i < 16; i++) {
+    analysers[i].getFloatTimeDomainData(buf)
+    const x0 = i * colW
+    if (i > 0) {
+      ctx.strokeStyle = 'rgba(128,128,128,0.15)'
+      ctx.lineWidth = 1
+      ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x0, H); ctx.stroke()
+    }
+    ctx.strokeStyle = 'rgba(128,128,128,0.08)'
+    ctx.lineWidth = 1
+    ctx.beginPath(); ctx.moveTo(x0, H / 2); ctx.lineTo(x0 + colW, H / 2); ctx.stroke()
+    ctx.strokeStyle = OSC_CHANNEL_COLORS[i]
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    const step = buf.length / colW
+    for (let j = 0; j < colW; j++) {
+      const idx = Math.min(buf.length - 1, Math.floor(j * step))
+      const y = (0.5 - buf[idx] * GAIN * 0.5) * H
+      j === 0 ? ctx.moveTo(x0 + j, y) : ctx.lineTo(x0 + j, y)
+    }
+    ctx.stroke()
+    ctx.globalAlpha = 0.55
+    ctx.fillStyle = OSC_CHANNEL_COLORS[i]
+    ctx.font = 'bold 9px monospace'
+    ctx.fillText('Ch' + (i + 1), x0 + 3, H - 3)
+    ctx.globalAlpha = 1
+  }
+  ctx.restore()
 }
 
 function ensureCursorVisible() {
@@ -2041,6 +2099,13 @@ async function loadSoundFont() {
     synth = new WorkletSynthesizer(audioCtx)
     if (synth.isReady) await synth.isReady
     synth.connect(audioCtx.destination)
+    analysers = Array.from({ length: 16 }, () => {
+      const a = audioCtx.createAnalyser()
+      a.fftSize = 512
+      a.smoothingTimeConstant = 0.5
+      return a
+    })
+    try { synth.connectIndividualOutputs(analysers) } catch {}
     await synth.soundBankManager.addSoundBank(sfBuf, 'default')
 
     sfLoaded.value = true
@@ -2491,6 +2556,7 @@ watch(() => props.file, async (f) => {
 })
 
 watch(isDark, () => nextTick(draw))
+watch(showOscilloscope, () => nextTick(drawOscilloscope))
 </script>
 
 <template>
@@ -2558,6 +2624,9 @@ watch(isDark, () => nextTick(draw))
 
         <div style="flex:1" />
 
+        <v-btn size="small" :color="showOscilloscope ? 'primary' : undefined" variant="tonal"
+          icon="mdi-waveform" :title="t('midi.oscilloscope')" @click="showOscilloscope = !showOscilloscope" />
+
         <v-btn size="small" :color="sfLoaded ? 'success' : 'warning'" variant="tonal"
           rounded="pill" prepend-icon="mdi-music" @click="showSFDialog = true">
           {{ sfLoaded ? t('midi.soundFontLoaded') : t('midi.loadSoundFont') }}
@@ -2568,6 +2637,11 @@ watch(isDark, () => nextTick(draw))
 
         <v-btn size="small" icon="mdi-help-circle-outline" variant="text"
           :title="t('midi.help')" @click="showHelpDialog = true" />
+      </div>
+
+      <!-- ── Oscilloscope panel ─────────────────────────────────────────── -->
+      <div v-if="showOscilloscope" class="osc-panel">
+        <canvas ref="oscCanvasRef" class="osc-canvas" />
       </div>
 
       <!-- ── Body ─────────────────────────────────────────────────────────── -->
@@ -2839,6 +2913,21 @@ watch(isDark, () => nextTick(draw))
   color: rgb(var(--v-theme-primary));
   flex-shrink: 0;
   letter-spacing: 0.04em;
+}
+
+/* ── Oscilloscope panel ─────────────────────────────────────── */
+.osc-panel {
+  height: 72px;
+  flex-shrink: 0;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  overflow: hidden;
+}
+
+.osc-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 /* ── Body ───────────────────────────────────────────────────── */

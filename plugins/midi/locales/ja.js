@@ -29,6 +29,7 @@ export default {
     sfConfigLabel: 'SoundFont の URL またはパス',
     sfConfigPlaceholder: 'https://... または /path/to/soundfont.sf2',
     sfConfigHelp: '無料サウンドフォント: GeneralUser GS または MuseScore_General.sf3 — 上記でパスを指定してください。',
+    oscilloscope: 'オシロスコープ',
     help: 'ヘルプ',
     helpTitle: 'MIDIエディター — ヘルプ',
     helpKeys: 'キーボードショートカット',
