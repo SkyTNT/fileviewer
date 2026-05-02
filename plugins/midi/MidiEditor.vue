@@ -52,7 +52,7 @@ const colors = computed(() => isDark.value ? {
 // ── Constants ─────────────────────────────────────────────────────────────────
 const KEYS_W  = 72
 const RULER_H = 32
-const VEL_H   = 80
+const VEL_H_DEFAULT = 80
 const NOTE_H  = 9
 const BASE_PPB = 120
 
@@ -178,7 +178,11 @@ let rafDirtyId   = null
 let loudnessDecay = {}
 
 let drag = null
+let uiDrag = null
 let noteIdSeq = 0
+
+const trackListWidth    = ref(188)
+const bottomLaneHeight  = ref(VEL_H_DEFAULT)
 
 // ── Clipboard ─────────────────────────────────────────────────────────────────
 let clipboard = { minTick: 0, notes: [] }
@@ -619,6 +623,7 @@ function draw() {
   const primaryRgb = getComputedStyle(canvas).getPropertyValue('--v-theme-primary').trim() || '136,187,255'
   const pianoActive = `rgb(${primaryRgb})`
 
+  const VEL_H  = bottomLaneHeight.value
   const noteW  = W - KEYS_W
   const noteH  = H - RULER_H - VEL_H
   const rh     = rowHeight()
@@ -1104,12 +1109,12 @@ function canvasCoords(e) {
 
 function inNoteArea(x, y) {
   const rect = canvasRef.value?.getBoundingClientRect()
-  return !!rect && x >= KEYS_W && y >= RULER_H && y < rect.height - VEL_H
+  return !!rect && x >= KEYS_W && y >= RULER_H && y < rect.height - bottomLaneHeight.value
 }
 
 function inVelArea(x, y) {
   const rect = canvasRef.value?.getBoundingClientRect()
-  return !!rect && x >= KEYS_W && y >= rect.height - VEL_H && y < rect.height
+  return !!rect && x >= KEYS_W && y >= rect.height - bottomLaneHeight.value && y < rect.height
 }
 
 // Returns all visible {track, note} pairs in top-to-bottom Z order (topmost first).
@@ -1164,7 +1169,7 @@ function noteAtVelPos(x) {
 function setVelAtRange(x1, x2, y) {
   const rect = canvasRef.value?.getBoundingClientRect()
   if (!rect) return
-  const newVel = Math.max(1, Math.min(127, Math.round((rect.height - y) / (VEL_H - 6) * 127)))
+  const newVel = Math.max(1, Math.min(127, Math.round((rect.height - y) / (bottomLaneHeight.value - 6) * 127)))
   const xMin = Math.min(x1, x2) - 4
   const xMax = Math.max(x1, x2) + 4
   let changed = false
@@ -1192,8 +1197,8 @@ function drawCcAtPos(x, y) {
   const track = trackData.value[activeTrack.value]
   if (!track) return
   const tick = quantizeTick(Math.max(0, pxToTicks(x - KEYS_W + scrollX.value)))
-  const laneY = y - (rect.height - VEL_H)
-  const val = laneYToCcVal(laneY, VEL_H)
+  const laneY = y - (rect.height - bottomLaneHeight.value)
+  const val = laneYToCcVal(laneY, bottomLaneHeight.value)
   const idx = track.ccEvents.findIndex(e => e.controller === ccNumber.value && e.tick === tick)
   if (idx >= 0) {
     track.ccEvents[idx].value = val
@@ -1223,8 +1228,8 @@ function drawPcAtPos(x, y) {
   const track = trackData.value[activeTrack.value]
   if (!track) return
   const tick = Math.max(1, quantizeTick(pxToTicks(x - KEYS_W + scrollX.value)))
-  const laneY = y - (rect.height - VEL_H)
-  const prog = laneYToPcProg(laneY, VEL_H)
+  const laneY = y - (rect.height - bottomLaneHeight.value)
+  const prog = laneYToPcProg(laneY, bottomLaneHeight.value)
   const idx = track.pcEvents.findIndex(e => e.tick === tick)
   if (idx >= 0) track.pcEvents[idx].program = prog
   else { track.pcEvents.push({ tick, program: prog }); track.pcEvents.sort((a, b) => a.tick - b.tick) }
@@ -1340,8 +1345,8 @@ function onMouseDown(e) {
     } else if (laneMode.value === 'bpm') {
       const tick = Math.max(0, pxToTicks(x - KEYS_W + scrollX.value))
       const rect = canvasRef.value.getBoundingClientRect()
-      const laneY = y - (rect.height - VEL_H)
-      const bpm = laneYToBpm(laneY, VEL_H)
+      const laneY = y - (rect.height - bottomLaneHeight.value)
+      const bpm = laneYToBpm(laneY, bottomLaneHeight.value)
       if (e.button === 2) {
         const nearest = findNearestTempoPx(x)
         if (nearest && nearest.tick !== 0) {
@@ -1426,6 +1431,7 @@ function onMouseDown(e) {
 }
 
 function onMouseMove(e) {
+  if (uiDrag) return
   const { x, y } = canvasCoords(e)
   if (!drag) { updateCursor(x, y, e); return }
 
@@ -1494,8 +1500,8 @@ function onMouseMove(e) {
   } else if (drag.type === 'bpm-move') {
     const rect = canvasRef.value?.getBoundingClientRect()
     if (!rect) return
-    const laneY = y - (rect.height - VEL_H)
-    const bpm = laneYToBpm(laneY, VEL_H)
+    const laneY = y - (rect.height - bottomLaneHeight.value)
+    const bpm = laneYToBpm(laneY, bottomLaneHeight.value)
     drag.tempo.tempo = Math.round(60000000 / bpm)
     if (drag.tempo.tick !== 0) {
       const tick = Math.max(1, pxToTicks(x - KEYS_W + scrollX.value))
@@ -1531,7 +1537,7 @@ function onWheel(e) {
   const rect = canvasRef.value.getBoundingClientRect()
   const x = e.clientX - rect.left
   const y = e.clientY - rect.top
-  const noteH = rect.height - RULER_H - VEL_H
+  const noteH = rect.height - RULER_H - bottomLaneHeight.value
   const noteW = rect.width  - KEYS_W
 
   if (e.ctrlKey && e.altKey) {
@@ -1703,7 +1709,7 @@ function centerView() {
   const canvas = canvasRef.value
   if (!canvas) return
   const rect = canvas.getBoundingClientRect()
-  const noteH = rect.height - RULER_H - VEL_H
+  const noteH = rect.height - RULER_H - bottomLaneHeight.value
   const allNotes = trackData.value.flatMap(t => t.notes)
   if (allNotes.length) {
     const min = Math.min(...allNotes.map(n => n.note))
@@ -1895,6 +1901,37 @@ function selectAll() {
   markDirty()
 }
 
+// ── UI resize drag (track list width / bottom lane height) ────────────────────
+function onTlResizerMousedown(e) {
+  e.preventDefault()
+  uiDrag = { type: 'tl', startX: e.clientX, startVal: trackListWidth.value }
+  document.addEventListener('mousemove', onUiDragMove)
+  document.addEventListener('mouseup', onUiDragUp)
+}
+
+function onLaneResizerMousedown(e) {
+  e.preventDefault()
+  uiDrag = { type: 'lane', startY: e.clientY, startVal: bottomLaneHeight.value }
+  document.addEventListener('mousemove', onUiDragMove)
+  document.addEventListener('mouseup', onUiDragUp)
+}
+
+function onUiDragMove(e) {
+  if (!uiDrag) return
+  if (uiDrag.type === 'tl') {
+    trackListWidth.value = Math.max(120, Math.min(400, uiDrag.startVal + (e.clientX - uiDrag.startX)))
+  } else {
+    bottomLaneHeight.value = Math.max(40, Math.min(400, uiDrag.startVal - (e.clientY - uiDrag.startY)))
+    markDirty()
+  }
+}
+
+function onUiDragUp() {
+  uiDrag = null
+  document.removeEventListener('mousemove', onUiDragMove)
+  document.removeEventListener('mouseup', onUiDragUp)
+}
+
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 let ro = null
 
@@ -1908,6 +1945,8 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  document.removeEventListener('mousemove', onUiDragMove)
+  document.removeEventListener('mouseup', onUiDragUp)
   eventBus?.off('keyboard:keydown', onKey)
   ro?.disconnect()
   stopPreview()
@@ -2010,7 +2049,7 @@ watch(isDark, () => nextTick(draw))
       <!-- ── Body ─────────────────────────────────────────────────────────── -->
       <div class="editor-body">
         <!-- Track list -->
-        <div class="track-list">
+        <div class="track-list" :style="{ width: trackListWidth + 'px' }">
           <div class="tl-header">
             <span class="text-overline">{{ t('midi.tracks') }}</span>
             <v-chip size="x-small" label class="ml-1" density="comfortable">{{ trackData.length }}</v-chip>
@@ -2065,6 +2104,7 @@ watch(isDark, () => nextTick(draw))
                 @click="track.solo = !track.solo; markDirty()" />
             </div>
           </div>
+          <div class="tl-resizer" @mousedown="onTlResizerMousedown" />
         </div>
 
         <!-- Piano roll + lane overlay -->
@@ -2077,8 +2117,12 @@ watch(isDark, () => nextTick(draw))
             @wheel.prevent="onWheel"
           />
 
+          <!-- Lane resizer handle -->
+          <div class="lane-resizer" :style="{ bottom: bottomLaneHeight + 'px' }"
+            @mousedown="onLaneResizerMousedown" />
+
           <!-- Lane mode controls (sits over the piano-keys column of the bottom lane) -->
-          <div class="lane-overlay" style="pointer-events:none">
+          <div class="lane-overlay" :style="{ height: bottomLaneHeight + 'px' }" style="pointer-events:none">
             <div class="lane-mode-btns" style="pointer-events:auto">
               <button v-ripple class="lane-btn" :class="{active: laneMode==='velocity'}"
                 @click="laneMode='velocity'; markDirty()">{{ t('midi.vel') }}</button>
@@ -2229,7 +2273,6 @@ watch(isDark, () => nextTick(draw))
 
 /* ── Track list ─────────────────────────────────────────────── */
 .track-list {
-  width: 188px;
   flex-shrink: 0;
   background: rgba(var(--v-theme-on-surface), 0.025);
   border-right: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
@@ -2237,7 +2280,19 @@ watch(isDark, () => nextTick(draw))
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
+
+.tl-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 10;
+}
+.tl-resizer:hover { background: rgba(var(--v-theme-primary), 0.35); }
 
 .tl-header {
   display: flex;
@@ -2381,13 +2436,24 @@ watch(isDark, () => nextTick(draw))
   cursor: crosshair;
 }
 
+/* ── Lane resizer ─────────────────────────────────────────────── */
+.lane-resizer {
+  position: absolute;
+  left: 72px;   /* KEYS_W */
+  right: 0;
+  height: 6px;
+  margin-bottom: -3px;
+  cursor: ns-resize;
+  z-index: 10;
+}
+.lane-resizer:hover { background: rgba(var(--v-theme-primary), 0.35); }
+
 /* ── Lane overlay ─────────────────────────────────────────────── */
 .lane-overlay {
   position: absolute;
   bottom: 0;
   left: 0;
   width: 72px;   /* KEYS_W */
-  height: 80px;  /* VEL_H */
   display: flex;
   align-items: center;
   justify-content: center;
