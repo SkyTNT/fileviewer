@@ -195,7 +195,9 @@ const helpLaneRows = computed(() => [
 ])
 
 const quantize   = ref(1/4)
-const activeTrack = ref(0)
+const activeTrack      = ref(0)
+const renameTrackIdx   = ref(-1)
+const renameTrackValue = ref('')
 const zoomX      = ref(1.0)
 const zoomY      = ref(1.0)
 const scrollX    = ref(0)
@@ -2256,6 +2258,52 @@ function changeChannel(track, ch) {
   markDirty()
 }
 
+function addTrack() {
+  pushUndo()
+  const idx = trackData.value.length
+  const usedChs = new Set(trackData.value.map(t => t.channel))
+  let ch = 0
+  for (let i = 0; i < 16; i++) { if (!usedChs.has(i)) { ch = i; break } }
+  trackData.value.push({
+    index: idx,
+    name: t('midi.trackN', { n: idx + 1 }),
+    channel: ch, program: 0,
+    color: TRACK_COLORS[idx % TRACK_COLORS.length],
+    muted: false, solo: false,
+    notes: [], events: [], ccEvents: [], pcEvents: [],
+  })
+  activeTrack.value = idx
+  markDirty()
+}
+
+function deleteTrack(idx) {
+  if (trackData.value.length <= 1) return
+  pushUndo()
+  trackData.value = trackData.value.filter(t => t.index !== idx)
+  trackData.value.forEach((t, i) => { t.index = i })
+  if (activeTrack.value >= trackData.value.length)
+    activeTrack.value = trackData.value.length - 1
+  markDirty()
+}
+
+function startRenameTrack(track) {
+  activeTrack.value = track.index
+  renameTrackIdx.value = track.index
+  renameTrackValue.value = track.name
+}
+
+function commitRenameTrack() {
+  if (renameTrackIdx.value < 0) return
+  const name = renameTrackValue.value.trim()
+  const track = trackData.value[renameTrackIdx.value]
+  if (track && name && track.name !== name) {
+    pushUndo()
+    track.name = name
+    markDirty()
+  }
+  renameTrackIdx.value = -1
+}
+
 function onKey({ key, ctrl, shift, raw }) {
   if (key === ' ') { raw.preventDefault(); togglePlay() }
   if (ctrl && key.toLowerCase() === 'z' && !shift) { raw.preventDefault(); undo(); return }
@@ -2700,7 +2748,17 @@ watch(masterGain, v => {
           >
             <div class="tl-color" :style="{background: track.color}" />
             <div class="tl-info">
-              <div class="tl-name">{{ track.name }}</div>
+              <input
+                v-if="renameTrackIdx === track.index"
+                :ref="el => el && nextTick(() => el.focus())"
+                v-model="renameTrackValue"
+                class="tl-rename-input"
+                @blur="commitRenameTrack"
+                @keydown.enter.prevent="commitRenameTrack"
+                @keydown.escape.prevent="renameTrackIdx = -1"
+                @click.stop
+              />
+              <div v-else class="tl-name" @dblclick.stop="startRenameTrack(track)">{{ track.name }}</div>
               <div class="tl-meter">
                 <div class="tl-meter-bar"
                   :style="{
@@ -2740,6 +2798,17 @@ watch(masterGain, v => {
               <v-btn density="compact" icon="mdi-alpha-s-circle-outline" size="x-small" variant="text"
                 :color="track.solo ? 'warning' : undefined"
                 @click="track.solo = !track.solo; markDirty()" />
+              <v-btn density="compact" icon="mdi-pencil-outline" size="x-small" variant="text"
+                :title="t('midi.renameTrack')" @click="startRenameTrack(track)" />
+              <v-btn density="compact" icon="mdi-close" size="x-small" variant="text"
+                :disabled="trackData.length <= 1"
+                :title="t('midi.deleteTrack')" @click="deleteTrack(track.index)" />
+            </div>
+          </div>
+          <div v-ripple class="tl-row tl-row--add" @click="addTrack">
+            <div class="tl-color tl-color--add" />
+            <div class="tl-add-label">
+              <v-icon size="14" class="mr-1">mdi-plus</v-icon>{{ t('midi.addTrack') }}
             </div>
           </div>
           <div class="tl-resizer" @mousedown="onTlResizerMousedown" />
@@ -3063,6 +3132,22 @@ watch(masterGain, v => {
   gap: 2px;
 }
 
+.tl-row--add {
+  opacity: 0.45;
+  min-height: 32px;
+}
+.tl-row--add:hover { opacity: 0.75; }
+.tl-color--add {
+  border: 1px dashed rgba(var(--v-theme-on-surface), 0.4);
+  background: transparent !important;
+}
+.tl-add-label {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+}
+
 .tl-name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3071,6 +3156,20 @@ watch(masterGain, v => {
   font-weight: 500;
   color: rgba(var(--v-theme-on-surface), 0.87);
   line-height: 1.3;
+  cursor: text;
+}
+
+.tl-rename-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(var(--v-theme-primary), 0.8);
+  outline: none;
+  color: rgba(var(--v-theme-on-surface), 0.87);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  padding: 0 2px;
 }
 
 .tl-meter {
@@ -3089,8 +3188,8 @@ watch(masterGain, v => {
 }
 
 .tl-btns {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: auto auto;
   flex-shrink: 0;
   gap: 2px;
 }
