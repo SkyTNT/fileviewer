@@ -33,6 +33,8 @@ const colors = computed(() => isDark.value ? {
   bpmLine:      '#f472b6', bpmDotFirst:  '#ff88aa',
   bpmDotStroke: '#ffaabb', bpmText:      '#ddaacc',
   pcText:       '#bbccee', pcDotFirst:   '#aaddff',
+  selFill:      '#ffffff', selStroke:    '#ffffaa', selText: '#000000',
+  selLaneDot:   '#ffffff', selLaneText:  '#ffffaa',
 } : {
   bgBlack:      'rgba(0,0,0,0.065)',
   bgDark:       'rgba(0,0,0,0.045)', bgDarker:     'rgba(0,0,0,0.08)',
@@ -47,6 +49,8 @@ const colors = computed(() => isDark.value ? {
   bpmLine:      '#cc44aa', bpmDotFirst:  '#ee66aa',
   bpmDotStroke: '#dd88aa', bpmText:      '#aa3388',
   pcText:       '#445588', pcDotFirst:   '#3366cc',
+  selFill:      '#2563eb', selStroke:    '#1e3a8a', selText: '#ffffff',
+  selLaneDot:   '#2563eb', selLaneText:  '#1e3a8a',
 })
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -926,16 +930,16 @@ function draw() {
       if (nx + nw < KEYS_W || nx > W || ny + nh < RULER_H || ny > RULER_H + noteH) continue
       const isActive = (playing.value || (drag?.type === 'ruler' && drag?.button === 2)) &&
         note.startTick <= currentTick.value && note.endTick > currentTick.value
-      ctx.fillStyle = note.selected ? '#ffffff' : (isActive ? adjustColor(color, 80) : color)
+      ctx.fillStyle = note.selected ? C.selFill : (isActive ? adjustColor(color, 80) : color)
       ctx.globalAlpha = note.selected ? 1 : (isActive ? 1 : 0.88)
       ctx.fillRect(nx, ny + 1, nw, nh - 1)
       ctx.globalAlpha = 1
-      ctx.strokeStyle = note.selected ? '#ffffaa' : (isActive ? '#ffffff' : adjustColor(color, -40))
+      ctx.strokeStyle = note.selected ? C.selStroke : (isActive ? '#ffffff' : adjustColor(color, -40))
       ctx.lineWidth = isActive ? 1.5 : 1
       ctx.strokeRect(nx + 0.5, ny + 1.5, nw - 1, nh - 2)
       ctx.lineWidth = 1
       if (nw > 18 && rh >= 9) {
-        ctx.fillStyle = note.selected ? '#000' : 'rgba(0,0,0,0.75)'
+        ctx.fillStyle = note.selected ? C.selText : 'rgba(0,0,0,0.75)'
         ctx.font = `bold ${Math.min(9, rh - 2)}px sans-serif`
         ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
         ctx.fillText(NOTE_NAMES[note.note % 12], nx + 2, ny + rh / 2)
@@ -1035,7 +1039,7 @@ function draw() {
         const nw = Math.max(2, ticksToPx(note.endTick - note.startTick))
         const bh = Math.max(2, (note.velocity / 127) * (VEL_H - 6))
         const barTop = velY + VEL_H - bh
-        const color = note.selected ? '#ffffff' : track.color
+        const color = note.selected ? C.selFill : track.color
         ctx.fillStyle = color
         ctx.globalAlpha = 0.75
         ctx.fillRect(vx - 1, barTop, 3, bh)
@@ -1089,16 +1093,16 @@ function draw() {
       if (ex < KEYS_W - 12 || ex > W + 12) continue
       const ey = laneNormToCanvasY(laneEvNorm(ev), velY, VEL_H)
       if (ev.selected) {
-        ctx.fillStyle = '#ffffff'
+        ctx.fillStyle = C.selLaneDot
         ctx.beginPath(); ctx.arc(ex, ey, 5, 0, Math.PI * 2); ctx.fill()
-        ctx.strokeStyle = '#ffffaa'; ctx.lineWidth = 1.5; ctx.stroke()
+        ctx.strokeStyle = C.selLaneText; ctx.lineWidth = 1.5; ctx.stroke()
       } else {
         const isBase = ev.tick === 0 && laneMode.value !== 'cc'
         ctx.fillStyle = isBase ? C.bpmDotFirst : laneColor
         ctx.beginPath(); ctx.arc(ex, ey, 3.5, 0, Math.PI * 2); ctx.fill()
       }
       if (ex > KEYS_W + 4) {
-        ctx.fillStyle = ev.selected ? '#ffffaa' : C.textDim
+        ctx.fillStyle = ev.selected ? C.selLaneText : C.textDim
         ctx.font = laneMode.value === 'bpm' ? 'bold 8px monospace' : '8px sans-serif'
         ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
         ctx.fillText(laneEvLabel(ev), ex + 6, ey)
