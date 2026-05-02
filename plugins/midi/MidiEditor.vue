@@ -672,8 +672,12 @@ function draw() {
   })
 
   // ── Notes ───────────────────────────────────────────────────────────────────
-  for (let ti = 0; ti < trackData.value.length; ti++) {
-    const track = trackData.value[ti]
+  // Draw non-active tracks first, active track last so its notes render on top
+  const trackOrder = [
+    ...trackData.value.filter(t => t.index !== activeTrack.value),
+    ...trackData.value.filter(t => t.index === activeTrack.value),
+  ]
+  for (const track of trackOrder) {
     if (soloActive.value ? !track.solo : track.muted) continue
     const color = track.color
     for (const note of track.notes) {
@@ -957,6 +961,8 @@ function markDirty() {
   if (animFrameId || rafDirtyId) return
   rafDirtyId = requestAnimationFrame(() => { rafDirtyId = null; draw() })
 }
+
+watch(activeTrack, markDirty)
 
 // ── Animation loop ─────────────────────────────────────────────────────────────
 function startAnimation() {
