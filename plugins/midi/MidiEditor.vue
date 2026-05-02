@@ -323,6 +323,22 @@ function redo() {
 // ── Computed ──────────────────────────────────────────────────────────────────
 const soloActive = computed(() => trackData.value.some(t => t.solo))
 
+function applySynthMuteState() {
+  if (!synth || !sfLoaded.value) return
+  for (let ch = 0; ch < 16; ch++) {
+    const onCh = trackData.value.filter(t => t.channel === ch)
+    let shouldMute
+    if (onCh.length === 0) {
+      shouldMute = false
+    } else if (soloActive.value) {
+      shouldMute = !onCh.some(t => t.solo)
+    } else {
+      shouldMute = onCh.every(t => t.muted)
+    }
+    try { synth.muteChannel(ch, shouldMute) } catch {}
+  }
+}
+
 const ccItemsSorted = computed(() => {
   const track = trackData.value[activeTrack.value]
   const counts = new Map()
@@ -1246,6 +1262,11 @@ function markDirty() {
 watch(activeTrack, markDirty)
 watch(quantize, markDirty)
 
+const _muteSnapshot = computed(() =>
+  trackData.value.map(t => `${t.channel}:${t.muted ? 1 : 0}:${t.solo ? 1 : 0}`).join(',')
+)
+watch(_muteSnapshot, applySynthMuteState)
+
 // ── Animation loop ─────────────────────────────────────────────────────────────
 function startAnimation() {
   if (animFrameId) return
@@ -1349,7 +1370,7 @@ function updateTrackLoudness() {
   const result = {}
   for (const track of trackData.value) {
     const idx = track.index
-    if (track.muted) { loudnessDecay[idx] = 0; result[idx] = 0; continue }
+    if (soloActive.value ? !track.solo : track.muted) { loudnessDecay[idx] = 0; result[idx] = 0; continue }
     let maxVel = 0
     for (const note of track.notes) {
       if (note.startTick <= tick && note.endTick > tick && note.velocity > maxVel) {
@@ -2138,6 +2159,7 @@ async function startPlayback() {
       if (startSec > 0) seq.currentTime = startSec
       seq.loopCount = 0
       seq.play()
+      applySynthMuteState()
       playing.value = true
       seqInitCountdown = 5
       startAnimation()
@@ -2697,7 +2719,7 @@ watch(showOscilloscope, () => nextTick(drawOscilloscope))
                 size="x-small" variant="text"
                 :color="track.muted ? 'error' : undefined"
                 @click="track.muted = !track.muted; markDirty()" />
-              <v-btn density="compact" icon="mdi-star" size="x-small" variant="text"
+              <v-btn density="compact" icon="mdi-alpha-s-circle-outline" size="x-small" variant="text"
                 :color="track.solo ? 'warning' : undefined"
                 @click="track.solo = !track.solo; markDirty()" />
             </div>
