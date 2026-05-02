@@ -197,6 +197,32 @@ const undoVersion = ref(0)
 const canUndo = computed(() => { undoVersion.value; return _undoStack.length > 0 })
 const canRedo = computed(() => { undoVersion.value; return _redoStack.length > 0 })
 
+// ── Scrollbar ─────────────────────────────────────────────────────────────────
+const MIN_THUMB = 24   // minimum thumb size px
+const rollSize  = ref({ w: 0, h: 0 })
+
+const hThumbStyle = computed(() => {
+  const trackW = Math.max(1, rollSize.value.w - KEYS_W)
+  const viewPx = trackW
+  const totalPx = Math.max(viewPx + 1, ticksToPx(totalTicks.value))
+  const ratio = viewPx / totalPx
+  const barW = Math.max(MIN_THUMB, ratio * trackW)
+  const maxSX = totalPx - viewPx
+  const barL = maxSX > 0 ? (scrollX.value / maxSX) * (trackW - barW) : 0
+  return { left: Math.max(0, Math.min(trackW - barW, barL)) + 'px', width: barW + 'px' }
+})
+
+const vThumbStyle = computed(() => {
+  const trackH = Math.max(1, rollSize.value.h - RULER_H - bottomLaneHeight.value)
+  const viewPx = trackH
+  const totalPx = Math.max(viewPx + 1, 128 * NOTE_H * zoomY.value)
+  const ratio = viewPx / totalPx
+  const barH = Math.max(MIN_THUMB, ratio * trackH)
+  const maxSY = totalPx - viewPx
+  const barT = maxSY > 0 ? (scrollY.value / maxSY) * (trackH - barH) : 0
+  return { top: Math.max(0, Math.min(trackH - barH, barT)) + 'px', height: barH + 'px' }
+})
+
 function snapshotState() {
   return {
     trackData: trackData.value.map(t => ({
@@ -1133,6 +1159,10 @@ function adjustColor(hex, amount) {
 }
 
 function markDirty() {
+  if (rollRef.value) {
+    const { clientWidth: w, clientHeight: h } = rollRef.value
+    if (rollSize.value.w !== w || rollSize.value.h !== h) rollSize.value = { w, h }
+  }
   if (animFrameId || rafDirtyId) return
   rafDirtyId = requestAnimationFrame(() => { rafDirtyId = null; draw() })
 }
@@ -1644,7 +1674,7 @@ function onWheel(e) {
   const noteH = rect.height - RULER_H - bottomLaneHeight.value
   const noteW = rect.width  - KEYS_W
 
-  if (e.ctrlKey && e.altKey) {
+  if (e.ctrlKey && e.shiftKey) {
     // Y zoom anchored to mouse Y
     const contentY = y - RULER_H + scrollY.value
     const factor   = e.deltaY < 0 ? 1.15 : 1/1.15
@@ -2124,13 +2154,145 @@ function onLaneResizerMousedown(e) {
   document.addEventListener('mouseup', onUiDragUp)
 }
 
+function _sbHState() {
+  const trackW  = Math.max(1, rollSize.value.w - KEYS_W)
+  const viewPx  = trackW
+  const totalPx = Math.max(viewPx + 1, ticksToPx(totalTicks.value))
+  const ratio   = viewPx / totalPx
+  const barW    = Math.max(MIN_THUMB, ratio * trackW)
+  const maxSX   = totalPx - viewPx
+  const barL    = maxSX > 0 ? (scrollX.value / maxSX) * (trackW - barW) : 0
+  return { trackW, viewPx, totalPx, ratio, barW, maxSX, barL }
+}
+
+function _sbVState() {
+  const trackH  = Math.max(1, rollSize.value.h - RULER_H - bottomLaneHeight.value)
+  const viewPx  = trackH
+  const totalPx = Math.max(viewPx + 1, 128 * NOTE_H * zoomY.value)
+  const ratio   = viewPx / totalPx
+  const barH    = Math.max(MIN_THUMB, ratio * trackH)
+  const maxSY   = totalPx - viewPx
+  const barT    = maxSY > 0 ? (scrollY.value / maxSY) * (trackH - barH) : 0
+  return { trackH, viewPx, totalPx, ratio, barH, maxSY, barT }
+}
+
+function _sbStart(e) {
+  e.preventDefault()
+  document.addEventListener('mousemove', onUiDragMove)
+  document.addEventListener('mouseup', onUiDragUp)
+}
+
+function onSbHPanMousedown(e) {
+  const s = _sbHState()
+  uiDrag = { type: 'sb-h-pan', startX: e.clientX, startScrollX: scrollX.value, ...s }
+  _sbStart(e)
+}
+function onSbHLeftMousedown(e) {
+  const s = _sbHState()
+  uiDrag = {
+    type: 'sb-h-left', startX: e.clientX,
+    initBarLeft: s.barL, barRight: s.barL + s.barW,
+    rightTick: pxToTicks(scrollX.value + s.viewPx),
+    trackW: s.trackW, viewPx: s.viewPx,
+  }
+  _sbStart(e)
+}
+function onSbHRightMousedown(e) {
+  const s = _sbHState()
+  uiDrag = {
+    type: 'sb-h-right', startX: e.clientX,
+    initBarRight: s.barL + s.barW, barLeft: s.barL,
+    leftTick: pxToTicks(scrollX.value),
+    trackW: s.trackW, viewPx: s.viewPx,
+  }
+  _sbStart(e)
+}
+function onSbVPanMousedown(e) {
+  const s = _sbVState()
+  uiDrag = { type: 'sb-v-pan', startY: e.clientY, startScrollY: scrollY.value, ...s }
+  _sbStart(e)
+}
+function onSbVTopMousedown(e) {
+  const s = _sbVState()
+  uiDrag = {
+    type: 'sb-v-top', startY: e.clientY,
+    initBarTop: s.barT, barBottom: s.barT + s.barH,
+    bottomNotePos: (scrollY.value + s.viewPx) / (NOTE_H * zoomY.value),
+    trackH: s.trackH, viewPx: s.viewPx,
+  }
+  _sbStart(e)
+}
+function onSbVBottomMousedown(e) {
+  const s = _sbVState()
+  uiDrag = {
+    type: 'sb-v-bottom', startY: e.clientY,
+    initBarBottom: s.barT + s.barH, barTop: s.barT,
+    topNotePos: scrollY.value / (NOTE_H * zoomY.value),
+    trackH: s.trackH, viewPx: s.viewPx,
+  }
+  _sbStart(e)
+}
+
 function onUiDragMove(e) {
   if (!uiDrag) return
-  if (uiDrag.type === 'tl') {
-    trackListWidth.value = Math.max(120, Math.min(400, uiDrag.startVal + (e.clientX - uiDrag.startX)))
-  } else {
-    bottomLaneHeight.value = Math.max(40, Math.min(400, uiDrag.startVal - (e.clientY - uiDrag.startY)))
+  const d = uiDrag
+  if (d.type === 'tl') {
+    trackListWidth.value = Math.max(120, Math.min(400, d.startVal + (e.clientX - d.startX)))
+  } else if (d.type === 'lane') {
+    bottomLaneHeight.value = Math.max(40, Math.min(400, d.startVal - (e.clientY - d.startY)))
     markDirty()
+  } else if (d.type === 'sb-h-pan') {
+    const dt = (e.clientX - d.startX) / d.trackW * d.totalPx
+    scrollX.value = Math.max(0, Math.min(d.maxSX, d.startScrollX + dt))
+    markDirty()
+  } else if (d.type === 'sb-h-left') {
+    const dx = e.clientX - d.startX
+    const newL = Math.max(0, Math.min(d.barRight - MIN_THUMB, d.initBarLeft + dx))
+    const newW = d.barRight - newL
+    const newRatio = newW / d.trackW
+    if (newRatio > 0.001) {
+      const newTotalPx = d.viewPx / newRatio
+      zoomX.value = Math.max(0.1, Math.min(16, newTotalPx * ppq.value / (totalTicks.value * BASE_PPB)))
+      scrollX.value = Math.max(0, d.rightTick * zoomX.value * BASE_PPB / ppq.value - d.viewPx)
+      markDirty()
+    }
+  } else if (d.type === 'sb-h-right') {
+    const dx = e.clientX - d.startX
+    const newR = Math.max(d.barLeft + MIN_THUMB, Math.min(d.trackW, d.initBarRight + dx))
+    const newW = newR - d.barLeft
+    const newRatio = newW / d.trackW
+    if (newRatio > 0.001) {
+      const newTotalPx = d.viewPx / newRatio
+      zoomX.value = Math.max(0.1, Math.min(16, newTotalPx * ppq.value / (totalTicks.value * BASE_PPB)))
+      scrollX.value = Math.max(0, d.leftTick * zoomX.value * BASE_PPB / ppq.value)
+      markDirty()
+    }
+  } else if (d.type === 'sb-v-pan') {
+    const dt = (e.clientY - d.startY) / d.trackH * d.totalPx
+    scrollY.value = Math.max(0, Math.min(d.maxSY, d.startScrollY + dt))
+    markDirty()
+  } else if (d.type === 'sb-v-top') {
+    const dy = e.clientY - d.startY
+    const newT = Math.max(0, Math.min(d.barBottom - MIN_THUMB, d.initBarTop + dy))
+    const newH = d.barBottom - newT
+    const newRatio = newH / d.trackH
+    if (newRatio > 0.001) {
+      const newTotalPx = d.viewPx / newRatio
+      zoomY.value = Math.max(0.3, Math.min(4, newTotalPx / (128 * NOTE_H)))
+      scrollY.value = Math.max(0, d.bottomNotePos * NOTE_H * zoomY.value - d.viewPx)
+      markDirty()
+    }
+  } else if (d.type === 'sb-v-bottom') {
+    const dy = e.clientY - d.startY
+    const newB = Math.max(d.barTop + MIN_THUMB, Math.min(d.trackH, d.initBarBottom + dy))
+    const newH = newB - d.barTop
+    const newRatio = newH / d.trackH
+    if (newRatio > 0.001) {
+      const newTotalPx = d.viewPx / newRatio
+      zoomY.value = Math.max(0.3, Math.min(4, newTotalPx / (128 * NOTE_H)))
+      scrollY.value = Math.max(0, d.topNotePos * NOTE_H * zoomY.value)
+      markDirty()
+    }
   }
 }
 
@@ -2236,18 +2398,6 @@ watch(isDark, () => nextTick(draw))
           </template>
         </v-select>
 
-        <div class="zoom-group">
-          <v-btn size="small" icon density="compact" variant="text"
-            @click="zoomX = Math.max(0.1, +(zoomX-0.25).toFixed(2))">
-            <v-icon size="16">mdi-magnify-minus-outline</v-icon>
-          </v-btn>
-          <span class="zoom-label">{{ Math.round(zoomX * 100) }}%</span>
-          <v-btn size="small" icon density="compact" variant="text"
-            @click="zoomX = Math.min(16, +(zoomX+0.25).toFixed(2))">
-            <v-icon size="16">mdi-magnify-plus-outline</v-icon>
-          </v-btn>
-        </div>
-
         <div style="flex:1" />
 
         <v-btn size="small" :color="sfLoaded ? 'success' : 'warning'" variant="tonal"
@@ -2320,62 +2470,93 @@ watch(isDark, () => nextTick(draw))
           <div class="tl-resizer" @mousedown="onTlResizerMousedown" />
         </div>
 
-        <!-- Piano roll + lane overlay -->
-        <div class="piano-roll" ref="rollRef" @contextmenu.prevent>
-          <canvas ref="canvasRef" class="roll-canvas"
-            @mousedown="onMouseDown"
-            @mousemove="onMouseMove"
-            @mouseup="onMouseUp"
-            @mouseleave="onMouseLeave"
-            @wheel.prevent="onWheel"
-          />
-
-          <!-- Lane resizer handle -->
-          <div class="lane-resizer" :style="{ bottom: bottomLaneHeight + 'px' }"
-            @mousedown="onLaneResizerMousedown" />
-
-          <!-- Lane mode controls (sits over the piano-keys column of the bottom lane) -->
-          <div class="lane-overlay" :style="{ height: bottomLaneHeight + 'px' }" style="pointer-events:none">
-            <div class="lane-mode-btns" style="pointer-events:auto">
-              <button v-ripple class="lane-btn" :class="{active: laneMode==='velocity'}"
-                @click="laneMode='velocity'; markDirty()">{{ t('midi.vel') }}</button>
-              <button v-ripple class="lane-btn" :class="{active: laneMode==='cc'}"
-                @click="laneMode='cc'; markDirty()">{{ t('midi.cc') }}</button>
-              <button v-ripple class="lane-btn" :class="{active: laneMode==='bpm'}"
-                @click="laneMode='bpm'; markDirty()">{{ t('midi.bpm') }}</button>
-              <button v-ripple class="lane-btn" :class="{active: laneMode==='pc'}"
-                @click="laneMode='pc'; markDirty()">{{ t('midi.pc') }}</button>
+        <!-- Piano roll + scrollbars -->
+        <div class="piano-roll-outer">
+          <!-- Horizontal scrollbar (top) -->
+          <div class="pr-sb-h">
+            <div class="pr-sb-spacer-h" :style="{width: KEYS_W + 'px'}" />
+            <div class="pr-sb-h-track">
+              <div class="pr-sb-thumb pr-sb-thumb-h" :style="hThumbStyle"
+                   @mousedown.stop="onSbHPanMousedown">
+                <div class="pr-sb-handle pr-sb-h-handle-l" @mousedown.stop="onSbHLeftMousedown" />
+                <div class="pr-sb-handle pr-sb-h-handle-r" @mousedown.stop="onSbHRightMousedown" />
+              </div>
             </div>
+            <div class="pr-sb-corner" />
           </div>
 
-          <!-- TS dialog overlay (click-away to close) -->
-          <div v-if="tsDialog" class="ts-overlay" @mousedown="tsDialog = null" />
+          <!-- Main area (canvas + vertical scrollbar) -->
+          <div class="pr-main">
+            <div class="piano-roll" ref="rollRef" @contextmenu.prevent>
+              <canvas ref="canvasRef" class="roll-canvas"
+                @mousedown="onMouseDown"
+                @mousemove="onMouseMove"
+                @mouseup="onMouseUp"
+                @mouseleave="onMouseLeave"
+                @wheel.prevent="onWheel"
+              />
 
-          <!-- TS popup -->
-          <v-card v-if="tsDialog" class="ts-popup" rounded="lg" elevation="3"
-               :style="{ left: tsDialog.x + 'px', top: tsDialog.y + 'px' }"
-               @mousedown.stop>
-            <div class="ts-popup-title">
-              {{ tsDialog.isNew ? t('midi.timeSig.add') : t('midi.timeSig.edit') }}
+              <!-- Lane resizer handle -->
+              <div class="lane-resizer" :style="{ bottom: bottomLaneHeight + 'px' }"
+                @mousedown="onLaneResizerMousedown" />
+
+              <!-- Lane mode controls (sits over the piano-keys column of the bottom lane) -->
+              <div class="lane-overlay" :style="{ height: bottomLaneHeight + 'px' }" style="pointer-events:none">
+                <div class="lane-mode-btns" style="pointer-events:auto">
+                  <button v-ripple class="lane-btn" :class="{active: laneMode==='velocity'}"
+                    @click="laneMode='velocity'; markDirty()">{{ t('midi.vel') }}</button>
+                  <button v-ripple class="lane-btn" :class="{active: laneMode==='cc'}"
+                    @click="laneMode='cc'; markDirty()">{{ t('midi.cc') }}</button>
+                  <button v-ripple class="lane-btn" :class="{active: laneMode==='bpm'}"
+                    @click="laneMode='bpm'; markDirty()">{{ t('midi.bpm') }}</button>
+                  <button v-ripple class="lane-btn" :class="{active: laneMode==='pc'}"
+                    @click="laneMode='pc'; markDirty()">{{ t('midi.pc') }}</button>
+                </div>
+              </div>
+
+              <!-- TS dialog overlay (click-away to close) -->
+              <div v-if="tsDialog" class="ts-overlay" @mousedown="tsDialog = null" />
+
+              <!-- TS popup -->
+              <v-card v-if="tsDialog" class="ts-popup" rounded="lg" elevation="3"
+                   :style="{ left: tsDialog.x + 'px', top: tsDialog.y + 'px' }"
+                   @mousedown.stop>
+                <div class="ts-popup-title">
+                  {{ tsDialog.isNew ? t('midi.timeSig.add') : t('midi.timeSig.edit') }}
+                </div>
+                <div class="ts-popup-row">
+                  <input ref="tsNumInputRef" class="ts-input" type="number" min="1" max="32"
+                         v-model.number="tsEditNum"
+                         @keydown.enter="commitTsDialog" @keydown.escape="tsDialog = null" />
+                  <span class="ts-sep">/</span>
+                  <select class="ts-input ts-den" v-model.number="tsEditDen"
+                          @keydown.enter="commitTsDialog" @keydown.escape="tsDialog = null">
+                    <option v-for="d in [1,2,4,8,16,32]" :key="d" :value="d">{{ d }}</option>
+                  </select>
+                </div>
+                <div class="ts-popup-actions">
+                  <v-btn size="small" variant="tonal" color="primary" @click="commitTsDialog">{{ t('midi.ok') }}</v-btn>
+                  <v-btn size="small" variant="text" @click="tsDialog = null">{{ t('midi.cancel') }}</v-btn>
+                  <v-spacer />
+                  <v-btn v-if="tsDialog.tick !== 0" size="small" variant="text" color="error"
+                    @click="deleteTsDialog">{{ t('midi.delete') }}</v-btn>
+                </div>
+              </v-card>
             </div>
-            <div class="ts-popup-row">
-              <input ref="tsNumInputRef" class="ts-input" type="number" min="1" max="32"
-                     v-model.number="tsEditNum"
-                     @keydown.enter="commitTsDialog" @keydown.escape="tsDialog = null" />
-              <span class="ts-sep">/</span>
-              <select class="ts-input ts-den" v-model.number="tsEditDen"
-                      @keydown.enter="commitTsDialog" @keydown.escape="tsDialog = null">
-                <option v-for="d in [1,2,4,8,16,32]" :key="d" :value="d">{{ d }}</option>
-              </select>
+
+            <!-- Vertical scrollbar (right) -->
+            <div class="pr-sb-v">
+              <div class="pr-sb-spacer-v" :style="{height: RULER_H + 'px'}" />
+              <div class="pr-sb-v-track">
+                <div class="pr-sb-thumb pr-sb-thumb-v" :style="vThumbStyle"
+                     @mousedown.stop="onSbVPanMousedown">
+                  <div class="pr-sb-handle pr-sb-v-handle-t" @mousedown.stop="onSbVTopMousedown" />
+                  <div class="pr-sb-handle pr-sb-v-handle-b" @mousedown.stop="onSbVBottomMousedown" />
+                </div>
+              </div>
+              <div class="pr-sb-spacer-v" :style="{height: bottomLaneHeight + 'px'}" />
             </div>
-            <div class="ts-popup-actions">
-              <v-btn size="small" variant="tonal" color="primary" @click="commitTsDialog">{{ t('midi.ok') }}</v-btn>
-              <v-btn size="small" variant="text" @click="tsDialog = null">{{ t('midi.cancel') }}</v-btn>
-              <v-spacer />
-              <v-btn v-if="tsDialog.tick !== 0" size="small" variant="text" color="error"
-                @click="deleteTsDialog">{{ t('midi.delete') }}</v-btn>
-            </div>
-          </v-card>
+          </div>
         </div>
       </div>
     </template>
@@ -2457,24 +2638,6 @@ watch(isDark, () => nextTick(draw))
   color: rgb(var(--v-theme-primary));
   flex-shrink: 0;
   letter-spacing: 0.04em;
-}
-
-.zoom-group {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  background: rgba(var(--v-theme-on-surface), 0.05);
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 20px;
-  padding: 0 2px;
-}
-
-.zoom-label {
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  min-width: 36px;
-  text-align: center;
-  opacity: 0.65;
 }
 
 /* ── Body ───────────────────────────────────────────────────── */
@@ -2634,6 +2797,102 @@ watch(isDark, () => nextTick(draw))
   --v-field-padding-top: 0;
   --v-field-padding-bottom: 0;
 }
+
+/* ── Piano roll outer + scrollbars ──────────────────────────── */
+.piano-roll-outer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pr-main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.pr-sb-h {
+  display: flex;
+  align-items: center;
+  height: 14px;
+  flex-shrink: 0;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.pr-sb-spacer-h {
+  flex-shrink: 0;
+  height: 100%;
+  border-right: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.pr-sb-corner {
+  width: 14px;
+  flex-shrink: 0;
+  height: 100%;
+  border-left: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.pr-sb-h-track {
+  flex: 1;
+  position: relative;
+  height: 8px;
+  margin: 0 2px;
+}
+
+.pr-sb-v {
+  display: flex;
+  flex-direction: column;
+  width: 14px;
+  flex-shrink: 0;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  border-left: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.pr-sb-spacer-v {
+  flex-shrink: 0;
+}
+
+.pr-sb-v-track {
+  flex: 1;
+  position: relative;
+  width: 8px;
+  margin: 2px auto;
+}
+
+.pr-sb-thumb {
+  position: absolute;
+  background: rgba(var(--v-theme-on-surface), 0.22);
+  border-radius: 4px;
+  transition: background 0.12s;
+}
+.pr-sb-thumb:hover { background: rgba(var(--v-theme-on-surface), 0.38); cursor: grab; }
+.pr-sb-thumb:active { cursor: grabbing; }
+
+.pr-sb-thumb-h {
+  top: 0; bottom: 0;
+  /* left + width set via :style */
+}
+
+.pr-sb-thumb-v {
+  left: 0; right: 0;
+  /* top + height set via :style */
+}
+
+.pr-sb-handle {
+  position: absolute;
+  background: transparent;
+  border-radius: inherit;
+  transition: background 0.12s;
+  z-index: 1;
+}
+.pr-sb-handle:hover { background: rgba(var(--v-theme-primary), 0.45); }
+
+.pr-sb-h-handle-l { top: 0; bottom: 0; left: 0; width: 5px; border-radius: 4px 0 0 4px; cursor: ew-resize; }
+.pr-sb-h-handle-r { top: 0; bottom: 0; right: 0; width: 5px; border-radius: 0 4px 4px 0; cursor: ew-resize; }
+.pr-sb-v-handle-t { left: 0; right: 0; top: 0; height: 5px; border-radius: 4px 4px 0 0; cursor: ns-resize; }
+.pr-sb-v-handle-b { left: 0; right: 0; bottom: 0; height: 5px; border-radius: 0 0 4px 4px; cursor: ns-resize; }
 
 /* ── Piano roll ─────────────────────────────────────────────── */
 .piano-roll {
