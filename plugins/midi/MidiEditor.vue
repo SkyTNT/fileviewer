@@ -151,7 +151,40 @@ const sfLoading  = ref(false)
 const sfError    = ref(null)
 const DEFAULT_SF_URL = '/api/midi/soundfont/default'
 const sfUrlInput = ref(localStorage.getItem('fv-midi-soundfont') || DEFAULT_SF_URL)
-const showSFDialog = ref(false)
+const showSFDialog   = ref(false)
+const showHelpDialog = ref(false)
+
+const helpKeyRows = computed(() => [
+  { key: 'Space',                desc: t('midi.kPlay') },
+  { key: 'Ctrl+Z',               desc: t('midi.kUndo') },
+  { key: 'Ctrl+Y / Ctrl+Shift+Z', desc: t('midi.kRedo') },
+  { key: 'Ctrl+A',               desc: t('midi.kSelAll') },
+  { key: 'Ctrl+C / Ctrl+V',      desc: t('midi.kCopyPaste') },
+  { key: 'Delete / Backspace',   desc: t('midi.kDelete') },
+  { key: 'Escape',               desc: t('midi.kEscape') },
+  { key: 'Shift+↑ / Shift+↓',   desc: t('midi.kSemitone') },
+  { key: 'Ctrl+↑ / Ctrl+↓',     desc: t('midi.kOctave') },
+])
+
+const helpMouseRows = computed(() => [
+  { key: t('midi.mLeftDrag'),     desc: t('midi.mLeftDragDesc') },
+  { key: t('midi.mRight'),        desc: t('midi.mRightDesc') },
+  { key: t('midi.mAltRight'),     desc: t('midi.mAltRightDesc') },
+  { key: t('midi.mCtrlDrag'),     desc: t('midi.mCtrlDragDesc') },
+  { key: t('midi.mWheel'),        desc: t('midi.mWheelDesc') },
+  { key: t('midi.mShiftWheel'),   desc: t('midi.mShiftWheelDesc') },
+  { key: t('midi.mCtrlWheel'),    desc: t('midi.mCtrlWheelDesc') },
+  { key: t('midi.mCtrlAltWheel'), desc: t('midi.mCtrlAltWheelDesc') },
+  { key: t('midi.mRulerLeft'),    desc: t('midi.mRulerLeftDesc') },
+  { key: t('midi.mRulerRight'),   desc: t('midi.mRulerRightDesc') },
+])
+
+const helpLaneRows = computed(() => [
+  { mode: 'VEL', desc: t('midi.lVel') },
+  { mode: 'CC',  desc: t('midi.lCc') },
+  { mode: 'BPM', desc: t('midi.lBpm') },
+  { mode: 'PC',  desc: t('midi.lPc') },
+])
 
 const quantize   = ref(1/4)
 const activeTrack = ref(0)
@@ -1424,7 +1457,7 @@ function onMouseDown(e) {
 
   if (y < RULER_H && x >= KEYS_W) {
     const tick = Math.max(0, pxToTicks(x - KEYS_W + scrollX.value))
-    if (e.button === 2 && !e.ctrlKey) {
+    if (e.button === 2 && !e.altKey) {
       openTsDialog(x, tickToBarStart(tick))
       return
     }
@@ -1433,7 +1466,7 @@ function onMouseDown(e) {
     if (e.button === 0) {
       if (seq) seq.currentTime = ticksToSeconds(tick)
       drag = { type: 'ruler', button: 0 }
-    } else if (e.button === 2 && e.ctrlKey) {
+    } else if (e.button === 2 && e.altKey) {
       playChordAtTick(tick)
       drag = { type: 'ruler', button: 2 }
     }
@@ -1441,6 +1474,14 @@ function onMouseDown(e) {
   }
 
   if (inVelArea(x, y)) {
+    if (e.button === 2 && e.altKey) {
+      const tick = Math.max(0, pxToTicks(x - KEYS_W + scrollX.value))
+      currentTick.value = tick
+      playChordAtTick(tick)
+      drag = { type: 'ruler', button: 2 }
+      markDirty()
+      return
+    }
     if (laneMode.value === 'velocity') {
       if (e.button === 0) {
         pushUndo()
@@ -1485,6 +1526,15 @@ function onMouseDown(e) {
   }
 
   if (!inNoteArea(x, y)) return
+
+  if (e.button === 2 && e.altKey) {
+    const tick = Math.max(0, pxToTicks(x - KEYS_W + scrollX.value))
+    currentTick.value = tick
+    playChordAtTick(tick)
+    drag = { type: 'ruler', button: 2 }
+    markDirty()
+    return
+  }
 
   if (e.button === 2) {
     pushUndo()
@@ -2440,6 +2490,9 @@ watch(isDark, () => nextTick(draw))
 
         <v-btn size="small" color="primary" variant="tonal" rounded="pill"
           prepend-icon="mdi-content-save" :loading="saving" @click="saveMidi">{{ t('midi.save') }}</v-btn>
+
+        <v-btn size="small" icon="mdi-help-circle-outline" variant="text"
+          :title="t('midi.help')" @click="showHelpDialog = true" />
       </div>
 
       <!-- ── Body ─────────────────────────────────────────────────────────── -->
@@ -2594,6 +2647,47 @@ watch(isDark, () => nextTick(draw))
       </div>
     </template>
 
+    <!-- Help dialog -->
+    <v-dialog v-model="showHelpDialog" max-width="680" scrollable>
+      <v-card rounded="xl">
+        <v-card-title class="text-subtitle-1 pt-5 px-6">{{ t('midi.helpTitle') }}</v-card-title>
+        <v-card-text class="px-6 pb-4">
+          <div class="help-grid">
+            <div>
+              <div class="text-overline mb-2">{{ t('midi.helpKeys') }}</div>
+              <table class="help-table">
+                <tr v-for="row in helpKeyRows" :key="row.key">
+                  <td class="help-kbd"><kbd>{{ row.key }}</kbd></td>
+                  <td class="help-desc">{{ row.desc }}</td>
+                </tr>
+              </table>
+            </div>
+            <div>
+              <div class="text-overline mb-2">{{ t('midi.helpMouseNav') }}</div>
+              <table class="help-table">
+                <tr v-for="row in helpMouseRows" :key="row.key">
+                  <td class="help-kbd help-kbd--plain">{{ row.key }}</td>
+                  <td class="help-desc">{{ row.desc }}</td>
+                </tr>
+              </table>
+            </div>
+          </div>
+
+          <div class="text-overline mt-5 mb-2">{{ t('midi.helpLanes') }}</div>
+          <div class="help-lanes">
+            <div v-for="row in helpLaneRows" :key="row.mode" class="help-lane-row">
+              <span class="help-lane-badge">{{ row.mode }}</span>
+              <span class="help-lane-text">{{ row.desc }}</span>
+            </div>
+          </div>
+        </v-card-text>
+        <v-card-actions class="px-6 pb-5">
+          <v-spacer />
+          <v-btn color="primary" variant="tonal" rounded="pill" @click="showHelpDialog = false">{{ t('midi.ok') }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- SoundFont dialog -->
     <v-dialog v-model="showSFDialog" max-width="480">
       <v-card rounded="xl">
@@ -2610,8 +2704,7 @@ watch(isDark, () => nextTick(draw))
           />
           <div v-if="sfError" class="text-error text-body-2 mt-2">{{ sfError }}</div>
           <v-alert type="info" variant="tonal" density="compact" rounded="lg" class="mt-4 text-caption">
-            {{ t('midi.sfConfigHelp') }}<br>
-            {{ t('midi.sfConfigShortcuts') }}
+            {{ t('midi.sfConfigHelp') }}
           </v-alert>
         </v-card-text>
         <v-card-actions class="px-6 pb-5">
@@ -3083,5 +3176,82 @@ watch(isDark, () => nextTick(draw))
   display: flex;
   gap: 4px;
   align-items: center;
+}
+
+/* ── Help dialog ─────────────────────────────────────────────── */
+.help-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.help-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.help-table tr + tr {
+  border-top: 1px solid rgba(var(--v-border-color), 0.35);
+}
+
+.help-kbd {
+  padding: 5px 10px 5px 0;
+  white-space: nowrap;
+  vertical-align: top;
+}
+
+.help-kbd kbd {
+  display: inline-block;
+  font-family: monospace;
+  font-size: 11px;
+  background: rgba(var(--v-theme-on-surface), 0.07);
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 5px;
+  padding: 2px 6px;
+  color: rgb(var(--v-theme-primary));
+}
+
+.help-kbd--plain {
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  font-weight: 500;
+}
+
+.help-desc {
+  padding: 5px 0;
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.75);
+  vertical-align: top;
+}
+
+.help-lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.help-lane-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.help-lane-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.1);
+  border: 1px solid rgba(var(--v-theme-primary), 0.25);
+  border-radius: 6px;
+  padding: 2px 7px;
+  min-width: 36px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.help-lane-text {
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.75);
 }
 </style>
