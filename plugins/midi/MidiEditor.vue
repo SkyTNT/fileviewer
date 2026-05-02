@@ -1301,16 +1301,33 @@ let rulerChordNotes = []
 function playChordAtTick(tick) {
   if (!synth || !sfLoaded.value || playing.value) return
   const next = []
+  const chanProgram = new Map()
+  const chanCC = new Map()
   for (const track of trackData.value) {
     if (soloActive.value ? !track.solo : track.muted) continue
     for (const n of track.notes) {
-      if (n.startTick <= tick && n.endTick > tick)
+      if (n.startTick <= tick && n.endTick > tick) {
         next.push({ channel: n.channel, note: n.note, velocity: n.velocity })
+        if (!chanProgram.has(n.channel)) {
+          chanProgram.set(n.channel, trackProgramAt(track, tick))
+          const ccMap = new Map()
+          for (const ev of (track.ccEvents || [])) {
+            if (ev.tick <= tick) ccMap.set(ev.controller, ev.value)
+            else break
+          }
+          chanCC.set(n.channel, ccMap)
+        }
+      }
     }
   }
   const nextSet = new Set(next.map(n => `${n.channel}-${n.note}`))
   for (const { channel, note } of rulerChordNotes)
     if (!nextSet.has(`${channel}-${note}`)) try { synth.noteOff(channel, note) } catch {}
+  for (const [ch, prog] of chanProgram)
+    try { synth.programChange(ch, prog) } catch {}
+  for (const [ch, ccMap] of chanCC)
+    for (const [ctrl, val] of ccMap)
+      try { synth.controllerChange(ch, ctrl, val) } catch {}
   const prevSet = new Set(rulerChordNotes.map(n => `${n.channel}-${n.note}`))
   for (const { channel, note, velocity } of next)
     if (!prevSet.has(`${channel}-${note}`)) try { synth.noteOn(channel, note, velocity) } catch {}
