@@ -13,13 +13,15 @@ const { t } = useI18n()
     rounded="lg"
     color="primary"
     class="mr-1"
+    mandatory
+    :model-value="layoutRegistry.activeId"
+    @update:model-value="v => v && layoutRegistry.setActive(v)"
   >
     <v-btn
       v-for="layout in layoutRegistry.layouts"
       :key="layout.key"
       size="small"
-      :active="layoutRegistry.activeId === layout.key"
-      @click="layoutRegistry.setActive(layout.key)"
+      :value="layout.key"
     >
       <v-icon size="18">{{ layout.icon }}</v-icon>
       <v-tooltip activator="parent">{{ t(layout.label) }}</v-tooltip>

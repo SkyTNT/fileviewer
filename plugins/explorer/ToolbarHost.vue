@@ -138,14 +138,15 @@ function resolveComponent(item) {
       rounded="lg"
       color="primary"
       class="mr-1"
+      mandatory
+      :model-value="group.items.find(i => i.active?.())?.id"
+      @update:model-value="v => group.items.find(i => i.id === v)?.execute()"
     >
       <v-btn
         v-for="tog in group.items"
         :key="tog.id"
         size="small"
         :value="tog.id"
-        :active="tog.active?.()"
-        @click="tog.execute()"
       >
         <v-icon size="18">{{ tog.icon }}</v-icon>
         <v-tooltip activator="parent">{{ tog.label?.() }}</v-tooltip>
