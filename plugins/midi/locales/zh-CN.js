@@ -12,6 +12,7 @@ export default {
     addTrack: '添加轨道',
     deleteTrack: '删除轨道',
     renameTrack: '重命名轨道',
+    changeColor: '修改颜色',
     tool: { select: '选择', pencil: '绘制', eraser: '删除' },
     quantize: '量化',
     quantizeOff: '关闭',

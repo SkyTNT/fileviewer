@@ -12,6 +12,7 @@ export default {
     addTrack: 'トラックを追加',
     deleteTrack: 'トラックを削除',
     renameTrack: 'トラック名を変更',
+    changeColor: '色を変更',
     tool: { select: '選択', pencil: '描画', eraser: '消去' },
     quantize: 'クォンタイズ',
     quantizeOff: 'オフ',

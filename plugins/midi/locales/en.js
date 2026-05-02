@@ -12,6 +12,7 @@ export default {
     addTrack: 'Add Track',
     deleteTrack: 'Delete Track',
     renameTrack: 'Rename Track',
+    changeColor: 'Change Color',
     tool: { select: 'Select', pencil: 'Draw', eraser: 'Erase' },
     quantize: 'Quantize',
     quantizeOff: 'Off',

@@ -2304,6 +2304,12 @@ function commitRenameTrack() {
   renameTrackIdx.value = -1
 }
 
+function changeTrackColor(track, color) {
+  pushUndo()
+  track.color = color
+  markDirty()
+}
+
 function onKey({ key, ctrl, shift, raw }) {
   if (key === ' ') { raw.preventDefault(); togglePlay() }
   if (ctrl && key.toLowerCase() === 'z' && !shift) { raw.preventDefault(); undo(); return }
@@ -2746,7 +2752,11 @@ watch(masterGain, v => {
             class="tl-row" :class="{ 'tl-row--active': activeTrack === track.index }"
             @click="activeTrack = track.index"
           >
-            <div class="tl-color" :style="{background: track.color}" />
+            <label class="tl-color" :style="{background: track.color}"
+              :title="t('midi.changeColor')" @click.stop>
+              <input type="color" class="tl-color-input" :value="track.color"
+                @change="changeTrackColor(track, $event.target.value)" />
+            </label>
             <div class="tl-info">
               <input
                 v-if="renameTrackIdx === track.index"
@@ -3121,6 +3131,21 @@ watch(masterGain, v => {
   border-radius: 4px;
   flex-shrink: 0;
   margin: 6px 0;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: filter 0.15s;
+}
+.tl-color:hover { filter: brightness(1.4); }
+.tl-color-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  padding: 0;
+  border: none;
 }
 
 .tl-info {

@@ -12,6 +12,7 @@ export default {
     addTrack: '新增軌道',
     deleteTrack: '刪除軌道',
     renameTrack: '重新命名軌道',
+    changeColor: '修改顏色',
     tool: { select: '選取', pencil: '繪製', eraser: '刪除' },
     quantize: '量化',
     quantizeOff: '關閉',
