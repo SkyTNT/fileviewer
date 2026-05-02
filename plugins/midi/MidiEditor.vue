@@ -187,6 +187,62 @@ const bottomLaneHeight  = ref(VEL_H_DEFAULT)
 // ── Clipboard ─────────────────────────────────────────────────────────────────
 let clipboard = { minTick: 0, notes: [] }
 
+// ── Undo / Redo ───────────────────────────────────────────────────────────────
+const MAX_UNDO = 100
+const _undoStack = []
+const _redoStack = []
+const undoVersion = ref(0)
+
+const canUndo = computed(() => { undoVersion.value; return _undoStack.length > 0 })
+const canRedo = computed(() => { undoVersion.value; return _redoStack.length > 0 })
+
+function snapshotState() {
+  return {
+    trackData: trackData.value.map(t => ({
+      ...t,
+      notes:    t.notes.map(n => ({ ...n })),
+      events:   [...t.events],
+      ccEvents: t.ccEvents.map(e => ({ ...e })),
+      pcEvents: t.pcEvents.map(e => ({ ...e })),
+    })),
+    tempos:   tempos.value.map(t => ({ ...t })),
+    timeSigs: timeSigs.value.map(t => ({ ...t })),
+  }
+}
+
+function pushUndo() {
+  _undoStack.push(snapshotState())
+  if (_undoStack.length > MAX_UNDO) _undoStack.shift()
+  _redoStack.length = 0
+  undoVersion.value++
+}
+
+function restoreSnapshot(snap) {
+  trackData.value = snap.trackData
+  tempos.value    = snap.tempos
+  timeSigs.value  = snap.timeSigs
+  let maxId = noteIdSeq
+  for (const t of snap.trackData) for (const n of t.notes) if (n.id > maxId) maxId = n.id
+  noteIdSeq = maxId
+  let maxTick = 0
+  for (const t of snap.trackData) for (const n of t.notes) if (n.endTick > maxTick) maxTick = n.endTick
+  if (maxTick > 0) totalTicks.value = maxTick + ppq.value * 8
+  undoVersion.value++
+  markDirty()
+}
+
+function undo() {
+  if (!_undoStack.length) return
+  _redoStack.push(snapshotState())
+  restoreSnapshot(_undoStack.pop())
+}
+
+function redo() {
+  if (!_redoStack.length) return
+  _undoStack.push(snapshotState())
+  restoreSnapshot(_redoStack.pop())
+}
+
 
 // ── Computed ──────────────────────────────────────────────────────────────────
 const soloActive = computed(() => trackData.value.some(t => t.solo))
@@ -1284,6 +1340,7 @@ async function openTsDialog(canvasX, barTick) {
 
 function commitTsDialog() {
   if (!tsDialog.value) return
+  pushUndo()
   const num = Math.max(1, Math.min(32, Math.round(tsEditNum.value) || 4))
   const den = tsEditDen.value
   const { tick } = tsDialog.value
@@ -1296,6 +1353,7 @@ function commitTsDialog() {
 
 function deleteTsDialog() {
   if (!tsDialog.value || tsDialog.value.tick === 0) return
+  pushUndo()
   timeSigs.value = timeSigs.value.filter(ts => ts.tick !== tsDialog.value.tick)
   tsDialog.value = null
   markDirty()
@@ -1325,20 +1383,25 @@ function onMouseDown(e) {
   if (inVelArea(x, y)) {
     if (laneMode.value === 'velocity') {
       if (e.button === 0) {
+        pushUndo()
         drag = { type: 'vel-draw', lastX: x }
         setVelAtRange(x, x, y)
       }
     } else if (laneMode.value === 'cc') {
       if (e.button === 2) {
+        pushUndo()
         eraseCcAtPos(x)
       } else if (e.button === 0) {
+        pushUndo()
         drag = { type: 'cc-draw' }
         drawCcAtPos(x, y)
       }
     } else if (laneMode.value === 'pc') {
       if (e.button === 2) {
+        pushUndo()
         erasePcAtPos(x)
       } else if (e.button === 0) {
+        pushUndo()
         drag = { type: 'pc-draw' }
         drawPcAtPos(x, y)
       }
@@ -1350,10 +1413,12 @@ function onMouseDown(e) {
       if (e.button === 2) {
         const nearest = findNearestTempoPx(x)
         if (nearest && nearest.tick !== 0) {
+          pushUndo()
           tempos.value = tempos.value.filter(t => t !== nearest)
           markDirty()
         }
       } else if (e.button === 0) {
+        pushUndo()
         const nearest = findNearestTempoPx(x)
         if (nearest) {
           drag = { type: 'bpm-move', tempo: nearest }
@@ -1372,6 +1437,7 @@ function onMouseDown(e) {
   if (!inNoteArea(x, y)) return
 
   if (e.button === 2) {
+    pushUndo()
     const hit = noteAtPos(x, y)
     if (hit) {
       previewNote(hit.note.channel, hit.note.note, hit.note.velocity)
@@ -1393,6 +1459,7 @@ function onMouseDown(e) {
 
   const edge = noteResizeEdge(x, y)
   if (edge) {
+    pushUndo()
     const targets = edge.note.selected ? getAllSelected() : [edge.note]
     drag = {
       type: 'resize', note: edge.note, origEndTick: edge.note.endTick,
@@ -1403,6 +1470,7 @@ function onMouseDown(e) {
 
   const hit = noteAtPos(x, y)
   if (hit) {
+    pushUndo()
     previewNote(hit.note.channel, hit.note.note, hit.note.velocity)
     if (!hit.note.selected) {
       deselectAll()
@@ -1415,6 +1483,7 @@ function onMouseDown(e) {
       origPositions: selectedNotes.map(n => ({ note: n, startTick: n.startTick, noteNum: n.note })),
     }
   } else {
+    pushUndo()
     deselectAll()
     const st = quantizeTick(pxToTicks(x - KEYS_W + scrollX.value))
     const n  = yToNote(y - RULER_H + scrollY.value)
@@ -1557,6 +1626,7 @@ function onWheel(e) {
     const delta = e.deltaY < 0 ? 4 : -4
     const selected = getAllSelected()
     if (selected.length) {
+      pushUndo()
       for (const n of selected)
         n.velocity = Math.max(1, Math.min(127, n.velocity + delta))
       markDirty()
@@ -1565,6 +1635,7 @@ function onWheel(e) {
       if (inVelArea(x, y)) target = noteAtVelPos(x)
       else if (inNoteArea(x, y)) target = noteAtPos(x, y)
       if (target) {
+        pushUndo()
         target.note.velocity = Math.max(1, Math.min(127, target.note.velocity + delta))
         markDirty()
       }
@@ -1648,6 +1719,7 @@ function copySelected() {
 
 function pasteNotes() {
   if (!clipboard.notes?.length) return
+  pushUndo()
   deselectAll()
   const step = defaultDuration()
   const insertTick = clipboard.minTick + step
@@ -1673,6 +1745,7 @@ function pasteNotes() {
 // ── Loading ───────────────────────────────────────────────────────────────────
 async function loadMidi() {
   loading.value = true; error.value = null
+  _undoStack.length = 0; _redoStack.length = 0; undoVersion.value++
   try {
     const res = await fetch(midiApi.rawUrl(props.file.path))
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -1833,12 +1906,14 @@ function bytesToBase64(bytes) {
 function setBpm(val) {
   const bpmVal = Number(val)
   if (!isFinite(bpmVal) || bpmVal < 1) return
+  pushUndo()
   const tempo = Math.round(60000000 / bpmVal)
   if (tempos.value.length && tempos.value[0].tick === 0) tempos.value[0].tempo = tempo
   else tempos.value.unshift({ tick: 0, tempo })
 }
 
 function changeProgram(track, program) {
+  pushUndo()
   const tick = currentTick.value
   let activeEv = null
   for (const ev of (track.pcEvents || [])) {
@@ -1856,6 +1931,7 @@ function changeProgram(track, program) {
 function changeChannel(track, ch) {
   const newCh = ch & 0x0F
   if (newCh === track.channel) return
+  pushUndo()
   const oldCh = track.channel
   for (const note of track.notes) {
     if (note.channel === oldCh) note.channel = newCh
@@ -1869,6 +1945,8 @@ function changeChannel(track, ch) {
 
 function onKey({ key, ctrl, shift, raw }) {
   if (key === ' ') { raw.preventDefault(); togglePlay() }
+  if (ctrl && key.toLowerCase() === 'z' && !shift) { raw.preventDefault(); undo(); return }
+  if (ctrl && (key.toLowerCase() === 'y' || (shift && key.toLowerCase() === 'z'))) { raw.preventDefault(); redo(); return }
   if (ctrl && key === 'a') { raw.preventDefault(); selectAll() }
   if (ctrl && key === 'c') { raw.preventDefault(); copySelected() }
   if (ctrl && key === 'v') { raw.preventDefault(); pasteNotes() }
@@ -1882,6 +1960,7 @@ function onKey({ key, ctrl, shift, raw }) {
 }
 
 function shiftPitch(delta) {
+  pushUndo()
   const selected = getAllSelected()
   const targets = selected.length ? selected : trackData.value.flatMap(t => t.notes)
   for (const n of targets)
@@ -1890,6 +1969,7 @@ function shiftPitch(delta) {
 }
 
 function deleteSelected() {
+  pushUndo()
   for (const track of trackData.value)
     track.notes = track.notes.filter(n => !n.selected)
   markDirty()
@@ -1984,6 +2064,11 @@ watch(isDark, () => nextTick(draw))
             :color="playing ? 'primary' : undefined" @click="togglePlay" />
           <v-btn size="small" icon="mdi-repeat" :color="looping ? 'primary' : undefined"
             @click="looping = !looping" />
+        </v-btn-group>
+
+        <v-btn-group density="compact" variant="tonal" rounded="pill">
+          <v-btn size="small" icon="mdi-undo" :disabled="!canUndo" @click="undo" />
+          <v-btn size="small" icon="mdi-redo" :disabled="!canRedo" @click="redo" />
         </v-btn-group>
 
         <div class="pos-display font-mono">{{ positionDisplay }}</div>
