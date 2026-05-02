@@ -1242,7 +1242,18 @@ function startAnimation() {
   if (animFrameId) return
   function loop() {
     if (seq) {
-      if (seq.isFinished) { stopPlayback(); draw(); return }
+      if (seq.isFinished) {
+        if (looping.value) {
+          const restartTick = (loopRegionActive.value && loopStart.value < loopEnd.value)
+            ? loopStart.value : 0
+          currentTick.value = restartTick
+          seq.currentTime = ticksToSeconds(restartTick)
+          seq.play()
+          seqInitCountdown = 3
+        } else {
+          stopPlayback(); draw(); return
+        }
+      }
       if (seqInitCountdown > 0) {
         seqInitCountdown--
       } else {
@@ -2060,7 +2071,7 @@ async function startPlayback() {
     seq.eventHandler.addEvent('songChange', 'play-on-load', () => {
       seq.eventHandler.removeEvent('songChange', 'play-on-load')
       if (startSec > 0) seq.currentTime = startSec
-      seq.loopCount = looping.value ? -1 : 0
+      seq.loopCount = 0
       seq.play()
       playing.value = true
       seqInitCountdown = 5
