@@ -265,9 +265,9 @@ const actions = {
     if (state.selection) {
       const mask = selectionToMask(state.selection, state.canvasWidth, state.canvasHeight)
       const imgData = ctx.getImageData(0, 0, state.canvasWidth, state.canvasHeight)
-      const { r, g, b } = hexToRgbLocal(state.fgColor)
+      const { r, g, b, a } = hexToRgbLocal(state.fgColor)
       for (let i = 0; i < mask.length; i++) {
-        if (mask[i]) { imgData.data[i*4] = r; imgData.data[i*4+1] = g; imgData.data[i*4+2] = b; imgData.data[i*4+3] = 255 }
+        if (mask[i]) { imgData.data[i*4] = r; imgData.data[i*4+1] = g; imgData.data[i*4+2] = b; imgData.data[i*4+3] = a }
       }
       ctx.putImageData(imgData, 0, 0)
     } else {

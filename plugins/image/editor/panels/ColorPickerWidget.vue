@@ -1,6 +1,5 @@
 <script setup>
 import { inject, ref } from 'vue'
-import ColorPickerDialog from '../dialogs/ColorPickerDialog.vue'
 
 const state = inject('editorState')
 const showFg = ref(false)
@@ -25,18 +24,14 @@ function resetColors() {
       <template #activator="{ props: menuProps }">
         <div class="swatch swatch-bg" :style="{ background: state.bgColor }" v-bind="menuProps" title="Background color" />
       </template>
-      <v-card class="pa-2" elevation="8">
-        <ColorPickerDialog v-model="state.bgColor" />
-      </v-card>
+      <v-color-picker v-model="state.bgColor" />
     </v-menu>
     <!-- FG swatch (front) -->
     <v-menu v-model="showFg" :close-on-content-click="false" location="bottom end" :z-index="9999">
       <template #activator="{ props: menuProps }">
         <div class="swatch swatch-fg" :style="{ background: state.fgColor }" v-bind="menuProps" title="Foreground color" />
       </template>
-      <v-card class="pa-2" elevation="8">
-        <ColorPickerDialog v-model="state.fgColor" />
-      </v-card>
+      <v-color-picker v-model="state.fgColor" />
     </v-menu>
     <!-- Control buttons -->
     <button class="ctrl-btn swap-btn" @click="swapColors" title="Swap colors (X)">⇄</button>

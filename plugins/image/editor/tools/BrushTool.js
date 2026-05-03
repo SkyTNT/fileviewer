@@ -6,8 +6,8 @@ let _lastX = 0, _lastY = 0
 
 function drawStamp(ctx, x, y, state, composite = 'source-over') {
   const r = state.brushSize / 2
-  const alpha = state.brushFlow * state.brushOpacity
-  const { r: cr, g: cg, b: cb } = hexToRgb(state.fgColor)
+  const { r: cr, g: cg, b: cb, a: ca } = hexToRgb(state.fgColor)
+  const alpha = state.brushFlow * state.brushOpacity * (ca / 255)
   ctx.save()
   ctx.globalCompositeOperation = composite
   ctx.globalAlpha = alpha

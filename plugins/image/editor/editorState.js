@@ -98,8 +98,17 @@ export function getActiveLayer(state) {
 }
 
 export function hexToRgb(hex) {
-  const n = parseInt(hex.replace('#', ''), 16)
-  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }
+  const s = hex.replace('#', '')
+  if (s.length === 8) {
+    return {
+      r: parseInt(s.slice(0, 2), 16),
+      g: parseInt(s.slice(2, 4), 16),
+      b: parseInt(s.slice(4, 6), 16),
+      a: parseInt(s.slice(6, 8), 16),
+    }
+  }
+  const n = parseInt(s, 16)
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255, a: 255 }
 }
 
 export function rgbToHex(r, g, b) {
