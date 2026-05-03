@@ -2195,6 +2195,18 @@ function stopPlayback() {
   draw()
 }
 
+// ── Download ──────────────────────────────────────────────────────────────────
+function downloadMidi() {
+  const bytes = buildMidiBytes()
+  const blob  = new Blob([bytes], { type: 'audio/midi' })
+  const url   = URL.createObjectURL(blob)
+  const a     = document.createElement('a')
+  a.href      = url
+  a.download  = (props.file.name || 'midi').replace(/\.[^.]+$/, '') + '.mid'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 // ── Save ──────────────────────────────────────────────────────────────────────
 async function saveMidi() {
   saving.value = true
@@ -2728,6 +2740,9 @@ watch(masterGain, v => {
 
         <v-btn size="small" color="primary" variant="tonal" rounded="pill"
           prepend-icon="mdi-content-save" :loading="saving" @click="saveMidi">{{ t('midi.save') }}</v-btn>
+
+        <v-btn size="small" color="primary" variant="tonal" rounded="pill"
+          prepend-icon="mdi-download" @click="downloadMidi">{{ t('midi.download') }}</v-btn>
 
         <v-btn size="small" icon="mdi-help-circle-outline" variant="text"
           :title="t('midi.help')" @click="showHelpDialog = true" />

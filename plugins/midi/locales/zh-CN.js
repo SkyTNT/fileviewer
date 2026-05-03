@@ -7,6 +7,7 @@ export default {
     save: '保存',
     saved: '已保存',
     saveFailed: '保存失败',
+    download: '下载',
     bpm: 'BPM',
     tracks: '轨道',
     addTrack: '添加轨道',

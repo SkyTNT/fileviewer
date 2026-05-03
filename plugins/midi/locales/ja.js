@@ -7,6 +7,7 @@ export default {
     save: '保存',
     saved: '保存しました',
     saveFailed: '保存失敗',
+    download: 'ダウンロード',
     bpm: 'BPM',
     tracks: 'トラック',
     addTrack: 'トラックを追加',

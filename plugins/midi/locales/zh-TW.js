@@ -7,6 +7,7 @@ export default {
     save: '儲存',
     saved: '已儲存',
     saveFailed: '儲存失敗',
+    download: '下載',
     bpm: 'BPM',
     tracks: '軌道',
     addTrack: '新增軌道',

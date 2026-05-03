@@ -7,6 +7,7 @@ export default {
     save: 'Save',
     saved: 'Saved',
     saveFailed: 'Save failed',
+    download: 'Download',
     bpm: 'BPM',
     tracks: 'Tracks',
     addTrack: 'Add Track',
