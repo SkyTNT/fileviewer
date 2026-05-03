@@ -45,6 +45,9 @@ const rightGroups = computed(() => groupsFor(rightItems.value))
 function groupDivider(groupId) {
   return toolbarRegistry.groups.find(g => g.id === groupId)?.divider ?? false
 }
+function groupMandatory(groupId) {
+  return toolbarRegistry.groups.find(g => g.id === groupId)?.mandatory ?? true
+}
 
 function resolveComponent(item) {
   if (typeof item.component === 'function') return defineAsyncComponent(item.component)
@@ -138,9 +141,9 @@ function resolveComponent(item) {
       rounded="lg"
       color="primary"
       class="mr-1"
-      mandatory
+      :mandatory="groupMandatory(group.id)"
       :model-value="group.items.find(i => i.active?.())?.id"
-      @update:model-value="v => group.items.find(i => i.id === v)?.execute()"
+      @update:model-value="v => (v ? group.items.find(i => i.id === v) : group.items.find(i => i.active?.()))?.execute()"
     >
       <v-btn
         v-for="tog in group.items"

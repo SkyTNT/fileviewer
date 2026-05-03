@@ -46,7 +46,7 @@ export async function setup(ctx) {
 
   const explorer = await ctx.services.getAsync('explorer.state')
 
-  toolbar.registerGroup({ id: 'bookmarks', priority: 37, divider: false })
+  toolbar.registerGroup({ id: 'bookmarks', priority: 37, divider: false, mandatory: false })
   toolbar.register({
     id: 'bookmark-toggle',
     plugin: 'bookmarks',
