@@ -1,4 +1,4 @@
-import { markRaw } from 'vue'
+import { markRaw, reactive } from 'vue'
 import en   from './locales/en.js'
 import zhCN from './locales/zh-CN.js'
 import zhTW from './locales/zh-TW.js'
@@ -38,6 +38,17 @@ export async function setup(ctx) {
   explorerState.writeMode = appConfig.writeMode
   explorerState.roots     = appConfig.roots
 
+  const sidebarRegistry = reactive({
+    _sections: [],
+    register(component, pluginId, props = {}) {
+      this._sections.push({ component: markRaw(component), pluginId, props, key: `${pluginId}:sidebar` })
+    },
+    unregister(pluginId) {
+      this._sections = this._sections.filter(s => s.pluginId !== pluginId)
+    },
+    get sections() { return this._sections },
+  })
+  ctx.services.register('explorer.sidebar', sidebarRegistry, 'explorer')
   ctx.services.register('explorer.state', explorerState, 'explorer')
   ctx.services.register('explorer.useRubberBand', useRubberBand, 'explorer')
   ctx.services.register('explorer.useContextMenu', useContextMenu, 'explorer')
@@ -147,6 +158,7 @@ export async function teardown(ctx) {
   slotHost.remove('content.layout', 'explorer')
   slotHost.remove('toolbar', 'explorer')
   ctx.services.get('toolbar.registry').unregisterAll('explorer')
+  ctx.services.unregister('explorer.sidebar', 'explorer')
   ctx.services.unregister('explorer.ContextMenu', 'explorer')
   ctx.services.unregister('explorer.useExplorerKeyboard', 'explorer')
   ctx.services.unregister('explorer.useContextMenu', 'explorer')

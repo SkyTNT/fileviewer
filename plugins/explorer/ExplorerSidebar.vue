@@ -21,7 +21,16 @@
       <v-divider />
     </template>
 
-    <DirectoryTree />
+    <div style="flex:1; min-height:80px; overflow:hidden">
+      <DirectoryTree />
+    </div>
+
+    <component
+      :is="entry.component"
+      v-for="entry in sidebarBottomEntries"
+      :key="entry.key"
+      v-bind="entry.props"
+    />
 
     <div
       class="sidebar-resizer"
@@ -32,12 +41,15 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, inject } from 'vue'
+import { ref, computed, watch, onMounted, inject } from 'vue'
 import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 import DirectoryTree from './components/DirectoryTree.vue'
 
-const events = inject('events')
+const events   = inject('events')
+const services = inject('services')
+const sidebarRegistry      = services.get('explorer.sidebar')
+const sidebarBottomEntries = computed(() => sidebarRegistry?.sections ?? [])
 const { mobile } = useDisplay()
 const { t } = useI18n()
 
@@ -83,7 +95,7 @@ events?.on('explorer:toggle-sidebar', () => { sidebarVisible.value = !sidebarVis
 </script>
 
 <style>
-.tree-sidebar .v-navigation-drawer__content { overflow: hidden; }
+.tree-sidebar .v-navigation-drawer__content { overflow: hidden; display: flex; flex-direction: column; }
 .sidebar-resizer {
   position: absolute;
   top: 0; right: 0;
