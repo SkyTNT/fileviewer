@@ -1,5 +1,6 @@
 <script setup>
 import { ref, inject, watch, computed, onMounted, onUnmounted } from 'vue'
+import { useTheme } from 'vuetify'
 import { compositeLayers } from './LayerCompositor.js'
 import { drawMarchingAnts } from './marchingAnts.js'
 import { getTool } from '../tools/toolRegistry.js'
@@ -196,13 +197,26 @@ const cursorStyle = computed(() => {
   void state.paintTick  // re-evaluate when tool calls invalidate() (e.g. cursor changes on handle hover)
   return spaceDown.value ? (_panning ? 'grabbing' : 'grab') : (activeTool.value?.cursor || 'crosshair')
 })
+
+const theme = useTheme()
+const viewportStyle = computed(() => {
+  const dark = theme.global.current.value.dark
+  const bg = dark ? '#1a1a1a' : '#d0d0d0'
+  const check = dark ? '#222222' : '#c0c0c0'
+  return {
+    background: bg,
+    backgroundImage: `linear-gradient(45deg, ${check} 25%, transparent 25%), linear-gradient(-45deg, ${check} 25%, transparent 25%), linear-gradient(45deg, transparent 75%, ${check} 75%), linear-gradient(-45deg, transparent 75%, ${check} 75%)`,
+    backgroundSize: '20px 20px',
+    backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0',
+  }
+})
 </script>
 
 <template>
   <div
     ref="shellEl"
     class="canvas-viewport"
-    :style="{ cursor: cursorStyle }"
+    :style="[viewportStyle, { cursor: cursorStyle }]"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
@@ -223,13 +237,6 @@ const cursorStyle = computed(() => {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #1a1a1a;
-  background-image: linear-gradient(45deg, #222 25%, transparent 25%),
-    linear-gradient(-45deg, #222 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #222 75%),
-    linear-gradient(-45deg, transparent 75%, #222 75%);
-  background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
   touch-action: none;
 }
 .canvas-group {

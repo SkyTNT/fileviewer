@@ -31,16 +31,16 @@ function jump(index) { jumpTo(index, state) }
 
 <style scoped>
 .history-panel { display: flex; flex-direction: column; height: 100%; }
-.panel-header { display: flex; align-items: center; padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,0.08); }
-.panel-title { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.7); text-transform: uppercase; letter-spacing: 0.5px; }
+.panel-header { display: flex; align-items: center; padding: 4px 8px; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+.panel-title { font-size: 11px; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.7); text-transform: uppercase; letter-spacing: 0.5px; }
 .history-list { overflow-y: auto; flex: 1; }
 .history-item {
   display: flex; align-items: center;
   padding: 4px 8px; font-size: 12px; cursor: pointer;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.3));
   transition: background 0.1s;
 }
-.history-item:hover { background: rgba(255,255,255,0.05); }
+.history-item:hover { background: rgba(var(--v-theme-on-surface), 0.05); }
 .history-item.current { background: rgba(var(--v-theme-primary), 0.15); font-weight: 500; }
 .history-item.future { opacity: 0.4; }
 </style>

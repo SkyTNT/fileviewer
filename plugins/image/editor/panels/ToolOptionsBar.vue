@@ -227,11 +227,11 @@ const SHAPE_TYPES = ['rect', 'ellipse', 'line']
   flex-wrap: nowrap;
   padding: 2px 8px;
   min-height: 36px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   gap: 4px;
   flex-shrink: 0;
   overflow: hidden;
 }
-.opt-label { font-size: 11px; color: rgba(255,255,255,0.6); white-space: nowrap; flex-shrink: 0; }
-.opt-val { font-size: 11px; color: rgba(255,255,255,0.8); min-width: 28px; text-align: right; flex-shrink: 0; }
+.opt-label { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.6); white-space: nowrap; flex-shrink: 0; }
+.opt-val { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.8); min-width: 28px; text-align: right; flex-shrink: 0; }
 </style>

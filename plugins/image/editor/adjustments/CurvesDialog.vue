@@ -40,12 +40,12 @@ function drawCurve() {
   if (!canvas) return
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   ctx.clearRect(0, 0, CURVE_W, CURVE_H)
-  ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1
+  ctx.strokeStyle = 'rgba(128,128,128,0.25)'; ctx.lineWidth = 1
   for (let i = 1; i < 4; i++) {
     ctx.beginPath(); ctx.moveTo(i * CURVE_W / 4, 0); ctx.lineTo(i * CURVE_W / 4, CURVE_H); ctx.stroke()
     ctx.beginPath(); ctx.moveTo(0, i * CURVE_H / 4); ctx.lineTo(CURVE_W, i * CURVE_H / 4); ctx.stroke()
   }
-  ctx.strokeStyle = 'rgba(255,255,255,0.2)'
+  ctx.strokeStyle = 'rgba(128,128,128,0.4)'
   ctx.beginPath(); ctx.moveTo(0, CURVE_H); ctx.lineTo(CURVE_W, 0); ctx.stroke()
   const lut = buildLUT()
   ctx.strokeStyle = '#a0c4ff'; ctx.lineWidth = 2
@@ -135,6 +135,6 @@ onMounted(() => drawCurve())
 
 <style scoped>
 .adj-panel { padding: 8px; }
-.curve-canvas { width: 100%; aspect-ratio: 1.28; border-radius: 4px; background: rgba(0,0,0,0.5); cursor: crosshair; display: block; }
+.curve-canvas { width: 100%; aspect-ratio: 1.28; border-radius: 4px; background: rgba(var(--v-theme-on-surface), 0.06); cursor: crosshair; display: block; }
 .adj-actions { display: flex; justify-content: flex-end; gap: 4px; margin-top: 8px; }
 </style>

@@ -101,9 +101,9 @@ watch([black, gamma, white, () => state.paintTick], () => {
 
 <style scoped>
 .adj-panel { padding: 8px; }
-.hist-canvas { width: 100%; height: 80px; border-radius: 4px; background: rgba(0,0,0,0.4); display: block; }
+.hist-canvas { width: 100%; height: 80px; border-radius: 4px; background: rgba(var(--v-theme-on-surface), 0.06); display: block; }
 .adj-row { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
-.adj-label { font-size: 11px; color: rgba(255,255,255,0.6); width: 50px; flex-shrink: 0; }
-.adj-val { font-size: 11px; color: rgba(255,255,255,0.8); width: 36px; text-align: right; flex-shrink: 0; }
+.adj-label { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.6); width: 50px; flex-shrink: 0; }
+.adj-val { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.8); width: 36px; text-align: right; flex-shrink: 0; }
 .adj-actions { display: flex; justify-content: flex-end; gap: 4px; margin-top: 6px; }
 </style>

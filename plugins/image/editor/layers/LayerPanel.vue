@@ -176,20 +176,20 @@ function onDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move' 
 
 <style scoped>
 .layer-panel { display: flex; flex-direction: column; height: 100%; }
-.panel-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,0.08); }
-.panel-title { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.7); text-transform: uppercase; letter-spacing: 0.5px; }
+.panel-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+.panel-title { font-size: 11px; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.7); text-transform: uppercase; letter-spacing: 0.5px; }
 .panel-actions { display: flex; gap: 2px; }
-.layer-controls { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.layer-controls { padding: 6px 8px; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
 .layer-list { overflow-y: auto; flex: 1; }
 .layer-item {
   display: flex; align-items: center; gap: 6px;
   padding: 4px 8px; cursor: pointer;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.5));
   transition: background 0.1s;
 }
-.layer-item:hover { background: rgba(255,255,255,0.05); }
+.layer-item:hover { background: rgba(var(--v-theme-on-surface), 0.05); }
 .layer-item.active { background: rgba(var(--v-theme-primary), 0.15); }
 .layer-name { font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .layer-reorder { display: flex; flex-direction: column; }
-.opt-label { font-size: 11px; color: rgba(255,255,255,0.6); white-space: nowrap; }
+.opt-label { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.6); white-space: nowrap; }
 </style>

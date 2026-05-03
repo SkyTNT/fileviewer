@@ -41,7 +41,7 @@ const { preview, apply, cancel } = useAdjustment(
 <style scoped>
 .adj-panel { padding: 8px; }
 .adj-row { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
-.adj-label { font-size: 11px; color: rgba(255,255,255,0.6); width: 68px; flex-shrink: 0; }
-.adj-val { font-size: 11px; color: rgba(255,255,255,0.8); width: 36px; text-align: right; flex-shrink: 0; }
+.adj-label { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.6); width: 68px; flex-shrink: 0; }
+.adj-val { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.8); width: 36px; text-align: right; flex-shrink: 0; }
 .adj-actions { display: flex; justify-content: flex-end; gap: 4px; margin-top: 6px; }
 </style>

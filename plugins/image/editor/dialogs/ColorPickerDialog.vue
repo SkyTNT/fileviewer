@@ -132,5 +132,5 @@ function onHexInput(v) {
 .sv-canvas { cursor: crosshair; border-radius: 4px; }
 .hue-canvas { cursor: ns-resize; border-radius: 4px; }
 .picker-bottom { display: flex; align-items: center; gap: 8px; }
-.color-preview { width: 32px; height: 32px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); flex-shrink: 0; }
+.color-preview { width: 32px; height: 32px; border-radius: 4px; border: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 2)); flex-shrink: 0; }
 </style>

@@ -54,7 +54,7 @@ function resetColors() {
 .swatch {
   position: absolute;
   width: 28px; height: 28px;
-  border: 1px solid rgba(255,255,255,0.3);
+  border: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 2));
   border-radius: 3px;
   cursor: pointer;
 }
@@ -62,9 +62,9 @@ function resetColors() {
 .swatch-fg { top: 0; left: 0; z-index: 1; }
 .ctrl-btn {
   position: absolute;
-  background: rgba(0,0,0,0.6);
-  border: none;
-  color: #ccc;
+  background: rgba(var(--v-theme-surface), 0.85);
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  color: rgb(var(--v-theme-on-surface));
   font-size: 10px;
   width: 14px; height: 14px;
   cursor: pointer;

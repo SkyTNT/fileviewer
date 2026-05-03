@@ -77,9 +77,9 @@ watch(() => props.modelValue, (v) => { if (v) { w.value = state.canvasWidth; h.v
 
 <style scoped>
 .anchor-grid { display: flex; flex-direction: column; align-items: center; }
-.grid3x3 { border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; overflow: hidden; }
+.grid3x3 { border: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 2)); border-radius: 4px; overflow: hidden; }
 .grid-row { display: flex; }
-.anchor-cell { width: 24px; height: 24px; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; background: rgba(255,255,255,0.05); transition: background 0.15s; }
-.anchor-cell:hover { background: rgba(255,255,255,0.15); }
+.anchor-cell { width: 24px; height: 24px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); cursor: pointer; background: rgba(var(--v-theme-on-surface), 0.05); transition: background 0.15s; }
+.anchor-cell:hover { background: rgba(var(--v-theme-on-surface), 0.12); }
 .anchor-cell.active { background: rgb(var(--v-theme-primary)); }
 </style>
