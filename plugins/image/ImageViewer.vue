@@ -6,6 +6,7 @@ const props = defineProps({
   file:       { type: Object, required: true },
   winId:      { type: String, default: null },
   winManager: { type: Object, default: null },
+  imagePool:  { type: Array, default: null },
 })
 
 const { t }      = useI18n()
@@ -44,7 +45,7 @@ watch(() => props.file, (f) => {
 }, { immediate: true })
 
 // ── Adjacent-image navigation ─────────────────────────────────────────────────
-const imageEntries = computed(() => fileStore?.displayedEntries.filter(f => f.type === 'image') ?? [])
+const imageEntries = computed(() => props.imagePool ?? fileStore?.displayedEntries.filter(f => f.type === 'image') ?? [])
 const currentIndex = computed(() => imageEntries.value.findIndex(f => f.path === props.file?.path))
 const prevImage    = computed(() => currentIndex.value > 0 ? imageEntries.value[currentIndex.value - 1] : null)
 const nextImage    = computed(() => currentIndex.value >= 0 && currentIndex.value < imageEntries.value.length - 1 ? imageEntries.value[currentIndex.value + 1] : null)

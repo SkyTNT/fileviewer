@@ -46,9 +46,10 @@ export async function setup(ctx) {
     icon: 'mdi-image-outline',
     priority: 50,
     match: (target) => !Array.isArray(target) && isImage(target),
-    open(target) {
+    open(target, opts) {
       const id = `app:image:${target.path}`
-      winMgr.open({ id, title: target.name, icon: 'mdi-image-outline', component: markRaw(ImageViewer), props: { file: target }, width: 900, height: 650, maximized: true })
+      const extra = opts?.imagePool ? { imagePool: opts.imagePool } : {}
+      winMgr.open({ id, title: target.name, icon: 'mdi-image-outline', component: markRaw(ImageViewer), props: { file: target, ...extra }, width: 900, height: 650, maximized: true })
       return id
     },
   })

@@ -212,9 +212,21 @@ function openRow(row) {
   })
 }
 
+const pageImagePool = computed(() => {
+  const seen = new Set()
+  const pool = []
+  for (const row of rows.value) {
+    for (const col of Object.keys(imageCols.value)) {
+      const v = row[col]
+      if (v && !seen.has(v)) { seen.add(v); pool.push({ path: v, name: v }) }
+    }
+  }
+  return pool
+})
+
 function cellThumbUrl(value) { return value ? imagesApi.thumbnailUrl(value, 400) : '' }
 function openImgPreview(value) {
-  if (value) appRegistry?.open({ path: value, name: value }, { app: 'image' })
+  if (value) appRegistry?.open({ path: value, name: value }, { app: 'image', imagePool: pageImagePool.value })
 }
 </script>
 
