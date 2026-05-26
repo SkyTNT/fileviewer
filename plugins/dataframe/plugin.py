@@ -167,10 +167,10 @@ async def detect_image_cols(path: str = Query(...)):
         str_cols = [c for c, t in schema.items() if t == pl.String]
         if not str_cols:
             return {"image_cols": []}
-        sample = lf.select(str_cols).limit(10).collect()
 
         async def classify_col(col: str) -> tuple[str, str | None]:
-            vals = [v for v in sample[col].drop_nulls().to_list() if isinstance(v, str) and v.strip()]
+            sample = lf.select(col).drop_nulls().limit(10).collect()[col].to_list()
+            vals = [v for v in sample if isinstance(v, str) and v.strip()]
             if not vals:
                 return col, None
             return col, await _classify_image_col(vals)
