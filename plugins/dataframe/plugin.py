@@ -124,7 +124,7 @@ def get_data(
 
 async def _is_image_url(url: str) -> bool:
     try:
-        async with _http_client.stream(url) as resp:
+        async with _http_client.stream("GET", url) as resp:
             ct = resp.headers.get("content-type", "").split(";")[0].strip()
             return ct.startswith("image/")
     except Exception:
