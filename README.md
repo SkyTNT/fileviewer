@@ -2,6 +2,8 @@
 
 A web-based file browser and viewer with a modern UI. Browse local directories, view files of many formats, and optionally manage files — all from your browser.
 
+All written by Claude
+
 ## Features
 
 ### File browsing
