@@ -23,7 +23,7 @@ pip install -e ".[archive]"   # include py7zr for archive support
 fileviewer /path --port 8001 --write  # run the app
 ```
 
-**Dev workflow:** run `pnpm run dev` + `fileviewer .` simultaneously; the Vite dev server proxies API requests.
+**Dev workflow:** run `pnpm run dev` + `fileviewer . --port 8001` simultaneously (from the project root); the Vite dev server proxies `/api` → `localhost:8001`.
 
 ## Architecture
 
@@ -62,7 +62,9 @@ index.js        # frontend: kernel plugin initialization
 manifest.js     # frontend: plugin metadata
 ```
 
-Notable plugins: `fs_local` (filesystem I/O), `explorer` (core browser UI), `auth`, `archive` (ZIP/TAR/7Z via py7zr), `dataframe` (CSV/Parquet via Polars), `image`, `media`, `hex`.
+Notable backend plugins: `fs_local` (filesystem I/O), `explorer` (core browser UI), `auth`, `archive` (ZIP/TAR/7Z via py7zr), `dataframe` (CSV/Parquet/JSON/JSONL via Polars), `image` (viewer + full editor + PSD layers), `media` (audio/video streaming), `hex`, `midi` (MIDI playback/editing with Web Audio synth), `upload`.
+
+Frontend-only plugins: `bookmarks` (saved directories, localStorage), `explorer`, `file-types`, `fs-ops`, `keyboard`, `layout-list`, `layout-waterfall`, `layout-switcher`, `network`, `notification`, `open-with`, `task-panel`, `theme`, `ui-kit`, `window-manager`.
 
 ### Build Output
 

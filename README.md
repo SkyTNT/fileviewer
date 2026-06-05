@@ -16,9 +16,10 @@ All written by Claude
 
 ### File viewers
 - **Text** — syntax highlighting for 50+ languages via CodeMirror; inline editing with Ctrl+S save in write mode
-- **Images** — thumbnail grid, full-resolution pan/zoom viewer, side-by-side comparison slider; **image editor** with layer management, 15 drawing/selection tools (Move, Brush, Eraser, Crop, Fill, Gradient, Text, Shape, Lasso, Magic Wand, Blur, Smudge, and more), adjustments (Brightness/Contrast, Curves, Levels, Hue/Saturation, Color Balance, Exposure/Vibrance, Shadows/Highlights), WebGL-accelerated filters (Gaussian Blur, Sharpen, Noise, Vignette, Pixelate, Sepia, Emboss, Chromatic Aberration, and more), undo/redo history, and export with format/quality control
-- **Tabular data** — Parquet, CSV, JSON, JSONL powered by Polars with SQL `WHERE` filter, sorting, schema browser, and image column preview
+- **Images** — thumbnail grid, full-resolution pan/zoom viewer, side-by-side comparison slider; **image editor** with layer management, 15 drawing/selection tools (Move, Brush, Eraser, Crop, Fill, Gradient, Text, Shape, Lasso, Magic Wand, Blur, Smudge, and more), adjustments (Brightness/Contrast, Curves, Levels, Hue/Saturation, Color Balance, Exposure/Vibrance, Shadows/Highlights), WebGL-accelerated filters (Gaussian Blur, Sharpen, Noise, Vignette, Pixelate, Sepia, Emboss, Chromatic Aberration, and more), undo/redo history, export with format/quality control; **PSD** files open with full layer support
+- **Tabular data** — Parquet, CSV, JSON, JSONL powered by Polars with SQL `WHERE` filter, sorting, schema browser, image column preview, and inline image editing
 - **Archives** — browse zip, tar, tar.gz, tar.bz2, tar.xz, 7z; random-access preview (zip/7z); extract here or to subfolder; create archives with compression level and password
+- **MIDI** — playback with Web Audio synthesis, oscilloscope visualization, gain control, loop mode, and download
 - **Video & audio** — HTTP range streaming
 - **Markdown** — rendered preview with source toggle
 - **Hex dump** — paged hex viewer for binary files
@@ -44,6 +45,7 @@ All written by Claude
 | ←/→ | Navigate to prev/next image (in image viewer) |
 
 ### Other
+- **Bookmarks** — save favorite directories for quick sidebar access (persisted in localStorage)
 - **Authentication** — optional username/password login with HttpOnly session cookies
 - **Internationalization** — English, Simplified Chinese, Traditional Chinese, Japanese
 - **Theme** — light/dark mode and customizable accent color
@@ -94,7 +96,7 @@ fileviewer /path/to/dir --no-browser
 
 ## Tech Stack
 
-**Backend:** Python 3.10+, FastAPI, Uvicorn, Polars, Pillow
+**Backend:** Python 3.10+, FastAPI, Uvicorn, Polars, Pillow, py7zr
 
 **Frontend:** Vue 3, Vuetify 3, CodeMirror 6, Vite
 
@@ -106,7 +108,6 @@ pip install -e .
 fileviewer . --port 8001 --write
 
 # Frontend (runs on port 5173, proxies /api to backend)
-cd frontend
 pnpm install
 pnpm dev
 ```
@@ -114,9 +115,7 @@ pnpm dev
 Build for production:
 
 ```bash
-cd frontend
 pnpm build      # outputs to static/
-cd ..
 pip install .
 ```
 
