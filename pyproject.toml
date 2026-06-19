@@ -5,7 +5,41 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "fileviewer"
 version = "2.0.0"
-description = "File Viewer — plugin-based architecture"
+description = "Web-based file browser and viewer with support for images, video, audio, archives, tabular data, MIDI, hex, and more"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "SkyTNT" }
+]
+keywords = [
+    "file browser",
+    "file viewer",
+    "web ui",
+    "fastapi",
+    "image viewer",
+    "archive",
+    "dataframe",
+    "midi",
+    "hex viewer",
+    "file manager",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Multimedia :: Graphics :: Viewers",
+    "Topic :: System :: Filesystems",
+    "Topic :: Utilities",
+    "Environment :: Web Environment",
+]
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.111",
@@ -26,6 +60,11 @@ archive = ["py7zr"]
 
 [project.scripts]
 fileviewer = "cli:main"
+
+[project.urls]
+Homepage = "https://github.com/SkyTNT/fileviewer"
+Repository = "https://github.com/SkyTNT/fileviewer"
+Issues = "https://github.com/SkyTNT/fileviewer/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
