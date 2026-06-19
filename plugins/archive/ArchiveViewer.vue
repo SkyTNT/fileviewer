@@ -1,7 +1,6 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch, inject } from 'vue'
+import { ref, shallowRef, computed, onMounted, onUnmounted, watch, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
-import ArchiveTreeNode from './ArchiveTreeNode.vue'
 const props = defineProps({
   file:       { type: Object, required: true },
   winId:      { type: String, default: null },
@@ -21,14 +20,54 @@ const loading      = ref(false)
 const scanning     = ref(false)
 const error        = ref(null)
 const archiveInfo  = ref(null)
-const treeItems    = ref([])
+// shallowRef: tree structure is replaced as a whole; avoids deep Vue proxy on 10k+ nodes
+const treeItems    = shallowRef([])
 
-// Non-reactive scan accumulators (updated during SSE stream)
-let _allEntriesAcc = []
-let _totalUncomp   = 0
-let _totalComp     = 0
-let _rebuildTimer  = null
-let _scanAbort     = null
+// Non-reactive incremental tree state (mutated during SSE stream)
+let _treeMap    = {}   // normPath → node
+let _roots      = []   // top-level nodes
+let _totalUncomp = 0
+let _totalComp   = 0
+let _batchCount  = 0
+const BATCH_SIZE = 500  // flush to Vue every N entries
+let _scanAbort   = null
+
+function _ensureDir(normPath) {
+  if (_treeMap[normPath]) return _treeMap[normPath]
+  const parts = normPath.split('/')
+  const name  = parts[parts.length - 1]
+  const node  = { name, path: normPath + '/', is_dir: true, size: 0,
+                  compressed_size: 0, modified: null, children: [] }
+  _treeMap[normPath] = node
+  if (parts.length === 1) _roots.push(node)
+  else _ensureDir(parts.slice(0, -1).join('/')).children.push(node)
+  return node
+}
+
+function _addEntry(data) {
+  const normPath = data.path.replace(/\/$/, '')
+  if (_treeMap[normPath]) {
+    // Directory was pre-created by ensureDir; merge real metadata
+    Object.assign(_treeMap[normPath], data, { children: _treeMap[normPath].children })
+    return
+  }
+  const parts = normPath.split('/')
+  const node  = { ...data, children: data.is_dir ? [] : null }
+  _treeMap[normPath] = node
+  if (parts.length === 1) _roots.push(node)
+  else _ensureDir(parts.slice(0, -1).join('/')).children.push(node)
+}
+
+// Flush tree state to Vue; expand any newly appeared root dirs
+function _flushTree() {
+  treeItems.value = _roots.slice()
+  const s = new Set(expandedPaths.value)
+  let changed = false
+  for (const n of _roots) {
+    if (n.is_dir && !s.has(n.path)) { s.add(n.path); changed = true }
+  }
+  if (changed) expandedPaths.value = s
+}
 
 // ── password ─────────────────────────────────────────────────────────────────
 const passwordRequired = ref(false)
@@ -77,6 +116,52 @@ function startTreeResize(e) {
   window.addEventListener('mouseup', onUp)
 }
 
+// ── virtual tree ──────────────────────────────────────────────────────────────
+// expandedPaths tracks which directory paths are open
+const expandedPaths = ref(new Set())
+
+// flatRows: all visible rows; rebuilt only when tree or expansion changes
+const flatRows = computed(() => {
+  const rows = []
+  function walk(nodes, depth) {
+    for (const node of nodes) {
+      rows.push({ item: node, depth })
+      if (node.is_dir && node.children?.length && expandedPaths.value.has(node.path)) {
+        walk(node.children, depth + 1)
+      }
+    }
+  }
+  walk(treeItems.value, 0)
+  return rows
+})
+
+
+function toggleExpand(item) {
+  const s = new Set(expandedPaths.value)
+  if (s.has(item.path)) s.delete(item.path)
+  else s.add(item.path)
+  expandedPaths.value = s
+}
+
+function isDirIndeterminate(item) {
+  if (!item.is_dir || checkedPaths.value.has(item.path)) return false
+  for (const p of checkedPaths.value) {
+    if (p.startsWith(item.path)) return true
+  }
+  return false
+}
+
+function fileIcon(name) {
+  const ext = (name.split('.').pop() || '').toLowerCase()
+  if (['jpg','jpeg','png','gif','webp','bmp','svg','tiff','tif'].includes(ext)) return 'mdi-image-outline'
+  if (['mp4','webm','avi','mov','mkv'].includes(ext))  return 'mdi-play-circle-outline'
+  if (['mp3','wav','flac','ogg','m4a'].includes(ext))  return 'mdi-music-note'
+  if (['json','jsonl'].includes(ext))                  return 'mdi-code-json'
+  if (['pdf'].includes(ext))                           return 'mdi-file-pdf-box'
+  if (['zip','tar','gz','bz2','xz','7z'].includes(ext))return 'mdi-archive-outline'
+  return 'mdi-file-outline'
+}
+
 // ── selection (partial extract) ──────────────────────────────────────────────
 const checkedPaths = ref(new Set())
 
@@ -84,18 +169,23 @@ const extractEntries = computed(() =>
   checkedPaths.value.size > 0 ? [...checkedPaths.value] : null
 )
 
-function getAllPaths(node) {
-  const out = [node.path]
-  if (node.children) for (const c of node.children) out.push(...getAllPaths(c))
-  return out
-}
-
+// Use path-prefix traversal instead of recursive tree walk — O(checked) not O(tree)
 function onToggle(item) {
   const s = new Set(checkedPaths.value)
   if (s.has(item.path)) {
-    for (const p of getAllPaths(item)) s.delete(p)
+    s.delete(item.path)
+    if (item.is_dir) {
+      // dir paths end with '/', so startsWith covers all descendants
+      for (const p of [...s]) {
+        if (p.startsWith(item.path)) s.delete(p)
+      }
+    }
   } else {
-    if (item.is_dir) for (const p of getAllPaths(item)) s.delete(p)
+    if (item.is_dir) {
+      for (const p of [...s]) {
+        if (p.startsWith(item.path)) s.delete(p)
+      }
+    }
     s.add(item.path)
   }
   checkedPaths.value = s
@@ -128,36 +218,6 @@ function isImage(e)  { return IMAGE_EXTS.has(entryExt(e.name)) }
 function isText(e)   { return TEXT_EXTS.has(entryExt(e.name)) }
 function isJson(e)   { return JSON_EXTS.has(entryExt(e.name)) }
 
-// ── build tree ────────────────────────────────────────────────────────────────
-function buildTree(entries) {
-  const map = {}
-  const roots = []
-
-  function ensureDir(normPath) {
-    if (map[normPath]) return map[normPath]
-    const parts = normPath.split('/')
-    const name  = parts[parts.length - 1]
-    const node  = { name, path: normPath + '/', is_dir: true, size: 0,
-                    compressed_size: 0, modified: null, children: [] }
-    map[normPath] = node
-    if (parts.length === 1) roots.push(node)
-    else ensureDir(parts.slice(0, -1).join('/')).children.push(node)
-    return node
-  }
-
-  const sorted = [...entries].sort((a, b) => a.path.length - b.path.length || a.path.localeCompare(b.path))
-  for (const entry of sorted) {
-    const normPath = entry.path.replace(/\/$/, '')
-    if (map[normPath]) { Object.assign(map[normPath], entry, { children: map[normPath].children }); continue }
-    const parts = normPath.split('/')
-    const node  = { ...entry, children: entry.is_dir ? [] : null }
-    map[normPath] = node
-    if (parts.length === 1) roots.push(node)
-    else ensureDir(parts.slice(0, -1).join('/')).children.push(node)
-  }
-  return roots
-}
-
 // ── open ──────────────────────────────────────────────────────────────────────
 watch(() => props.file, async (f) => {
   if (!f) return
@@ -169,16 +229,7 @@ watch(() => props.file, async (f) => {
 }, { immediate: true })
 
 function _cancelScan() {
-  if (_scanAbort)    { _scanAbort.abort(); _scanAbort = null }
-  if (_rebuildTimer) { clearTimeout(_rebuildTimer); _rebuildTimer = null }
-}
-
-function _scheduleRebuild() {
-  if (_rebuildTimer) return
-  _rebuildTimer = setTimeout(() => {
-    _rebuildTimer = null
-    treeItems.value = buildTree(_allEntriesAcc)
-  }, 800)
+  if (_scanAbort) { _scanAbort.abort(); _scanAbort = null }
 }
 
 async function loadArchive() {
@@ -192,9 +243,12 @@ async function loadArchive() {
   scanning.value         = false
   totalUncompressed.value = 0
   totalCompressed.value   = 0
-  _allEntriesAcc = []
-  _totalUncomp   = 0
-  _totalComp     = 0
+  expandedPaths.value = new Set()
+  _treeMap    = {}
+  _roots      = []
+  _batchCount = 0
+  _totalUncomp = 0
+  _totalComp   = 0
 
   loading.value = true
   _scanAbort = new AbortController()
@@ -224,7 +278,6 @@ async function loadArchive() {
       const parts = buf.split('\n\n')
       buf = parts.pop()
 
-      let hasNew = false
       for (const part of parts) {
         const line = part.trim()
         if (!line.startsWith('data:')) continue
@@ -236,15 +289,14 @@ async function loadArchive() {
           if (data.encrypted && !password.value) passwordRequired.value = true
           scanning.value = true
         } else if (data.type === 'entry') {
-          _allEntriesAcc.push(data)
+          _addEntry(data)
           if (!data.is_dir) { _totalUncomp += data.size || 0; _totalComp += data.compressed_size || 0 }
           if (archiveInfo.value) archiveInfo.value.entry_count++
-          hasNew = true
+          if (++_batchCount >= BATCH_SIZE) { _batchCount = 0; _flushTree() }
         } else if (data.type === 'done') {
-          _cancelScan()
           if (archiveInfo.value) archiveInfo.value.entry_count = data.entry_count
           scanning.value = false
-          treeItems.value = buildTree(_allEntriesAcc)
+          _flushTree()
           totalUncompressed.value = _totalUncomp
           totalCompressed.value   = _totalComp
         } else if (data.type === 'error') {
@@ -259,8 +311,6 @@ async function loadArchive() {
           return
         }
       }
-
-      if (hasNew) _scheduleRebuild()
     }
   } catch (e) {
     if (e.name !== 'AbortError') error.value = e.message
@@ -441,19 +491,40 @@ onUnmounted(() => _cancelScan())
           </div>
           <v-divider />
           <div class="archive-tree-scroll">
-            <div class="archive-tree-inner">
-              <ArchiveTreeNode
-                v-for="item in treeItems"
-                :key="item.path"
-                :item="item"
-                :random-access="archiveInfo.random_access"
-                :selected-path="selectedEntry?.path"
-                :depth="0"
-                :checked-paths="checkedPaths"
-                @select="selectEntry"
-                @toggle="onToggle"
-              />
-            </div>
+            <v-virtual-scroll :items="flatRows" :item-height="32" style="height:100%">
+              <template #default="{ item: row }">
+                <v-list-item
+                  :style="{ paddingLeft: (row.depth * 16 + 8) + 'px' }"
+                  density="compact"
+                  :class="['archive-tree-item', { 'archive-tree-item--selected': !row.item.is_dir && row.item.path === selectedEntry?.path }]"
+                  @click="row.item.is_dir ? toggleExpand(row.item) : (archiveInfo?.random_access && selectEntry(row.item))"
+                >
+                  <template #prepend>
+                    <v-checkbox-btn
+                      :model-value="checkedPaths.has(row.item.path)"
+                      :indeterminate="isDirIndeterminate(row.item)"
+                      density="compact"
+                      class="cb"
+                      @click.stop="onToggle(row.item)"
+                    />
+                    <v-icon size="16" :color="row.item.is_dir ? 'primary' : undefined" class="mr-1">
+                      {{ row.item.is_dir
+                        ? (expandedPaths.has(row.item.path) ? 'mdi-folder-open' : 'mdi-folder')
+                        : fileIcon(row.item.name) }}
+                    </v-icon>
+                  </template>
+                  <v-list-item-title class="text-body-2">{{ row.item.name || row.item.path }}</v-list-item-title>
+                  <template #append>
+                    <span v-if="!row.item.is_dir" class="text-caption text-medium-emphasis">
+                      {{ ft.formatBytes(row.item.size) }}
+                    </span>
+                    <v-icon v-if="row.item.is_dir" size="14" class="text-medium-emphasis">
+                      {{ expandedPaths.has(row.item.path) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
+                    </v-icon>
+                  </template>
+                </v-list-item>
+              </template>
+            </v-virtual-scroll>
           </div>
           <v-divider />
           <!-- Drag resize handle -->
@@ -594,12 +665,8 @@ onUnmounted(() => _cancelScan())
 }
 .archive-tree-scroll {
   flex: 1;
-  overflow: auto;
-  padding: 4px;
-}
-.archive-tree-inner {
-  width: max-content;
-  min-width: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 .archive-tree-resizer {
   position: absolute;
@@ -627,6 +694,20 @@ onUnmounted(() => _cancelScan())
   align-items: center;
   justify-content: center;
 }
+
+/* ── Tree list items ──────────────────────────────────────────────────────── */
+.archive-tree-item {
+  cursor: pointer;
+  border-radius: 4px;
+  min-height: 32px !important;
+}
+.archive-tree-item:hover {
+  background: rgba(var(--v-theme-on-surface), 0.06);
+}
+.archive-tree-item--selected {
+  background: rgba(var(--v-theme-primary), 0.12) !important;
+}
+.cb { margin-left: -6px; margin-right: 2px; }
 
 /* ── Entry content ────────────────────────────────────────────────────────── */
 .archive-entry-content {
