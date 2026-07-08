@@ -196,7 +196,7 @@ const LANG_MAP = {
           {{ saveError }}
         </v-alert>
         <div v-if="previewMode" class="md-preview-scroll">
-          <MarkdownRenderer :content="editText" :isDark="isDark" />
+          <MarkdownRenderer :content="editText" :isDark="isDark" :file-path="props.file?.path || ''" />
         </div>
         <Codemirror
           v-else

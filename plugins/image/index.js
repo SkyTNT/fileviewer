@@ -70,7 +70,7 @@ export async function setup(ctx) {
     key: 'image-editor',
     icon: 'mdi-image-edit-outline',
     priority: 49,
-    match: (target) => !Array.isArray(target) && isImage(target) && !target.path?.startsWith('http'),
+    match: (target) => !Array.isArray(target) && isImage(target) && !/^(data:|blob:)/i.test(target.path || ''),
     open(target) {
       const id = `app:image-editor:${target.path}`
       winMgr.open({

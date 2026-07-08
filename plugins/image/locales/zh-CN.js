@@ -30,6 +30,7 @@ export default {
     close: '关闭',
     savedSuccess: '已保存 {name}',
     savedError: '保存失败：{error}',
+    remoteReadOnly: '这是网络图片，无法保存到本地，请使用"导出"',
     filename: '文件名',
     format: '格式',
     quality: '质量',

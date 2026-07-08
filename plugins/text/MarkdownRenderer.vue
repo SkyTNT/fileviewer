@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, inject } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { Codemirror } from 'vue-codemirror'
@@ -10,9 +10,68 @@ import { oneDark } from '@codemirror/theme-one-dark'
 import { getLangByName } from './codeMirrorLangs.js'
 
 const props = defineProps({
-  content: { type: String, default: '' },
-  isDark:  { type: Boolean, default: false },
+  content:  { type: String, default: '' },
+  isDark:   { type: Boolean, default: false },
+  filePath: { type: String, default: '' },
 })
+
+const services    = inject('services')
+const appRegistry = services?.get('app.registry')
+
+// Directory (app path scheme, e.g. "root_slug/sub/dir") containing the markdown file,
+// used to resolve relative image sources.
+const baseDir = computed(() => {
+  const idx = props.filePath.lastIndexOf('/')
+  return idx === -1 ? '' : props.filePath.slice(0, idx)
+})
+
+function joinAppPath(dir, rel) {
+  const stack = dir ? dir.split('/').filter(Boolean) : []
+  for (const part of rel.split('/')) {
+    if (part === '' || part === '.') continue
+    if (part === '..') stack.pop()
+    else stack.push(part)
+  }
+  return stack.join('/')
+}
+
+// Resolve a markdown image src into:
+//  - url: what to put in the rendered <img src> (routed through the backend for local files)
+//  - openTarget: a { path, name } entry openable via app.registry.open(), or null if src is empty
+function resolveImage(src) {
+  if (!src) return { url: src, openTarget: null }
+  if (/^(data:|blob:)/i.test(src)) return { url: src, openTarget: { path: src, name: 'image' } }
+  if (/^https?:/i.test(src)) {
+    const name = src.split('/').pop()?.split('?')[0] || 'image'
+    return { url: src, openTarget: { path: src, name } }
+  }
+  let decoded = src
+  try { decoded = decodeURIComponent(src) } catch { /* not encoded, use as-is */ }
+  const appPath = decoded.startsWith('/') ? decoded : joinAppPath(baseDir.value, decoded)
+  const name = appPath.split('/').pop() || 'image'
+  return { url: `/api/images/full?path=${encodeURIComponent(appPath)}`, openTarget: { path: appPath, name } }
+}
+
+function rewriteImageSrcs(html) {
+  if (!html.includes('<img')) return html
+  const container = document.createElement('div')
+  container.innerHTML = html
+  container.querySelectorAll('img[src]').forEach((img) => {
+    const { url, openTarget } = resolveImage(img.getAttribute('src'))
+    img.setAttribute('src', url)
+    if (openTarget) {
+      img.dataset.openPath = openTarget.path
+      img.dataset.openName = openTarget.name
+    }
+  })
+  return container.innerHTML
+}
+
+function onContentClick(e) {
+  const img = e.target.closest?.('img[data-open-path]')
+  if (!img) return
+  appRegistry?.open({ path: img.dataset.openPath, name: img.dataset.openName }, { app: 'image' })
+}
 
 // Per-block copy state: index → 'idle' | 'copied'
 const copyState = ref({})
@@ -75,7 +134,7 @@ function getCodeExtensions(lang) {
 // Render a single non-code token to sanitised HTML
 function renderToken(token) {
   try {
-    return DOMPurify.sanitize(marked.parser([token]))
+    return rewriteImageSrcs(DOMPurify.sanitize(marked.parser([token])))
   } catch {
     return ''
   }
@@ -83,7 +142,7 @@ function renderToken(token) {
 </script>
 
 <template>
-  <div class="md-body">
+  <div class="md-body" @click="onContentClick">
     <template v-for="(token, i) in tokens" :key="i">
 
       <!-- Fenced code block → CodeMirror (line numbers + syntax highlight) -->
@@ -201,4 +260,5 @@ function renderToken(token) {
 :deep(.md-token th)  { background: rgba(128,128,128,.1); font-weight: 600; }
 :deep(.md-token tr:nth-child(even)) { background: rgba(128,128,128,.04); }
 :deep(.md-token img) { max-width: 100%; border-radius: 4px; }
+:deep(.md-token img[data-open-path]) { cursor: pointer; }
 </style>

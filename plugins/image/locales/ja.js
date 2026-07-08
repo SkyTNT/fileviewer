@@ -30,6 +30,7 @@ export default {
     close: '閉じる',
     savedSuccess: '{name} を保存しました',
     savedError: '保存に失敗しました：{error}',
+    remoteReadOnly: 'リモート画像です。ローカルには保存できません。「エクスポート」をご利用ください',
     filename: 'ファイル名',
     format: 'フォーマット',
     quality: '品質',

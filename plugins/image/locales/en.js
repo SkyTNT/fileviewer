@@ -32,6 +32,7 @@ export default {
     close: 'Close',
     savedSuccess: 'Saved {name}',
     savedError: 'Save failed: {error}',
+    remoteReadOnly: 'Remote image — use Export to save your changes',
     filename: 'Filename',
     format: 'Format',
     quality: 'Quality',

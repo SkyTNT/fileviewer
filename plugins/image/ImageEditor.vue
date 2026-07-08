@@ -44,6 +44,9 @@ const historyAPI = createHistory(50)
 const { store: history, push: pushHistory, undo, redo } = historyAPI
 const canUndo = computed(() => history.currentIndex > 0)
 const canRedo = computed(() => history.currentIndex < history.steps.length - 1)
+// Remote (http/https) sources have no local file to overwrite — Save/Save As are
+// server-side writes, so they're disabled; Export (client-side download) still works.
+const isRemoteSource = computed(() => /^https?:/i.test(state.filePath || ''))
 
 function doUndo() { undo(state); invalidate() }
 function doRedo() { redo(state); invalidate() }
@@ -205,6 +208,11 @@ const saveError = ref('')
 
 async function save() {
   if (!state.isDirty) return
+  if (isRemoteSource.value) {
+    saveError.value = t('editor.remoteReadOnly')
+    services?.get('notification.show')?.error(saveError.value)
+    return
+  }
   saving.value = true; saveError.value = ''
   try {
     const ext = state.fileName.split('.').pop()?.toLowerCase()
@@ -250,7 +258,7 @@ function flattenAll() {
 
 const actions = {
   save,
-  saveAs: () => { showSaveAs.value = true },
+  saveAs: () => { if (!isRemoteSource.value) showSaveAs.value = true },
   exportDialog: () => { showExport.value = true },
   fitToWindow: () => viewport.fitToWindow(),
   zoomIn: () => { state.zoom = Math.min(32, state.zoom * 1.25) },
@@ -425,10 +433,18 @@ const cursorInfo = computed(() =>
       <div class="menu-spacer" />
 
       <!-- File actions -->
-      <v-btn size="small" variant="text" :loading="saving" @click="save" :disabled="!state.isDirty" class="mr-1">
+      <v-btn
+        size="small" variant="text" :loading="saving" @click="save"
+        :disabled="!state.isDirty || isRemoteSource" class="mr-1"
+        :title="isRemoteSource ? t('editor.remoteReadOnly') : ''"
+      >
         <v-icon start>mdi-content-save</v-icon>{{ t('editor.save') }}
       </v-btn>
-      <v-btn size="small" variant="text" @click="showSaveAs = true" class="mr-1">
+      <v-btn
+        size="small" variant="text" @click="showSaveAs = true"
+        :disabled="isRemoteSource" class="mr-1"
+        :title="isRemoteSource ? t('editor.remoteReadOnly') : ''"
+      >
         <v-icon start>mdi-content-save-edit</v-icon>{{ t('editor.saveAs') }}
       </v-btn>
       <v-btn size="small" variant="tonal" @click="showExport = true">

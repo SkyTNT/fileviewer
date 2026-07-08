@@ -30,6 +30,7 @@ export default {
     close: '關閉',
     savedSuccess: '已儲存 {name}',
     savedError: '儲存失敗：{error}',
+    remoteReadOnly: '這是網路圖片，無法儲存到本機，請使用「匯出」',
     filename: '檔案名稱',
     format: '格式',
     quality: '品質',

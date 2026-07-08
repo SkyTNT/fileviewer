@@ -261,7 +261,7 @@ onUnmounted(() => eventBus?.off('keyboard:keydown', onKey))
         <v-icon>mdi-magnify-minus-outline</v-icon>
       </v-btn>
       <v-btn
-        v-if="!props.file?.path?.startsWith('http')"
+        v-if="!/^(data:|blob:)/i.test(props.file?.path || '')"
         icon size="small" variant="tonal" class="ml-2"
         @click.stop="openEditor" :title="t('action.editImage')"
       >
