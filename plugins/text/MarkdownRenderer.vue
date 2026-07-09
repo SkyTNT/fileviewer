@@ -15,6 +15,25 @@ const props = defineProps({
   filePath: { type: String, default: '' },
 })
 
+// marked's default GFM `del` rule treats a lone `~text~` as strikethrough
+// (mirrors github.com, which is more lenient than the GFM spec). That misfires
+// on docs using `~` as a range separator (e.g. "0.68~0.83"), so require `~~`.
+marked.use({
+  tokenizer: {
+    del(src) {
+      const match = /^~~(?=[^\s~])((?:\\[\s\S]|[^\\])*?(?:\\[\s\S]|[^\s~\\]))~~(?=[^~]|$)/.exec(src)
+      if (match) {
+        return {
+          type: 'del',
+          raw: match[0],
+          text: match[1],
+          tokens: this.lexer.inlineTokens(match[1]),
+        }
+      }
+    },
+  },
+})
+
 const services    = inject('services')
 const appRegistry = services?.get('app.registry')
 
