@@ -36,8 +36,20 @@ class FileTypeRegistry:
         for file_type, entries in list(self._enrichers.items()):
             self._enrichers[file_type] = [(fn, pid) for fn, pid in entries if pid != plugin_id]
 
-    def get_type(self, ext: str) -> str | None:
-        return self._map.get(ext.lower())
+    def get_type(self, filename_or_extension: str) -> str | None:
+        """Return the registered type for an extension or a complete filename.
+
+        Matching registered extensions by descending length supports compound
+        suffixes (for example, ``.tar.gz``) without making filesystem providers
+        aware of any particular file format.
+        """
+        value = filename_or_extension.lower()
+        if file_type := self._map.get(value):
+            return file_type
+        for extension in sorted(self._map, key=len, reverse=True):
+            if value.endswith(extension):
+                return self._map[extension]
+        return None
 
 
 def register_builtins(services, config_roots_fn) -> None:

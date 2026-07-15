@@ -16,6 +16,8 @@ export default {
       unlock: 'ロック解除',
       extractHere: 'ここに展開',
       extractToSubfolder: 'サブフォルダに展開',
+      extractSelectedHere: '選択した {n} 件をここに展開',
+      extractSelectedToSubfolder: '選択した {n} 件をサブフォルダに展開',
       download: 'ダウンロード',
       clickToView: 'ファイルをクリックして表示',
       noRandomAccess: '順次フォーマット — ファイルを表示するには先に展開してください',

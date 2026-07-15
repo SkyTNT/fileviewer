@@ -21,13 +21,8 @@ _file_type_registry = None
 def _get_file_type(path: Path) -> str:
     if path.is_dir():
         return "directory"
-    name_lower = path.name.lower()
-    for compound in (".tar.gz", ".tar.bz2", ".tar.xz"):
-        if name_lower.endswith(compound):
-            return "archive"
-    ext = path.suffix.lower()
     if _file_type_registry is not None:
-        t = _file_type_registry.get_type(ext)
+        t = _file_type_registry.get_type(path.name)
         if t is not None:
             return t
     return "unknown"

@@ -4,7 +4,16 @@ from pathlib import Path
 
 PLUGIN_ID = "archive"
 
-ARCHIVE_EXTENSIONS = {".zip", ".tar", ".tgz", ".tbz2", ".txz"}
+# Keep this in sync with the formats handled by ``router._ARCHIVE_EXTS``.
+# The file-type registry uses the registered suffix to decide whether to show
+# archive actions, so omitting a compound suffix makes a supported archive
+# impossible to extract from the explorer UI.
+ARCHIVE_EXTENSIONS = {
+    ".zip", ".tar",
+    ".tar.gz", ".tgz",
+    ".tar.bz2", ".tbz2",
+    ".tar.xz", ".txz",
+}
 try:
     import py7zr as _py7zr  # noqa
     ARCHIVE_EXTENSIONS.add(".7z")

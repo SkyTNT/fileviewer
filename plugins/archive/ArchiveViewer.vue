@@ -165,10 +165,6 @@ function fileIcon(name) {
 // ── selection (partial extract) ──────────────────────────────────────────────
 const checkedPaths = ref(new Set())
 
-const extractEntries = computed(() =>
-  checkedPaths.value.size > 0 ? [...checkedPaths.value] : null
-)
-
 // Use path-prefix traversal instead of recursive tree walk — O(checked) not O(tree)
 function onToggle(item) {
   const s = new Set(checkedPaths.value)
@@ -378,11 +374,25 @@ function onImgError() {
 
 // ── extract ───────────────────────────────────────────────────────────────────
 function extractHere() {
-  archiveState.extractDirect(props.file, store.currentPath, password.value || null, extractEntries.value)
+  const entries = [...checkedPaths.value]
+  archiveState.extractDirect(props.file, store.currentPath, password.value || null, entries.length ? entries : null)
 }
 
 function extractToSubfolder() {
-  archiveState.extractToSubfolderDirect(props.file, password.value || null, extractEntries.value)
+  const entries = [...checkedPaths.value]
+  archiveState.extractToSubfolderDirect(props.file, password.value || null, entries.length ? entries : null)
+}
+
+function extractHereLabel() {
+  return checkedPaths.value.size
+    ? t('archive.app.extractSelectedHere', { n: checkedPaths.value.size })
+    : t('archive.app.extractHere')
+}
+
+function extractToSubfolderLabel() {
+  return checkedPaths.value.size
+    ? t('archive.app.extractSelectedToSubfolder', { n: checkedPaths.value.size })
+    : t('archive.app.extractToSubfolder')
 }
 
 // Cancel in-progress scan when component is unmounted
@@ -418,10 +428,10 @@ onUnmounted(() => _cancelScan())
       <v-spacer />
 
       <template v-if="archiveInfo && store.writeMode && !store.isAtHome">
-        <v-btn icon size="small" :title="t('archive.app.extractHere')" @click="extractHere">
+        <v-btn icon size="small" :title="extractHereLabel()" :aria-label="extractHereLabel()" @click="extractHere">
           <v-icon size="18">mdi-archive-arrow-down-outline</v-icon>
         </v-btn>
-        <v-btn icon size="small" class="mr-1" :title="t('archive.app.extractToSubfolder')" @click="extractToSubfolder">
+        <v-btn icon size="small" class="mr-1" :title="extractToSubfolderLabel()" :aria-label="extractToSubfolderLabel()" @click="extractToSubfolder">
           <v-icon size="18">mdi-folder-arrow-down-outline</v-icon>
         </v-btn>
       </template>
@@ -505,7 +515,8 @@ onUnmounted(() => _cancelScan())
                       :indeterminate="isDirIndeterminate(row.item)"
                       density="compact"
                       class="cb"
-                      @click.stop="onToggle(row.item)"
+                      @click.stop
+                      @update:model-value="onToggle(row.item)"
                     />
                     <v-icon size="16" :color="row.item.is_dir ? 'primary' : undefined" class="mr-1">
                       {{ row.item.is_dir

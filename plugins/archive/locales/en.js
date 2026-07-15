@@ -16,6 +16,8 @@ export default {
       unlock: 'Unlock',
       extractHere: 'Extract Here',
       extractToSubfolder: 'Extract to Subfolder',
+      extractSelectedHere: 'Extract {n} selected items here',
+      extractSelectedToSubfolder: 'Extract {n} selected items to subfolder',
       download: 'Download',
       clickToView: 'Click a file to view',
       noRandomAccess: 'Sequential format — extract to view files',

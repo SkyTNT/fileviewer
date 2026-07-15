@@ -76,9 +76,9 @@ export function createArchiveState(explorerState, taskState, winMgr, archiveApi,
     await _doExtract(file, dest)
   }
 
-  async function _checkConflicts(file, dest, password) {
+  async function _checkConflicts(file, dest, password, entries = null) {
     try {
-      const res = await archiveApi.checkConflicts(file.path, dest, password)
+      const res = await archiveApi.checkConflicts(file.path, dest, password, entries)
       if (!res.data.conflicts.length) return 'overwrite'
       return openConflictDialog(res.data.conflicts)
     } catch {
@@ -141,7 +141,7 @@ export function createArchiveState(explorerState, taskState, winMgr, archiveApi,
   }
 
   async function extractDirect(file, dest, password, entries) {
-    const strategy = await _checkConflicts(file, dest, password)
+    const strategy = await _checkConflicts(file, dest, password, entries)
     if (strategy === null) return
     _runExtract(file, dest, password, strategy, entries)
   }

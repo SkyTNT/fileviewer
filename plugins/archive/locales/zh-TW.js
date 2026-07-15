@@ -16,6 +16,8 @@ export default {
       unlock: '解鎖',
       extractHere: '解壓縮到此處',
       extractToSubfolder: '解壓縮到子資料夾',
+      extractSelectedHere: '解壓縮所選的 {n} 個項目到此處',
+      extractSelectedToSubfolder: '解壓縮所選的 {n} 個項目到子資料夾',
       download: '下載',
       clickToView: '點擊檔案以檢視',
       noRandomAccess: '循序格式 — 請先解壓縮再檢視',
