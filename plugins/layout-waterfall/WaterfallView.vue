@@ -214,6 +214,20 @@ function loadMore() {
   store.goToPage(store.page + 1)
 }
 
+// On large screens the sentinel stays visible the entire time, so the
+// IntersectionObserver never fires a second time after page 1 loads.
+// Re-check the sentinel whenever a fetch completes and cascade until the
+// sentinel actually leaves the viewport or all items are loaded.
+watch(() => store.loading, (isLoading) => {
+  if (isLoading) return
+  nextTick(() => {
+    const sentinel = sentinelRef.value
+    if (!sentinel) return
+    const rect = sentinel.getBoundingClientRect()
+    if (rect.top < window.innerHeight + 400) loadMore()
+  })
+})
+
 // ── Observers ────────────────────────────────────────────────────────────────
 let scrollObs   = null
 let containerRO = null
