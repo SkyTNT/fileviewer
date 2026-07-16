@@ -16,6 +16,8 @@ const { t } = useI18n()
 const displayEntries = ref([])
 watch(displayEntries, (v) => store.setDisplayedEntries(v), { immediate: true })
 
+const isActive = ref(true)
+
 const { menuOpen, menuX, menuY, showMenu, onBgContextMenu } = useContextMenu()
 
 async function refreshAll() {
@@ -219,7 +221,7 @@ function loadMore() {
 // Re-check the sentinel whenever a fetch completes and cascade until the
 // sentinel actually leaves the viewport or all items are loaded.
 watch(() => store.loading, (isLoading) => {
-  if (isLoading) return
+  if (isLoading || !isActive.value) return
   nextTick(() => {
     const sentinel = sentinelRef.value
     if (!sentinel) return
@@ -281,6 +283,7 @@ onMounted(() => {
 })
 
 onActivated(() => {
+  isActive.value = true
   store.setRefreshHook(refreshAll)
   window.addEventListener('scroll', onScrollOrResize, { passive: true, capture: true })
   window.addEventListener('resize', onScrollOrResize, { passive: true })
@@ -291,6 +294,7 @@ onActivated(() => {
 })
 
 onDeactivated(() => {
+  isActive.value = false
   store.setRefreshHook(null)
   window.removeEventListener('scroll', onScrollOrResize, { capture: true })
   window.removeEventListener('resize', onScrollOrResize)
