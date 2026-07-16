@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fileviewer"
-version = "2.0.4"
+version = "2.0.5"
 description = "Web-based file browser and viewer with support for images, video, audio, archives, tabular data, MIDI, hex, and more"
 readme = "README.md"
 license = { text = "Apache-2.0" }
