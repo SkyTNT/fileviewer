@@ -113,7 +113,7 @@ pnpm dev
 构建生产版本：
 
 ```bash
-pnpm build      # 输出到 static/
+pnpm build      # 输出到 fileviewer/static/
 pip install .
 ```
 

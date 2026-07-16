@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 from PIL import Image
 
-from config import validate_path
+from fileviewer.config import validate_path
 
 PLUGIN_ID = "media"
 router = APIRouter()

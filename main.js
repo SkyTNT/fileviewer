@@ -5,7 +5,7 @@ import { createI18n } from 'vue-i18n'
 import '@mdi/font/css/materialdesignicons.css'
 import 'vuetify/styles'
 import App from './App.vue'
-import { Kernel } from './kernel/index.js'
+import { Kernel } from './fileviewer/kernel/index.js'
 
 const SUPPORTED = ['en', 'zh-CN', 'zh-TW', 'ja']
 function detectLocale() {
@@ -55,7 +55,7 @@ vueApp.provide('services', kernel.services)
 vueApp.provide('events', kernel.events)
 vueApp.provide('slot.host', kernel.services.get('slot.host'))
 
-const pluginModules = import.meta.glob('./plugins/*/index.js', { eager: false })
+const pluginModules = import.meta.glob('./fileviewer/plugins/*/index.js', { eager: false })
 await kernel.pluginManager.loadAll(pluginModules)
 
 vueApp.mount('#app')

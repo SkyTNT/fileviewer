@@ -9,11 +9,11 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from config import get_roots, get_disk_usage
-from kernel.builtins import register_builtins
-from kernel.event_bus import EventBus
-from kernel.plugin_manager import PluginManager
-from kernel.service_registry import ServiceRegistry, ServiceNotFoundError
+from fileviewer.config import get_roots, get_disk_usage
+from fileviewer.kernel.builtins import register_builtins
+from fileviewer.kernel.event_bus import EventBus
+from fileviewer.kernel.plugin_manager import PluginManager
+from fileviewer.kernel.service_registry import ServiceRegistry, ServiceNotFoundError
 
 STATIC_DIR = Path(__file__).parent / "static"
 PLUGIN_DIR = Path(__file__).parent / "plugins"

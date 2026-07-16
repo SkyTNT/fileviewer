@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "postbuild": "node -e \"require('fs').writeFileSync('static/__init__.py', '')\"",
+    "postbuild": "node -e \"require('fs').writeFileSync('fileviewer/static/__init__.py', '')\"",
     "preview": "vite preview"
   },
   "dependencies": {

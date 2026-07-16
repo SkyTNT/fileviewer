@@ -7,10 +7,10 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from kernel.context import PluginContext, _WrappedApp
-from kernel.event_bus import EventBus
-from kernel.manifest import PluginMeta, load_manifest
-from kernel.service_registry import ServiceRegistry
+from fileviewer.kernel.context import PluginContext, _WrappedApp
+from fileviewer.kernel.event_bus import EventBus
+from fileviewer.kernel.manifest import PluginMeta, load_manifest
+from fileviewer.kernel.service_registry import ServiceRegistry
 
 
 class PluginManager:
@@ -56,9 +56,9 @@ class PluginManager:
 
     def _load_module(self, meta: PluginMeta):
         plugin_py = meta.dir / "plugin.py"
-        spec = importlib.util.spec_from_file_location(f"plugins.{meta.id}", plugin_py)
+        spec = importlib.util.spec_from_file_location(f"fileviewer.plugins.{meta.id}", plugin_py)
         module = importlib.util.module_from_spec(spec)
-        sys.modules[f"plugins.{meta.id}"] = module
+        sys.modules[f"fileviewer.plugins.{meta.id}"] = module
         spec.loader.exec_module(module)
         return module
 

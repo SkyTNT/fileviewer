@@ -8,7 +8,7 @@ from typing import Optional
 import polars as pl
 from fastapi import APIRouter, Query, HTTPException
 
-from config import validate_path, validate_abs_path
+from fileviewer.config import validate_path, validate_abs_path
 
 PLUGIN_ID = "dataframe"
 router = APIRouter()

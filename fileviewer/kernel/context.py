@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from fastapi import FastAPI
-from kernel.service_registry import ServiceRegistry
-from kernel.event_bus import EventBus
+from fileviewer.kernel.service_registry import ServiceRegistry
+from fileviewer.kernel.event_bus import EventBus
 import logging
 
 

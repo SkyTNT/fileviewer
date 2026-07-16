@@ -11,7 +11,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
-from config import validate_path, require_write
+from fileviewer.config import validate_path, require_write
 
 router = APIRouter()
 

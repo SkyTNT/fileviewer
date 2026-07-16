@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel
-from config import validate_path, require_write
+from fileviewer.config import validate_path, require_write
 
 PLUGIN_ID = "text"
 router = APIRouter()

@@ -13,7 +13,7 @@ Design principle: **kernel minimized, domain cohesion, clear plugin↔plugin and
 ```bash
 pnpm install        # install deps
 pnpm run dev        # Vite dev server (proxies /api → localhost:8001)
-pnpm run build      # build to static/
+pnpm run build      # build to fileviewer/static/
 ```
 
 **Backend:**
@@ -29,9 +29,11 @@ fileviewer /path --port 8001 --write  # run the app
 
 ### Backend (Python)
 
-Entry points: `cli.py` (arg parsing, sets env vars, launches uvicorn) → `server.py` (FastAPI app with lifespan startup).
+Entry points: `fileviewer/cli.py` (arg parsing, sets env vars, launches uvicorn) → `fileviewer/server.py` (FastAPI app with lifespan startup).
 
-On startup, `server.py` initializes a **service registry** and **event bus**, then the **plugin manager** loads all `plugins/*/plugin.py` files. Plugins are topologically sorted by declared `requires`/`provides` in their `plugin.toml`. Each plugin registers FastAPI routes and services.
+On startup, `server.py` initializes a **service registry** and **event bus**, then the **plugin manager** loads all `fileviewer/plugins/*/plugin.py` files. Plugins are topologically sorted by declared `requires`/`provides` in their `plugin.toml`. Each plugin registers FastAPI routes and services.
+
+All backend and plugin Python packages live under the top-level `fileviewer/` package (importable as `fileviewer.kernel`, `fileviewer.plugins.*`, `fileviewer.config`, etc.) so that `pip install` doesn't scatter generically-named top-level modules (`kernel`, `config`, `plugins`) into `site-packages`.
 
 Key env vars (set by CLI args):
 - `FILE_VIEWER_ROOTS` — `"path1|name1;path2|name2"`
@@ -54,7 +56,7 @@ i18n: vue-i18n, supports `en`, `zh-CN`, `zh-TW`, `ja`. Plugins extend messages v
 
 ### Plugin Structure
 
-Every plugin lives in `plugins/<name>/` with this layout:
+Every plugin lives in `fileviewer/plugins/<name>/` with this layout:
 ```
 plugin.toml     # id, version, enabled, provides[], requires[]
 plugin.py       # backend: FastAPI routes + service registrations
@@ -68,4 +70,4 @@ Frontend-only plugins: `bookmarks` (saved directories, localStorage), `explorer`
 
 ### Build Output
 
-`pnpm run build` outputs to `static/` with Vite-chunked JS (`vuetify.js`, `codemirror.js`, `vendor.js`, `main.js`) + hash-based filenames. The FastAPI app serves `static/` as static files.
+`pnpm run build` outputs to `fileviewer/static/` with Vite-chunked JS (`vuetify.js`, `codemirror.js`, `vendor.js`, `main.js`) + hash-based filenames. The FastAPI app serves `fileviewer/static/` as static files.

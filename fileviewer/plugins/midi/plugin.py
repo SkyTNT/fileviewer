@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, Query, HTTPException, Depends
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
-from config import validate_path, require_write
+from fileviewer.config import validate_path, require_write
 
 PLUGIN_ID = "midi"
 router = APIRouter()

@@ -115,7 +115,7 @@ pnpm dev
 Build for production:
 
 ```bash
-pnpm build      # outputs to static/
+pnpm build      # outputs to fileviewer/static/
 pip install .
 ```
 

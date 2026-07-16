@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import APIRouter, Query, HTTPException, Depends, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
-from config import parse_path, build_entry_path, get_roots, validate_path
+from fileviewer.config import parse_path, build_entry_path, get_roots, validate_path
 
 PLUGIN_ID = "fs_local"
 

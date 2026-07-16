@@ -59,7 +59,7 @@ dependencies = [
 archive = ["py7zr"]
 
 [project.scripts]
-fileviewer = "cli:main"
+fileviewer = "fileviewer.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/SkyTNT/fileviewer"
@@ -68,12 +68,9 @@ Issues = "https://github.com/SkyTNT/fileviewer/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["kernel*", "plugins*", "static*"]
+include = ["fileviewer*"]
 
 [tool.setuptools.package-data]
-static = ["**/*"]
+"fileviewer.static" = ["**/*"]
 "*" = ["*.toml"]
-"plugins.midi" = ["soundfonts/*"]
-
-[tool.setuptools]
-py-modules = ["cli", "server", "config"]
+"fileviewer.plugins.midi" = ["soundfonts/*"]

@@ -47,7 +47,7 @@ export default defineConfig({
     preloadAllChunks(),
   ],
   build: {
-    outDir: 'static',
+    outDir: 'fileviewer/static',
     emptyOutDir: true,
     target: 'esnext',
     rollupOptions: {

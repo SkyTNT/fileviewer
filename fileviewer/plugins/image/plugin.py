@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response, FileResponse
 from PIL import Image
 
-from config import validate_path, validate_abs_path
+from fileviewer.config import validate_path, validate_abs_path
 
 PLUGIN_ID = "image"
 
@@ -266,7 +266,7 @@ async def get_psd_layers(path: str = Query(...)):
 
 @router.post("/save")
 async def save_image(request: Request, path: str = Query(...)):
-    from config import require_write
+    from fileviewer.config import require_write
     require_write()
     file_path = _resolve_local_path(path)
     if file_path is None:
@@ -289,7 +289,7 @@ async def save_image(request: Request, path: str = Query(...)):
 
 @router.post("/save-as")
 async def save_image_as(request: Request, parent: str = Query(...), filename: str = Query(...)):
-    from config import require_write, parse_path, build_entry_path
+    from fileviewer.config import require_write, parse_path, build_entry_path
     require_write()
     abs_dir, slug, root = parse_path(parent)
     if not abs_dir.is_dir():

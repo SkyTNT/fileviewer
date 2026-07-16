@@ -27,11 +27,11 @@ def _load_router():
     global _router_module
     if _router_module is None:
         spec = importlib.util.spec_from_file_location(
-            "plugins.archive._router",
+            "fileviewer.plugins.archive._router",
             Path(__file__).parent / "router.py"
         )
         mod = importlib.util.module_from_spec(spec)
-        sys.modules["plugins.archive._router"] = mod
+        sys.modules["fileviewer.plugins.archive._router"] = mod
         spec.loader.exec_module(mod)
         _router_module = mod
     return _router_module

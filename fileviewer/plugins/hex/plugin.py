@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Query, HTTPException
-from config import validate_path
+from fileviewer.config import validate_path
 
 PLUGIN_ID = "hex"
 router = APIRouter()

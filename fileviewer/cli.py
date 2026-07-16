@@ -44,7 +44,7 @@ def main():
         threading.Thread(target=_open, daemon=True).start()
 
     import uvicorn
-    uvicorn.run("server:app", host=args.host, port=args.port, reload=False)
+    uvicorn.run("fileviewer.server:app", host=args.host, port=args.port, reload=False)
 
 
 if __name__ == "__main__":
