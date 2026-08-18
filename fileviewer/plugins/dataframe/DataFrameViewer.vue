@@ -212,21 +212,38 @@ function openRow(row) {
   })
 }
 
+const fileDir = computed(() => {
+  const parts = props.file.path.split('/')
+  parts.pop()
+  return parts.join('/')
+})
+
+function isAbsolutePath(v) {
+  return v.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(v) || v.startsWith('\\\\')
+}
+
+function resolveImgPath(value) {
+  if (!value) return value
+  if (value.startsWith('http://') || value.startsWith('https://')) return value
+  if (isAbsolutePath(value)) return value
+  return fileDir.value ? `${fileDir.value}/${value}` : value
+}
+
 const pageImagePool = computed(() => {
   const seen = new Set()
   const pool = []
   for (const row of rows.value) {
     for (const col of Object.keys(imageCols.value)) {
       const v = row[col]
-      if (v && !seen.has(v)) { seen.add(v); pool.push({ path: v, name: v }) }
+      if (v && !seen.has(v)) { seen.add(v); pool.push({ path: resolveImgPath(v), name: v }) }
     }
   }
   return pool
 })
 
-function cellThumbUrl(value) { return value ? imagesApi.thumbnailUrl(value, 400) : '' }
+function cellThumbUrl(value) { return value ? imagesApi.thumbnailUrl(resolveImgPath(value), 400) : '' }
 function openImgPreview(value) {
-  if (value) appRegistry?.open({ path: value, name: value }, { app: 'image', imagePool: pageImagePool.value })
+  if (value) appRegistry?.open({ path: resolveImgPath(value), name: value }, { app: 'image', imagePool: pageImagePool.value })
 }
 </script>
 

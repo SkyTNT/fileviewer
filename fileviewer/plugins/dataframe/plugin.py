@@ -131,7 +131,7 @@ async def _is_image_url(url: str) -> bool:
         return False
 
 
-async def _classify_image_col(vals: list[str]) -> str | None:
+async def _classify_image_col(vals: list[str], base_dir: Path) -> str | None:
     path_hits = 0
     url_vals = []
     for v in vals:
@@ -140,6 +140,8 @@ async def _classify_image_col(vals: list[str]) -> str | None:
             url_vals.append(v)
         else:
             p = Path(v)
+            if not p.is_absolute():
+                p = base_dir / p
             if p.suffix.lower() in IMAGE_EXTENSIONS and p.is_file():
                 try:
                     validate_abs_path(str(p))
@@ -162,6 +164,7 @@ async def _classify_image_col(vals: list[str]) -> str | None:
 async def detect_image_cols(path: str = Query(...)):
     file_path = validate_path(path)
     try:
+        base_dir = file_path.parent
         lf = get_lazy_frame(str(file_path))
         schema = lf.collect_schema()
         str_cols = [c for c, t in schema.items() if t == pl.String]
@@ -173,7 +176,7 @@ async def detect_image_cols(path: str = Query(...)):
             vals = [v for v in sample if isinstance(v, str) and v.strip()]
             if not vals:
                 return col, None
-            return col, await _classify_image_col(vals)
+            return col, await _classify_image_col(vals, base_dir)
 
         results = await asyncio.gather(*[classify_col(col) for col in str_cols])
         image_cols = [{"col": col, "kind": kind} for col, kind in results if kind]
