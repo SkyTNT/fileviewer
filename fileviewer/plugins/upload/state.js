@@ -9,22 +9,19 @@ export function createUploadState(explorerState, taskState, winMgr, writeApi, op
     const controller = new AbortController()
     _controllers.set(fileEntry.id, controller)
     try {
-      let offset = 0
       try {
-        const res = await writeApi.uploadStatus(fileEntry.parent, fileEntry.file.name)
+        const res = await writeApi.uploadStatus(fileEntry.parent, fileEntry.file.name, fileEntry.file.size)
         const reported = res.data.offset ?? 0
         if (reported > 0 && reported < fileEntry.file.size) {
-          offset                 = reported
-          fileEntry.resumeOffset = offset
-          fileEntry.sent         = offset
-          fileEntry.progress     = Math.round(offset / fileEntry.file.size * 100)
+          fileEntry.resumeOffset = reported
+          fileEntry.sent         = reported
+          fileEntry.progress     = Math.round(reported / fileEntry.file.size * 100)
         }
       } catch { /* no partial — start fresh */ }
 
       const res = await writeApi.uploadStream(
         fileEntry.parent,
         fileEntry.file,
-        offset,
         fileEntry.onConflict,
         controller.signal,
         (sent, total) => { fileEntry.sent = sent; fileEntry.progress = Math.round(sent / total * 100) },

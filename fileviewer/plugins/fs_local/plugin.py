@@ -4,6 +4,7 @@ import json
 import shutil
 import threading
 import time
+import asyncio
 import concurrent.futures
 from functools import lru_cache
 from pathlib import Path
@@ -487,48 +488,125 @@ def delete_entries(req: BatchDeleteRequest):
     return _sse_response(generate())
 
 
+# Chunks are written to their declared byte offset (not appended), so several
+# in-flight requests for the same upload can land concurrently and out of order.
+# A small sidecar `.fvpart.meta` file tracks which byte ranges have been received;
+# `_upload_lock` only guards that bookkeeping (and the one-time file allocation),
+# never the actual (potentially large, concurrent) chunk writes.
+_upload_lock = asyncio.Lock()
+
+
+def _upload_meta_path(part_path: Path) -> Path:
+    return part_path.parent / (part_path.name + '.meta')
+
+
+def _load_upload_meta(meta_path: Path, total: int) -> dict:
+    if meta_path.exists():
+        try:
+            data = json.loads(meta_path.read_text())
+            if data.get('total') == total:
+                return data
+        except (OSError, ValueError):
+            pass
+    return {'total': total, 'ranges': []}
+
+
+def _save_upload_meta(meta_path: Path, data: dict) -> None:
+    meta_path.write_text(json.dumps(data))
+
+
+def _merge_range(ranges: list, start: int, end: int) -> list:
+    merged = sorted(ranges + [[start, end]])
+    result = []
+    for r in merged:
+        if result and r[0] <= result[-1][1]:
+            result[-1][1] = max(result[-1][1], r[1])
+        else:
+            result.append(list(r))
+    return result
+
+
+def _range_covered(ranges: list, start: int, end: int) -> bool:
+    return any(r[0] <= start and r[1] >= end for r in ranges)
+
+
+def _ranges_total(ranges: list) -> int:
+    return sum(r[1] - r[0] for r in ranges)
+
+
 @write_router.get("/upload-status")
-def upload_status(parent: str = Query(...), filename: str = Query(...)):
+def upload_status(parent: str = Query(...), filename: str = Query(...), total: int = Query(...)):
     dest_dir = validate_path(parent); safe_name = Path(filename).name
     part_path = dest_dir / (safe_name + '.fvpart')
-    return {'offset': part_path.stat().st_size if part_path.exists() else 0}
+    try:
+        if not part_path.exists() or part_path.stat().st_size != total:
+            return {'offset': 0, 'ranges': []}
+    except OSError:
+        # Part file was renamed away (upload just finalized) between the exists() and stat() checks.
+        return {'offset': 0, 'ranges': []}
+    meta = _load_upload_meta(_upload_meta_path(part_path), total)
+    return {'offset': _ranges_total(meta['ranges']), 'ranges': meta['ranges']}
 
 
 @write_router.post("/upload-stream")
 async def upload_stream(
     request: Request,
     parent: str = Query(...), filename: str = Query(...),
-    offset: int = Query(0), total: int = Query(...),
+    offset: int = Query(0), length: int = Query(...), total: int = Query(...),
     on_conflict: str = Query(default='overwrite'),
 ):
     dest_dir = validate_path(parent)
     if not dest_dir.is_dir(): raise HTTPException(status_code=400, detail="Destination is not a directory")
     safe_name = Path(filename).name
     if not safe_name: raise HTTPException(status_code=400, detail="Invalid filename")
-    part_path = dest_dir / (safe_name + '.fvpart'); dest_path = dest_dir / safe_name
-    current = part_path.stat().st_size if part_path.exists() else 0
-    if offset > 0 and offset != current:
-        raise HTTPException(status_code=409, detail=f"Offset mismatch: expected {current}, got {offset}")
+    if offset < 0 or length < 0 or offset + length > total:
+        raise HTTPException(status_code=400, detail="Invalid chunk range")
+
+    part_path = dest_dir / (safe_name + '.fvpart')
+    meta_path = _upload_meta_path(part_path)
+    dest_path = dest_dir / safe_name
+
+    async with _upload_lock:
+        if not part_path.exists() or part_path.stat().st_size != total:
+            with open(part_path, 'wb') as f:
+                f.truncate(total)
+            _save_upload_meta(meta_path, {'total': total, 'ranges': []})
+
     try:
-        mode = 'ab' if offset > 0 else 'wb'
-        with open(part_path, mode) as out:
+        with open(part_path, 'r+b') as out:
+            out.seek(offset)
+            written = 0
             async for chunk in request.stream():
+                if written >= length:
+                    break
+                if written + len(chunk) > length:
+                    chunk = chunk[:length - written]
                 out.write(chunk)
+                written += len(chunk)
     except Exception:
-        return {'ok': True, 'done': False, 'offset': part_path.stat().st_size if part_path.exists() else 0}
-    received = part_path.stat().st_size if part_path.exists() else 0
-    if received < total:
-        return {'ok': True, 'done': False, 'offset': received}
-    if dest_path.exists():
-        if on_conflict == 'skip':
-            part_path.unlink(missing_ok=True); return {'ok': True, 'done': True, 'saved': None}
-        elif on_conflict == 'coexist':
-            dest_path = dest_dir / _coexist_name(dest_dir, safe_name)
-        elif on_conflict == 'overwrite':
-            try: dest_path.unlink()
-            except OSError: pass
-    part_path.rename(dest_path)
-    return {'ok': True, 'done': True, 'saved': dest_path.name}
+        raise HTTPException(status_code=500, detail="Failed to write chunk")
+    if written != length:
+        raise HTTPException(status_code=400, detail=f"Expected {length} bytes, received {written}")
+
+    async with _upload_lock:
+        meta = _load_upload_meta(meta_path, total)
+        meta['ranges'] = _merge_range(meta['ranges'], offset, offset + length)
+        if not _range_covered(meta['ranges'], 0, total):
+            _save_upload_meta(meta_path, meta)
+            return {'ok': True, 'done': False, 'offset': _ranges_total(meta['ranges'])}
+        final_dest = dest_path
+        if final_dest.exists():
+            if on_conflict == 'skip':
+                part_path.unlink(missing_ok=True); meta_path.unlink(missing_ok=True)
+                return {'ok': True, 'done': True, 'saved': None}
+            elif on_conflict == 'coexist':
+                final_dest = dest_dir / _coexist_name(dest_dir, safe_name)
+            elif on_conflict == 'overwrite':
+                try: final_dest.unlink()
+                except OSError: pass
+        part_path.rename(final_dest)
+        meta_path.unlink(missing_ok=True)
+        return {'ok': True, 'done': True, 'saved': final_dest.name}
 
 
 # ── fs services ───────────────────────────────────────────────────────────────
