@@ -124,11 +124,9 @@ async function loadSchema() {
     const res = await dataframeApi.getSchema(props.file.path)
     schema.value     = res.data.columns.map((c, i) => ({ name: c, dtype: res.data.dtypes[i] }))
     schemaTree.value = res.data.schema_tree ?? []
+    imageCols.value  = Object.fromEntries((res.data.image_cols ?? []).map(({ col, kind }) => [col, kind]))
     updateEditorSchema(res.data.columns)
   } catch {}
-  dataframeApi.detectImageCols(props.file.path)
-    .then(res => { imageCols.value = Object.fromEntries(res.data.image_cols.map(({ col, kind }) => [col, kind])) })
-    .catch(() => {})
 }
 
 async function loadParquet() {

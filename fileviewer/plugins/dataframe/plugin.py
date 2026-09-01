@@ -1,6 +1,7 @@
 import asyncio
 import math
 import re
+from collections import OrderedDict
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -68,14 +69,29 @@ def get_lazy_frame(abs_path: str) -> pl.LazyFrame:
     return _load_lazy_frame(abs_path, mtime)
 
 
+_SCHEMA_CACHE_MAXSIZE = 32
+_schema_cache: "OrderedDict[tuple[str, float], dict]" = OrderedDict()
+
+
 @router.get("/schema")
-def get_schema(path: str = Query(...)):
+async def get_schema(path: str = Query(...)):
     file_path = validate_path(path)
     try:
-        lf = get_lazy_frame(str(file_path))
+        abs_path = str(file_path)
+        cache_key = (abs_path, file_path.stat().st_mtime)
+        cached = _schema_cache.get(cache_key)
+        if cached is not None:
+            _schema_cache.move_to_end(cache_key)
+            return cached
+        lf = get_lazy_frame(abs_path)
         schema = lf.collect_schema()
-        return {"columns": list(schema.keys()), "dtypes": [str(v) for v in schema.values()],
-                "schema_tree": schema_to_tree(schema)}
+        image_cols = await _detect_image_cols(lf, schema, file_path.parent)
+        result = {"columns": list(schema.keys()), "dtypes": [str(v) for v in schema.values()],
+                  "schema_tree": schema_to_tree(schema), "image_cols": image_cols}
+        _schema_cache[cache_key] = result
+        if len(_schema_cache) > _SCHEMA_CACHE_MAXSIZE:
+            _schema_cache.popitem(last=False)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -131,58 +147,36 @@ async def _is_image_url(url: str) -> bool:
         return False
 
 
-async def _classify_image_col(vals: list[str], base_dir: Path) -> str | None:
-    path_hits = 0
-    url_vals = []
-    for v in vals:
-        v = v.strip()
-        if v.startswith(("http://", "https://")):
-            url_vals.append(v)
-        else:
-            p = Path(v)
-            if not p.is_absolute():
-                p = base_dir / p
-            if p.suffix.lower() in IMAGE_EXTENSIONS and p.is_file():
-                try:
-                    validate_abs_path(str(p))
-                    path_hits += 1
-                except Exception:
-                    pass
-    url_checks = await asyncio.gather(*[_is_image_url(u) for u in url_vals])
-    url_hits = sum(url_checks)
-    total = len(vals)
-    if total == 0:
-        return None
-    if path_hits / total >= 0.5:
-        return "path"
-    if url_hits / total >= 0.5:
-        return "url"
+async def _classify_image_val(val: str, base_dir: Path) -> str | None:
+    val = val.strip()
+    if val.startswith(("http://", "https://")):
+        return "url" if await _is_image_url(val) else None
+    p = Path(val)
+    if not p.is_absolute():
+        p = base_dir / p
+    if p.suffix.lower() in IMAGE_EXTENSIONS and p.is_file():
+        try:
+            validate_abs_path(str(p))
+            return "path"
+        except Exception:
+            return None
     return None
 
 
-@router.get("/detect-image-cols")
-async def detect_image_cols(path: str = Query(...)):
-    file_path = validate_path(path)
-    try:
-        base_dir = file_path.parent
-        lf = get_lazy_frame(str(file_path))
-        schema = lf.collect_schema()
-        str_cols = [c for c, t in schema.items() if t == pl.String]
-        if not str_cols:
-            return {"image_cols": []}
+async def _detect_image_cols(lf: pl.LazyFrame, schema, base_dir: Path) -> list[dict]:
+    str_cols = [c for c, t in schema.items() if t == pl.String]
+    if not str_cols:
+        return []
 
-        async def classify_col(col: str) -> tuple[str, str | None]:
-            sample = lf.select(col).drop_nulls().limit(10).collect()[col].to_list()
-            vals = [v for v in sample if isinstance(v, str) and v.strip()]
-            if not vals:
-                return col, None
-            return col, await _classify_image_col(vals, base_dir)
+    async def classify_col(col: str) -> tuple[str, str | None]:
+        sample = lf.select(col).drop_nulls().limit(1).collect()[col].to_list()
+        vals = [v for v in sample if isinstance(v, str) and v.strip()]
+        if not vals:
+            return col, None
+        return col, await _classify_image_val(vals[0], base_dir)
 
-        results = await asyncio.gather(*[classify_col(col) for col in str_cols])
-        image_cols = [{"col": col, "kind": kind} for col, kind in results if kind]
-        return {"image_cols": image_cols}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    results = await asyncio.gather(*[classify_col(col) for col in str_cols])
+    return [{"col": col, "kind": kind} for col, kind in results if kind]
 
 
 async def setup(ctx):
