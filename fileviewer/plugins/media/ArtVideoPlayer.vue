@@ -64,7 +64,7 @@ const japanese = {
 }
 
 function artLang() {
-  const lang = String(locaffprobele.value || '').toLowerCase()
+  const lang = String(locale.value || '').toLowerCase()
   if (lang.startsWith('zh-tw') || lang.startsWith('zh-hk')) return 'zh-tw'
   if (lang.startsWith('zh')) return 'zh-cn'
   if (lang.startsWith('ja')) return 'ja'

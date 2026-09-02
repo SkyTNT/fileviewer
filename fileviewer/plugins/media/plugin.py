@@ -265,13 +265,18 @@ def _find_subtitle_files(path, entry_path: str) -> list:
 
 
 def _find_font_files(path, entry_path: str) -> list:
-    """Find fonts beside a video, including fonts kept in nested subdirectories."""
+    """Find fonts beside a video and at most one directory level below it."""
     from urllib.parse import quote
     parent = path.parent
     entry_parent = entry_path.rsplit('/', 1)[0] if '/' in entry_path else ''
     result = []
     try:
-        for font_path in sorted(parent.rglob('*')):
+        children = list(parent.iterdir())
+        candidates = [child for child in children if child.is_file()]
+        for child in children:
+            if child.is_dir():
+                candidates.extend(nested for nested in child.iterdir() if nested.is_file())
+        for font_path in sorted(candidates):
             if not font_path.is_file() or font_path.suffix.lower() not in FONT_MIME_TYPES:
                 continue
             relative_path = font_path.relative_to(parent).as_posix()
