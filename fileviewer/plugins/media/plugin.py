@@ -107,7 +107,7 @@ def _generate_media_thumbnail(path: str, suffix: str, size: int, mtime: float) -
 BITMAP_SUB_CODECS = {'dvd_subtitle', 'hdmv_pgs_subtitle', 'dvbsub', 'xsub', 'dvb_teletext'}
 
 
-@cached("media_video_info", maxsize=256, disk_size_limit_mb=16)
+@cached("media_video_info_v2", maxsize=256, disk_size_limit_mb=16)
 def _video_info_sync(path: str, mtime: float) -> dict:
     try:
         import json as _json
@@ -136,7 +136,12 @@ def _video_info_sync(path: str, mtime: float) -> dict:
                 lang  = tags.get('language') or tags.get('lang') or ''
                 title = tags.get('title') or tags.get('handler_name') or ''
                 label = title or lang or f'Track {len(sub_streams) + 1}'
-                sub_streams.append({'index': stream['index'], 'lang': lang, 'label': label})
+                sub_streams.append({
+                    'index': stream['index'],
+                    'lang': lang,
+                    'label': label,
+                    'type': 'ass' if codec in {'ass', 'ssa'} else 'vtt',
+                })
         if 'duration' not in info:
             dur = data.get('format', {}).get('duration')
             if dur:
@@ -184,6 +189,13 @@ def _audio_info_sync(path: str, mtime: float) -> dict:
 
 
 SUBTITLE_EXTS = {'.srt', '.vtt', '.ass', '.ssa'}
+FONT_MIME_TYPES = {
+    '.ttf': 'font/ttf',
+    '.otf': 'font/otf',
+    '.ttc': 'font/collection',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
+}
 
 
 def _srt_to_vtt(text: str) -> str:
@@ -243,15 +255,38 @@ def _find_subtitle_files(path, entry_path: str) -> list:
                 result.append({
                     'label': label,
                     'lang': '' if lang == 'und' else lang,
-                    'url': f'/api/media/subtitle?path={quote(sub_path, safe="")}',
+                    'type': 'ass' if f.suffix.lower() in {'.ass', '.ssa'} else 'vtt',
+                    'url': (f'/api/media/subtitle?path={quote(sub_path, safe="")}'
+                            + ('&raw=1' if f.suffix.lower() in {'.ass', '.ssa'} else '')),
                 })
     except Exception:
         pass
     return result
 
 
+def _find_font_files(path, entry_path: str) -> list:
+    """Find fonts beside a video, including fonts kept in nested subdirectories."""
+    from urllib.parse import quote
+    parent = path.parent
+    entry_parent = entry_path.rsplit('/', 1)[0] if '/' in entry_path else ''
+    result = []
+    try:
+        for font_path in sorted(parent.rglob('*')):
+            if not font_path.is_file() or font_path.suffix.lower() not in FONT_MIME_TYPES:
+                continue
+            relative_path = font_path.relative_to(parent).as_posix()
+            font_entry_path = f'{entry_parent}/{relative_path}' if entry_parent else relative_path
+            result.append({
+                'name': font_path.name,
+                'url': f'/api/media/font?path={quote(font_entry_path, safe="")}',
+            })
+    except Exception:
+        pass
+    return result
+
+
 @router.get("/subtitle")
-def get_subtitle(path: str = Query(...), stream: int = Query(None)):
+def get_subtitle(path: str = Query(...), stream: int = Query(None), raw: bool = Query(False)):
     file_path = validate_path(path)
     suffix = file_path.suffix.lower()
 
@@ -259,14 +294,18 @@ def get_subtitle(path: str = Query(...), stream: int = Query(None)):
         if suffix not in VIDEO_MIME_TYPES:
             raise HTTPException(status_code=400, detail="Not a video file")
         try:
+            output_format = 'ass' if raw else 'webvtt'
             r = subprocess.run(
                 ['ffmpeg', '-i', str(file_path),
-                 '-map', f'0:{stream}', '-f', 'webvtt', 'pipe:1', '-loglevel', 'quiet'],
+                 '-map', f'0:{stream}', '-f', output_format, 'pipe:1', '-loglevel', 'quiet'],
                 capture_output=True, timeout=30,
             )
             if not r.stdout:
                 raise HTTPException(status_code=404, detail="No subtitle data")
             content = r.stdout.decode('utf-8', errors='replace')
+            if raw:
+                return Response(content=content, media_type='text/plain; charset=utf-8',
+                                headers={'Cache-Control': 'no-cache'})
             if not content.strip().startswith('WEBVTT'):
                 content = 'WEBVTT\n\n' + content
             return Response(content=content, media_type='text/vtt; charset=utf-8',
@@ -280,6 +319,9 @@ def get_subtitle(path: str = Query(...), stream: int = Query(None)):
         raise HTTPException(status_code=400, detail="Not a subtitle file")
     try:
         text = file_path.read_text(encoding='utf-8-sig', errors='replace')
+        if raw and suffix in {'.ass', '.ssa'}:
+            return Response(content=text, media_type='text/plain; charset=utf-8',
+                            headers={'Cache-Control': 'no-cache'})
         if suffix == '.vtt':
             content = text
         elif suffix == '.srt':
@@ -294,6 +336,19 @@ def get_subtitle(path: str = Query(...), stream: int = Query(None)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/font")
+def get_font(path: str = Query(...)):
+    font_path = validate_path(path)
+    media_type = FONT_MIME_TYPES.get(font_path.suffix.lower())
+    if not media_type or not font_path.is_file():
+        raise HTTPException(status_code=404, detail="Font not found")
+    return FileResponse(
+        str(font_path),
+        media_type=media_type,
+        headers={'Cache-Control': 'public, max-age=3600'},
+    )
+
+
 def _video_entry_enricher(path, entry_path: str, mtime: float) -> dict:
     from urllib.parse import quote
     info = _video_info_sync(str(path), mtime)
@@ -303,14 +358,20 @@ def _video_entry_enricher(path, entry_path: str, mtime: float) -> dict:
     }
     subs = []
     for s in info.get('_sub_streams', []):
+        subtitle_type = s.get('type', 'vtt')
         subs.append({
             'label': s['label'],
             'lang':  s['lang'],
-            'url':   f'/api/media/subtitle?path={quote(entry_path, safe="")}&stream={s["index"]}',
+            'type':  subtitle_type,
+            'url':   (f'/api/media/subtitle?path={quote(entry_path, safe="")}&stream={s["index"]}'
+                      + ('&raw=1' if subtitle_type == 'ass' else '')),
         })
     subs.extend(_find_subtitle_files(path, entry_path))
     if subs:
         result['subtitles'] = subs
+    fonts = _find_font_files(path, entry_path)
+    if fonts:
+        result['fonts'] = fonts
     return result
 
 

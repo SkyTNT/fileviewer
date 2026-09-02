@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onUnmounted, inject } from 'vue'
-import { useI18n } from 'vue-i18n'
+import ArtVideoPlayer from './ArtVideoPlayer.vue'
 
 const props = defineProps({
   file:       { type: Object, required: true },
@@ -8,13 +8,12 @@ const props = defineProps({
   winManager: { type: Object, default: null },
 })
 
-const { t } = useI18n()
 const services   = inject('services')
 const mediaApi   = services?.get('media.api')
 const fileStore  = services?.get('explorer.state')
 const eventBus   = services?.get('event.bus')
 const mediaEl    = ref(null)
-const videoWrapper = ref(null)
+const artVideoPlayer = ref(null)
 
 const playing      = ref(false)
 const currentTime  = ref(0)
@@ -22,16 +21,8 @@ const duration     = ref(0)
 const volume       = ref(Number(localStorage.getItem('fv-media-volume') ?? 1))
 const muted        = ref(false)
 const buffered     = ref(0)
-const showControls = ref(true)
-const showCenterIcon = ref(false)
-const centerIconPlay = ref(false)
 const isDragging   = ref(false)
 const dragValue    = ref(0)
-const isFullscreen  = ref(false)
-const activeSubIdx  = ref(-1)
-const subMenuOpen   = ref(false)
-
-let hideTimer = null
 
 const isVideo = computed(() => {
   const ext = (props.file?.extension || '').toLowerCase()
@@ -42,7 +33,7 @@ const mediaUrl    = computed(() => props.file ? mediaApi.streamUrl(props.file.pa
 const coverUrl    = computed(() => props.file ? mediaApi.thumbnailUrl(props.file.path, 400) : '')
 const fileName    = computed(() => props.file?.name || '')
 const subtitles   = computed(() => props.file?.subtitles || [])
-const subLabel    = computed(() => activeSubIdx.value >= 0 ? (subtitles.value[activeSubIdx.value]?.label || String(activeSubIdx.value + 1)) : null)
+const fonts       = computed(() => props.file?.fonts || [])
 
 const hasCover    = ref(false)
 const coverFailed = ref(false)
@@ -82,13 +73,12 @@ function fmt(s) {
 }
 
 function togglePlay() {
+  if (isVideo.value) {
+    artVideoPlayer.value?.toggle()
+    return
+  }
   if (!mediaEl.value) return
   if (playing.value) { mediaEl.value.pause() } else { mediaEl.value.play() }
-  if (isVideo.value) {
-    centerIconPlay.value = !playing.value
-    showCenterIcon.value = true
-    setTimeout(() => { showCenterIcon.value = false }, 700)
-  }
 }
 
 function onPlay()  { playing.value = true;  if (!isVideo.value) { ensureAudioCtx(); audioCtx?.resume() } }
@@ -142,27 +132,6 @@ function toggleMute() {
   if (mediaEl.value) mediaEl.value.muted = muted.value
 }
 function onVolumeInput(e) { setVolume(Number(e.target.value)) }
-
-// ── video controls visibility ─────────────────────────
-function scheduleHide() {
-  clearTimeout(hideTimer)
-  if (playing.value) hideTimer = setTimeout(() => { showControls.value = false }, 3000)
-}
-function onMouseMove() {
-  if (!isVideo.value) return
-  showControls.value = true
-  scheduleHide()
-}
-function onMouseLeave() {
-  if (!isVideo.value) return
-  scheduleHide()
-}
-function onVideoClick(e) {
-  e.preventDefault()
-  togglePlay()
-  showControls.value = true
-  scheduleHide()
-}
 
 // ── spectrum ──────────────────────────────────────────
 const spectrumCanvas = ref(null)
@@ -238,30 +207,20 @@ function stopSpectrum() {
   animFrame = null
 }
 
-// ── fullscreen ────────────────────────────────────────
-function toggleFullscreen() {
-  if (!videoWrapper.value) return
-  document.fullscreenElement ? document.exitFullscreen() : videoWrapper.value.requestFullscreen()
-}
-function onFsChange() { isFullscreen.value = !!document.fullscreenElement }
-
-function applySubMode() {
-  const tracks = mediaEl.value?.textTracks
-  if (!tracks) return
-  for (let i = 0; i < tracks.length; i++)
-    tracks[i].mode = i === activeSubIdx.value ? 'showing' : 'hidden'
-}
-
-function selectSubtitle(idx) {
-  activeSubIdx.value = idx
-  nextTick(applySubMode)
-}
-
 function seekBy(seconds) {
+  if (isVideo.value) {
+    artVideoPlayer.value?.seekBy(seconds)
+    return
+  }
   if (!mediaEl.value) return
   const t = Math.max(0, Math.min(duration.value, mediaEl.value.currentTime + seconds))
   mediaEl.value.currentTime = t
   currentTime.value = t
+}
+
+function onArtVolume(value) {
+  volume.value = value
+  localStorage.setItem('fv-media-volume', value)
 }
 
 function onKey({ key, raw }) {
@@ -277,19 +236,15 @@ function onKey({ key, raw }) {
 
 onMounted(() => {
   nextTick(() => mediaEl.value?.load())
-  document.addEventListener('fullscreenchange', onFsChange)
   eventBus?.on('keyboard:keydown', onKey)
 })
 onUnmounted(() => {
-  document.removeEventListener('fullscreenchange', onFsChange)
-  clearTimeout(hideTimer)
   stopSpectrum()
   audioCtx?.close()
   eventBus?.off('keyboard:keydown', onKey)
 })
 watch(() => props.file, (f) => {
   playing.value = false; currentTime.value = 0; duration.value = 0
-  activeSubIdx.value = -1
   if (f) props.winManager?.setTitle(props.winId, f.name)
   nextTick(() => mediaEl.value?.load())
 })
@@ -405,119 +360,22 @@ watch(() => props.file, (f) => {
   </div>
 
   <!-- ═══════════════ VIDEO PLAYER ═══════════════ -->
-  <div
+  <ArtVideoPlayer
     v-else
-    ref="videoWrapper"
-    class="video-player"
-    :class="{ 'hide-cursor': playing && !showControls }"
-    @mousemove="onMouseMove"
-    @mouseleave="onMouseLeave"
-  >
-    <video
-      ref="mediaEl" :src="mediaUrl" class="video-el"
-      @play="onPlay" @pause="onPause"
-      @timeupdate="onTimeUpdate" @loadedmetadata="onLoaded" @ended="onEnded"
-      @click="onVideoClick"
-    >
-      <track
-        v-for="(sub, i) in subtitles" :key="sub.url"
-        kind="subtitles"
-        :srclang="sub.lang || 'und'"
-        :label="sub.label"
-        :src="sub.url"
-      />
-    </video>
-
-    <!-- center play/pause flash -->
-    <transition name="center-flash">
-      <div v-if="showCenterIcon" class="center-flash-wrap">
-        <div class="center-flash-circle">
-          <v-icon size="52" color="white">{{ centerIconPlay ? 'mdi-play' : 'mdi-pause' }}</v-icon>
-        </div>
-      </div>
-    </transition>
-
-    <!-- controls overlay -->
-    <transition name="ctrl-fade">
-      <div v-show="showControls" class="video-ctrl-wrap">
-        <div class="video-ctrl-bar">
-          <!-- seek -->
-          <div
-            class="v-seek-container"
-            @pointerdown="onSeekPointerDown"
-            @pointermove="onSeekPointerMove"
-            @pointerup="onSeekPointerUp"
-          >
-            <div class="v-seek-track">
-              <div class="v-seek-buffered" :style="{ width: bufferedPct + '%' }"/>
-              <div class="v-seek-fill" :style="{ width: progressPct + '%' }"/>
-              <div class="v-seek-thumb" :style="{ left: progressPct + '%' }"/>
-            </div>
-          </div>
-
-          <!-- bottom row -->
-          <div class="video-ctrl-row">
-            <div class="ctrl-left">
-              <v-btn icon variant="text" size="small" @click.stop="togglePlay">
-                <v-icon size="22" color="white">{{ playing ? 'mdi-pause' : 'mdi-play' }}</v-icon>
-              </v-btn>
-              <v-btn icon variant="text" size="small" @click.stop="toggleMute">
-                <v-icon size="20" color="white">{{ volumeIcon }}</v-icon>
-              </v-btn>
-              <input
-                type="range" class="vol-range vol-range--video"
-                min="0" max="100" :value="volumeValue"
-                @input="onVolumeInput" @click.stop
-              />
-              <span class="ctrl-time">{{ fmt(currentTime) }} / {{ fmt(duration) }}</span>
-            </div>
-            <div class="ctrl-right">
-              <v-menu
-                v-if="subtitles.length"
-                v-model="subMenuOpen"
-                location="top"
-                :close-on-content-click="true"
-              >
-                <template #activator="{ props: menuProps }">
-                  <v-btn
-                    icon variant="text" size="small"
-                    v-bind="menuProps"
-                    @click.stop
-                  >
-                    <v-icon size="20" :color="subLabel ? 'primary' : 'white'">mdi-closed-caption</v-icon>
-                  </v-btn>
-                </template>
-                <v-list density="compact" min-width="140">
-                  <v-list-item
-                    :active="activeSubIdx === -1"
-                    @click="selectSubtitle(-1)"
-                  >
-                    <v-list-item-title>{{ t('media.subtitleOff') }}</v-list-item-title>
-                  </v-list-item>
-                  <v-list-item
-                    v-for="(sub, i) in subtitles" :key="sub.url"
-                    :active="activeSubIdx === i"
-                    @click="selectSubtitle(i)"
-                  >
-                    <v-list-item-title>{{ sub.label || t('media.subtitleTrack', { n: i + 1 }) }}</v-list-item-title>
-                  </v-list-item>
-                </v-list>
-              </v-menu>
-              <v-btn icon variant="text" size="small" @click.stop="toggleFullscreen">
-                <v-icon size="20" color="white">{{ isFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen' }}</v-icon>
-              </v-btn>
-            </div>
-          </div>
-        </div>
-      </div>
-    </transition>
-  </div>
+    ref="artVideoPlayer"
+    :url="mediaUrl"
+    :subtitles="subtitles"
+    :fonts="fonts"
+    :volume="volume"
+    @play="playing = true"
+    @pause="playing = false"
+    @volume="onArtVolume"
+  />
 </template>
 
 <style scoped>
 /* ── shared tokens ─────────────────────────────────────── */
-.seek-container,
-.v-seek-container {
+.seek-container {
   cursor: pointer;
   user-select: none;
   touch-action: none;
@@ -854,139 +712,5 @@ watch(() => props.file, (f) => {
   border: none;
   border-radius: 50%;
   background: rgb(var(--v-theme-primary));
-}
-
-
-/* ══════════════════════════════════════════════════════════
-   VIDEO PLAYER
-══════════════════════════════════════════════════════════ */
-.video-player {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  background: #000;
-  overflow: hidden;
-}
-.video-player.hide-cursor { cursor: none; }
-
-.video-el {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-}
-
-/* center flash ──────────────────────────────── */
-.center-flash-wrap {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-.center-flash-circle {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background: rgba(0,0,0,0.45);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.center-flash-enter-active,
-.center-flash-leave-active { transition: opacity 0.25s ease, transform 0.25s ease; }
-.center-flash-enter-from   { opacity: 0; transform: scale(0.7); }
-.center-flash-leave-to     { opacity: 0; transform: scale(1.2); }
-
-/* controls overlay ──────────────────────────── */
-.video-ctrl-wrap {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: linear-gradient(transparent, rgba(0,0,0,0.72) 100%);
-  padding: 40px 16px 10px;
-}
-.ctrl-fade-enter-active,
-.ctrl-fade-leave-active { transition: opacity 0.25s ease; }
-.ctrl-fade-enter-from,
-.ctrl-fade-leave-to { opacity: 0; }
-
-/* video seek ────────────────────────────────── */
-.v-seek-container {
-  padding: 6px 0;
-  margin-bottom: 2px;
-}
-.v-seek-track {
-  position: relative;
-  height: 3px;
-  border-radius: 2px;
-  background: rgba(255,255,255,0.2);
-  transition: height 0.15s ease;
-}
-.v-seek-container:hover .v-seek-track { height: 5px; }
-
-.v-seek-buffered {
-  position: absolute;
-  inset: 0; right: auto;
-  border-radius: 2px;
-  background: rgba(255,255,255,0.28);
-}
-.v-seek-fill {
-  position: absolute;
-  inset: 0; right: auto;
-  border-radius: 2px;
-  background: rgb(var(--v-theme-primary));
-}
-.v-seek-thumb {
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%) scale(0);
-  width: 13px; height: 13px;
-  border-radius: 50%;
-  background: rgb(var(--v-theme-primary));
-  transition: transform 0.15s ease;
-  pointer-events: none;
-}
-.v-seek-container:hover .v-seek-thumb { transform: translate(-50%, -50%) scale(1); }
-
-/* video bottom row ──────────────────────────── */
-.video-ctrl-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.ctrl-left, .ctrl-right {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-.ctrl-time {
-  font-size: 12px;
-  color: rgba(255,255,255,0.85);
-  font-variant-numeric: tabular-nums;
-  margin-left: 6px;
-  white-space: nowrap;
-}
-
-.vol-range--video {
-  width: 72px;
-  background: linear-gradient(
-    to right,
-    rgb(var(--v-theme-primary)) 0%,
-    rgb(var(--v-theme-primary)) calc(v-bind(volumeValue) * 1%),
-    rgba(255,255,255,0.25) calc(v-bind(volumeValue) * 1%),
-    rgba(255,255,255,0.25) 100%
-  );
-}
-</style>
-
-<style>
-video::cue {
-  background-color: transparent;
-  color: white;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.6);
 }
 </style>

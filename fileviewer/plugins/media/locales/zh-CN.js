@@ -4,6 +4,7 @@ export default {
     title:    '标题',
     artist:   '艺术家',
     album:    '专辑',
+    subtitle:      '字幕',
     subtitleOff:   '关闭',
     subtitleTrack: '字幕 {n}',
   },
