@@ -70,6 +70,7 @@ async def _auth(request: Request, call_next):
 def get_config():
     return {
         "write_mode": os.environ.get("FILE_VIEWER_WRITE", "").lower() not in ("", "0", "false", "no"),
+        "low_memory_mode": os.environ.get("FILE_VIEWER_LOW_MEMORY", "").lower() not in ("", "0", "false", "no"),
         "roots": [
             {"slug": slug, "name": name, "disk": get_disk_usage(path)}
             for slug, name, path in get_roots()

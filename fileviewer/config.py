@@ -113,3 +113,7 @@ def require_write() -> None:
     import os
     if os.environ.get("FILE_VIEWER_WRITE", "").lower() in ("", "0", "false", "no"):
         raise HTTPException(status_code=403, detail="Write mode not enabled")
+
+
+def is_low_memory() -> bool:
+    return os.environ.get("FILE_VIEWER_LOW_MEMORY", "").lower() not in ("", "0", "false", "no")

@@ -1,8 +1,6 @@
 import asyncio
 import math
 import re
-from collections import OrderedDict
-from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -10,6 +8,7 @@ import polars as pl
 from fastapi import APIRouter, Query, HTTPException
 
 from fileviewer.config import validate_path, validate_abs_path
+from fileviewer.kernel.cache import cached, async_cached
 
 PLUGIN_ID = "dataframe"
 router = APIRouter()
@@ -35,7 +34,7 @@ def schema_to_tree(schema) -> list[dict]:
     return [_dtype_to_node(name, dtype) for name, dtype in schema.items()]
 
 
-@lru_cache(maxsize=32)
+@cached("dataframe_lazy_frame", maxsize=32, allow_disk=False)
 def _load_lazy_frame(abs_path: str, mtime: float) -> pl.LazyFrame:
     suffix = Path(abs_path).suffix.lower()
     if suffix in JSONL_EXTENSIONS:
@@ -69,29 +68,20 @@ def get_lazy_frame(abs_path: str) -> pl.LazyFrame:
     return _load_lazy_frame(abs_path, mtime)
 
 
-_SCHEMA_CACHE_MAXSIZE = 32
-_schema_cache: "OrderedDict[tuple[str, float], dict]" = OrderedDict()
+@async_cached("dataframe_schema", maxsize=32, disk_size_limit_mb=16)
+async def _compute_schema(abs_path: str, mtime: float) -> dict:
+    lf = get_lazy_frame(abs_path)
+    schema = lf.collect_schema()
+    image_cols = await _detect_image_cols(lf, schema, Path(abs_path).parent)
+    return {"columns": list(schema.keys()), "dtypes": [str(v) for v in schema.values()],
+            "schema_tree": schema_to_tree(schema), "image_cols": image_cols}
 
 
 @router.get("/schema")
 async def get_schema(path: str = Query(...)):
     file_path = validate_path(path)
     try:
-        abs_path = str(file_path)
-        cache_key = (abs_path, file_path.stat().st_mtime)
-        cached = _schema_cache.get(cache_key)
-        if cached is not None:
-            _schema_cache.move_to_end(cache_key)
-            return cached
-        lf = get_lazy_frame(abs_path)
-        schema = lf.collect_schema()
-        image_cols = await _detect_image_cols(lf, schema, file_path.parent)
-        result = {"columns": list(schema.keys()), "dtypes": [str(v) for v in schema.values()],
-                  "schema_tree": schema_to_tree(schema), "image_cols": image_cols}
-        _schema_cache[cache_key] = result
-        if len(_schema_cache) > _SCHEMA_CACHE_MAXSIZE:
-            _schema_cache.popitem(last=False)
-        return result
+        return await _compute_schema(str(file_path), file_path.stat().st_mtime)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -1,15 +1,14 @@
 import asyncio
 import io
 import struct
-from functools import lru_cache
 from pathlib import Path
 
-from async_lru import alru_cache
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response, FileResponse
 from PIL import Image
 
 from fileviewer.config import validate_path, validate_abs_path
+from fileviewer.kernel.cache import cached, async_cached
 
 PLUGIN_ID = "image"
 
@@ -39,7 +38,7 @@ _http_client = None
 router = APIRouter()
 
 
-@lru_cache(maxsize=4096)
+@cached("image_dims", maxsize=4096, disk_size_limit_mb=8)
 def _image_dims(path: str, mtime: float) -> "tuple[int, int] | None":
     try:
         with Image.open(path) as img:
@@ -62,7 +61,7 @@ def _image_entry_enricher(path, entry_path: str, mtime: float) -> dict:
     return result
 
 
-@lru_cache(maxsize=512)
+@cached("image_thumbnails", maxsize=512, disk_size_limit_mb=256)
 def _generate_thumbnail(path: str, size: int, mtime: float) -> bytes:
     if path.lower().endswith('.psd'):
         return _psd_thumbnail(path, size)
@@ -109,7 +108,7 @@ def _pil_to_jpeg(img: Image.Image, size: int) -> bytes:
     return buf.getvalue()
 
 
-@alru_cache(maxsize=32)
+@async_cached("image_url_fetch", maxsize=32, disk_size_limit_mb=128)
 async def _fetch_url(url: str) -> tuple[bytes, str]:
     resp = await _http_client.get(url)
     resp.raise_for_status()
@@ -119,7 +118,7 @@ async def _fetch_url(url: str) -> tuple[bytes, str]:
     return resp.content, ct
 
 
-@alru_cache(maxsize=128)
+@async_cached("image_url_thumbnails", maxsize=128, disk_size_limit_mb=128)
 async def _url_thumbnail(url: str, size: int) -> bytes:
     data, _ = await _fetch_url(url)
     return await asyncio.to_thread(_pil_to_jpeg_from_bytes, data, size)

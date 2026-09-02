@@ -2,13 +2,13 @@ import asyncio
 import io
 import re
 import subprocess
-from functools import lru_cache
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 from PIL import Image
 
 from fileviewer.config import validate_path
+from fileviewer.kernel.cache import cached
 
 PLUGIN_ID = "media"
 router = APIRouter()
@@ -97,7 +97,7 @@ def _audio_cover_sync(path: str, size: int) -> "bytes | None":
         return None
 
 
-@lru_cache(maxsize=256)
+@cached("media_thumbnails", maxsize=256, disk_size_limit_mb=256)
 def _generate_media_thumbnail(path: str, suffix: str, size: int, mtime: float) -> "bytes | None":
     if suffix in VIDEO_MIME_TYPES:
         return _video_thumbnail_sync(path, size)
@@ -107,7 +107,7 @@ def _generate_media_thumbnail(path: str, suffix: str, size: int, mtime: float) -
 BITMAP_SUB_CODECS = {'dvd_subtitle', 'hdmv_pgs_subtitle', 'dvbsub', 'xsub', 'dvb_teletext'}
 
 
-@lru_cache(maxsize=256)
+@cached("media_video_info", maxsize=256, disk_size_limit_mb=16)
 def _video_info_sync(path: str, mtime: float) -> dict:
     try:
         import json as _json
@@ -148,7 +148,7 @@ def _video_info_sync(path: str, mtime: float) -> dict:
         return {}
 
 
-@lru_cache(maxsize=256)
+@cached("media_audio_info", maxsize=256, disk_size_limit_mb=16)
 def _audio_info_sync(path: str, mtime: float) -> dict:
     try:
         from mutagen import File as MutagenFile

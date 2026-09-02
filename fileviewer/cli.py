@@ -13,6 +13,8 @@ def main():
     parser.add_argument("--port", type=int, default=8001)
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--write", action="store_true", help="Enable write operations")
+    parser.add_argument("--low-memory", action="store_true",
+                        help="Cache thumbnails/metadata on disk (OS temp dir) instead of in memory")
     parser.add_argument("--name", nargs="*", help="Display names for each root")
     parser.add_argument("--user", default="", help="Username for auth")
     parser.add_argument("--password", default="", help="Password for auth")
@@ -30,6 +32,8 @@ def main():
     os.environ["FILE_VIEWER_ROOTS"] = ";".join(roots)
     if args.write:
         os.environ["FILE_VIEWER_WRITE"] = "1"
+    if args.low_memory:
+        os.environ["FILE_VIEWER_LOW_MEMORY"] = "1"
     if args.user:
         os.environ["FILE_VIEWER_USER"] = args.user
     if args.password:

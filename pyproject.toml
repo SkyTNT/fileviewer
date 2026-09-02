@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fileviewer"
-version = "2.1.0"
+version = "2.2.0"
 description = "Web-based file browser and viewer with support for images, video, audio, archives, tabular data, MIDI, hex, and more"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -52,7 +52,8 @@ dependencies = [
     "tomli>=2.0; python_version < '3.11'",
     "pyzipper>=0.3",
     "psd_tools>=1.16.0",
-    "mutagen>=1.47.0"
+    "mutagen>=1.47.0",
+    "diskcache>=5.6"
 ]
 
 [project.optional-dependencies]
