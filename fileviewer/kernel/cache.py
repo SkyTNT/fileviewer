@@ -6,12 +6,46 @@ size-bounded disk cache under the OS temp directory, so large thumbnail/metadata
 caches don't grow the process's resident memory.
 """
 import functools
+import importlib.metadata
+import shutil
 import tempfile
 from pathlib import Path
 
 from fileviewer.config import is_low_memory
 
 CACHE_ROOT = Path(tempfile.gettempdir()) / "fileviewer-cache"
+
+_version_checked = False
+
+
+def _current_version() -> str:
+    try:
+        return importlib.metadata.version("fileviewer")
+    except importlib.metadata.PackageNotFoundError:
+        return "0"
+
+
+def _ensure_cache_version() -> None:
+    """Wipe the whole disk cache when it was written by a different app version.
+
+    The cache stores raw function results keyed only by (path, mtime, ...) — if a
+    cached function's return shape changes between versions, a stale entry from a
+    previous install would otherwise be served as-is after an upgrade.
+    """
+    global _version_checked
+    if _version_checked:
+        return
+    _version_checked = True
+    version_file = CACHE_ROOT / "VERSION"
+    try:
+        stored = version_file.read_text().strip() if version_file.exists() else None
+    except OSError:
+        stored = None
+    version = _current_version()
+    if stored != version:
+        shutil.rmtree(CACHE_ROOT, ignore_errors=True)
+        CACHE_ROOT.mkdir(parents=True, exist_ok=True)
+        version_file.write_text(version)
 
 
 def _make_key(args, kwargs):
@@ -20,6 +54,7 @@ def _make_key(args, kwargs):
 
 def _disk_cache(name: str, size_limit_mb: int):
     import diskcache
+    _ensure_cache_version()
     directory = CACHE_ROOT / name
     directory.mkdir(parents=True, exist_ok=True)
     return diskcache.Cache(str(directory), size_limit=size_limit_mb * 1024 * 1024,
