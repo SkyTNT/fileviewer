@@ -41,6 +41,7 @@ const imageCols    = ref({})
 const filterSql    = ref('')
 const schemaTree   = ref([])
 const imgRowHeight = ref(48)
+const colWidths    = ref({})
 
 const hasImageCols = computed(() => Object.keys(imageCols.value).length > 0)
 
@@ -103,11 +104,12 @@ onMounted(async () => {
   await loadData()
 })
 
-onUnmounted(() => { editorView?.destroy() })
+onUnmounted(() => { editorView?.destroy(); onResizeUp() })
 
 watch(() => props.file, async () => {
   page.value = 1; sortCol.value = null; sortAsc.value = true; filterSql.value = ''
   columns.value = []; rows.value = []; schema.value = []; schemaTree.value = []; imageCols.value = {}
+  colWidths.value = {}
   error.value = null
   if (editorView) editorView.dispatch({ changes: { from: 0, to: editorView.state.doc.length, insert: '' } })
   await loadData()
@@ -176,6 +178,43 @@ function displayValue(val) {
   return String(val)
 }
 
+const MIN_COL_WIDTH = 40
+
+function defaultColWidth(col) {
+  return imageCols.value[col] ? 220 : 180
+}
+
+function colWidth(col) {
+  return colWidths.value[col] ?? defaultColWidth(col)
+}
+
+let resizeCol = null
+let resizeStartX = 0
+let resizeStartWidth = 0
+
+function onResizeMove(e) {
+  if (!resizeCol) return
+  colWidths.value[resizeCol] = Math.max(MIN_COL_WIDTH, resizeStartWidth + (e.clientX - resizeStartX))
+}
+
+function onResizeUp() {
+  resizeCol = null
+  document.removeEventListener('mousemove', onResizeMove)
+  document.removeEventListener('mouseup', onResizeUp)
+  document.body.style.removeProperty('cursor')
+  document.body.style.removeProperty('user-select')
+}
+
+function startResize(e, col) {
+  resizeCol = col
+  resizeStartX = e.clientX
+  resizeStartWidth = colWidth(col)
+  document.addEventListener('mousemove', onResizeMove)
+  document.addEventListener('mouseup', onResizeUp)
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+}
+
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 
 function applyFilter() {
@@ -190,8 +229,14 @@ function clearFilter() {
 }
 
 function onSort(col) {
-  sortAsc.value = sortCol.value === col ? !sortAsc.value : true
-  sortCol.value = col; page.value = 1; loadParquet()
+  if (sortCol.value !== col) {
+    sortCol.value = col; sortAsc.value = true
+  } else if (sortAsc.value) {
+    sortAsc.value = false
+  } else {
+    sortCol.value = null; sortAsc.value = true
+  }
+  page.value = 1; loadParquet()
 }
 
 function onPageSizeChange() { page.value = 1; loadParquet() }
@@ -300,12 +345,16 @@ function openImgPreview(value) {
       <div class="table-scroll">
         <v-alert v-if="error" type="error" class="ma-4">{{ error }}</v-alert>
         <table v-else-if="rows.length" class="df-table">
+          <colgroup>
+            <col v-for="col in columns" :key="col" :style="{ width: colWidth(col) + 'px' }" />
+          </colgroup>
           <thead>
             <tr>
               <th v-for="(col, i) in columns" :key="col" :class="{ sorted: sortCol === col }" @click="onSort(col)">
                 {{ col }}
                 <span class="dtype">{{ dtypes[i] }}</span>
                 <v-icon v-if="sortCol === col" size="13" class="ml-1">{{ sortAsc ? 'mdi-arrow-up' : 'mdi-arrow-down' }}</v-icon>
+                <span class="col-resizer" @mousedown.stop.prevent="startResize($event, col)" @click.stop></span>
               </th>
             </tr>
           </thead>
@@ -384,6 +433,7 @@ function openImgPreview(value) {
 }
 .df-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 13px;
 }
@@ -395,21 +445,34 @@ function openImgPreview(value) {
   text-align: left;
   cursor: pointer;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   user-select: none;
 }
 .df-table th:hover { background: rgb(var(--v-theme-surface-variant)); }
 .df-table th.sorted { color: rgb(var(--v-theme-primary)); }
 .dtype { font-size: 10px; opacity: 0.5; margin-left: 4px; }
+.col-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 1;
+}
+.col-resizer:hover, .col-resizer:active {
+  background: rgba(var(--v-theme-primary), 0.4);
+}
 .df-table td {
   padding: 4px 12px;
   border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.5));
   white-space: nowrap;
-  max-width: 280px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.df-table td.img-col { max-width: none; overflow: visible; text-overflow: unset; padding: 2px 8px; }
+.df-table td.img-col { overflow: visible; text-overflow: unset; padding: 2px 8px; }
 .df-table tr:hover td { background: rgba(var(--v-theme-on-surface), 0.04); }
 .data-row { cursor: pointer; }
 </style>
