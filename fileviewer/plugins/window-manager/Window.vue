@@ -368,6 +368,8 @@ function stopResizeTouch() {
 }
 
 .win-content {
+  position: relative;
+  z-index: 0;
   flex: 1;
   min-height: 0;
   overflow: hidden;
