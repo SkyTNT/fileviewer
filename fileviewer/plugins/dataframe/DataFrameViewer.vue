@@ -179,9 +179,26 @@ function displayValue(val) {
 }
 
 const MIN_COL_WIDTH = 40
+const MAX_DEFAULT_COL_WIDTH = 360
+
+function estimateTextWidth(text) {
+  return Math.min(String(text).length, 60) * 7.5 + 28
+}
+
+const autoColWidths = computed(() => {
+  const widths = {}
+  const imgColWidth = Math.min(MAX_DEFAULT_COL_WIDTH, Math.max(90, imgRowHeight.value * 1.3 + 40))
+  for (const col of columns.value) {
+    if (imageCols.value[col]) { widths[col] = imgColWidth; continue }
+    let w = estimateTextWidth(col)
+    for (const row of rows.value) w = Math.max(w, estimateTextWidth(displayValue(row[col])))
+    widths[col] = Math.min(MAX_DEFAULT_COL_WIDTH, Math.max(90, w))
+  }
+  return widths
+})
 
 function defaultColWidth(col) {
-  return imageCols.value[col] ? 220 : 180
+  return autoColWidths.value[col] ?? 180
 }
 
 function colWidth(col) {
@@ -216,6 +233,10 @@ function startResize(e, col) {
 }
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
+
+// table-layout:fixed with width:auto still lets Chrome shrink-to-fit the table to
+// unbreakable cell content, ignoring <col> widths — give it an explicit numeric width instead.
+const tableWidth = computed(() => columns.value.reduce((sum, col) => sum + colWidth(col), 0))
 
 function applyFilter() {
   filterSql.value = editorView ? editorView.state.doc.toString().trim() : ''
@@ -307,7 +328,7 @@ function openImgPreview(value) {
       <v-select
         v-if="hasImageCols"
         v-model="imgRowHeight"
-        :items="[40, 64, 96, 128, 200]"
+        :items="[40, 64, 96, 128, 200, 256, 320, 400, 512]"
         :menu-props="{ zIndex: menuZ }"
         :label="t('dataframe.imgHeight')"
         density="compact" hide-details variant="outlined" style="max-width:110px"
@@ -344,7 +365,7 @@ function openImgPreview(value) {
     <div class="table-area">
       <div class="table-scroll">
         <v-alert v-if="error" type="error" class="ma-4">{{ error }}</v-alert>
-        <table v-else-if="rows.length" class="df-table">
+        <table v-else-if="rows.length" class="df-table" :style="{ width: tableWidth + 'px' }">
           <colgroup>
             <col v-for="col in columns" :key="col" :style="{ width: colWidth(col) + 'px' }" />
           </colgroup>
@@ -365,7 +386,7 @@ function openImgPreview(value) {
                   <v-tooltip :text="row[col]" location="top">
                     <template #activator="{ props: tp }">
                       <img v-bind="tp" :src="cellThumbUrl(row[col])"
-                        :style="{ height: imgRowHeight + 'px', cursor: 'pointer', borderRadius: '3px', verticalAlign: 'middle' }"
+                        :style="{ height: imgRowHeight + 'px', maxWidth: '100%', objectFit: 'contain', cursor: 'pointer', borderRadius: '3px', verticalAlign: 'middle' }"
                         @click.stop="openImgPreview(row[col])" />
                     </template>
                   </v-tooltip>
@@ -432,7 +453,6 @@ function openImgPreview(value) {
   border-width: 2px;
 }
 .df-table {
-  width: 100%;
   table-layout: fixed;
   border-collapse: collapse;
   font-size: 13px;
@@ -447,6 +467,7 @@ function openImgPreview(value) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
   border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   user-select: none;
 }
@@ -471,8 +492,9 @@ function openImgPreview(value) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
-.df-table td.img-col { overflow: visible; text-overflow: unset; padding: 2px 8px; }
+.df-table td.img-col { overflow: hidden; text-overflow: unset; padding: 2px 8px; }
 .df-table tr:hover td { background: rgba(var(--v-theme-on-surface), 0.04); }
 .data-row { cursor: pointer; }
 </style>
