@@ -17,16 +17,18 @@ All written by Claude
 ### File viewers
 - **Text** — syntax highlighting for 50+ languages via CodeMirror; inline editing with Ctrl+S save in write mode
 - **Images** — thumbnail grid, full-resolution pan/zoom viewer, side-by-side comparison slider; **image editor** with layer management, 15 drawing/selection tools (Move, Brush, Eraser, Crop, Fill, Gradient, Text, Shape, Lasso, Magic Wand, Blur, Smudge, and more), adjustments (Brightness/Contrast, Curves, Levels, Hue/Saturation, Color Balance, Exposure/Vibrance, Shadows/Highlights), WebGL-accelerated filters (Gaussian Blur, Sharpen, Noise, Vignette, Pixelate, Sepia, Emboss, Chromatic Aberration, and more), undo/redo history, export with format/quality control; **PSD** files open with full layer support
-- **Tabular data** — Parquet, CSV, JSON, JSONL powered by Polars with SQL `WHERE` filter, sorting, schema browser, image column preview, and inline image editing
+- **Tabular data** — Parquet, CSV, JSONL powered by Polars with SQL `WHERE` filter, sorting, resizable columns, dtype badges, schema browser, image column preview, and inline image editing
+- **JSON** — collapsible tree viewer for `.json` files; switch to the tabular view (and back) via **Open With**
 - **Archives** — browse zip, tar, tar.gz, tar.bz2, tar.xz, 7z, rar; random-access preview (zip/7z/rar); extract here or to subfolder; create archives with compression level and password (rar is extract-only, and needs `unrar`, `unar`, `bsdtar`, or `7z` on `PATH`)
 - **MIDI** — playback with Web Audio synthesis, oscilloscope visualization, gain control, loop mode, and download
-- **Video & audio** — HTTP range streaming
-- **Markdown** — rendered preview with source toggle
+- **Video & audio** — Artplayer-based player with HTTP range streaming, playback speed, aspect ratio, picture-in-picture, and fullscreen; subtitle track selection from embedded streams or sibling `.srt`/`.ass`/`.vtt` files, with ASS rendering and adjustable timing offset; video thumbnails and audio cover-art thumbnails (video thumbnails need `ffmpeg` on `PATH`)
+- **Markdown** — rendered preview with source toggle; local images open in the full image viewer/editor, remote `http(s)://` images render inline
 - **Hex dump** — paged hex viewer for binary files
+- **Open With** — open a file in any other viewer registered for its type, not just the default one
 
 ### File management (write mode)
 - Create, rename, delete files and directories
-- Upload via drag & drop onto the file area or file picker
+- Upload via drag & drop onto the file area or file picker; large files upload as concurrent 64MB chunks and resume from where they left off if interrupted
 - Copy/move with conflict resolution: overwrite, skip, or keep both
 - Cut/copy/paste with clipboard indicator
 - Compress files and directories into archives
@@ -49,6 +51,7 @@ All written by Claude
 - **Authentication** — optional username/password login with HttpOnly session cookies
 - **Internationalization** — English, Simplified Chinese, Traditional Chinese, Japanese
 - **Theme** — light/dark mode and customizable accent color
+- **Low-memory mode** — cache thumbnails and metadata on disk instead of in process memory, for large directories on constrained hosts
 
 ## Installation
 
@@ -79,6 +82,9 @@ fileviewer /path/to/dir --host 0.0.0.0 --port 9000
 
 # Don't auto-open browser
 fileviewer /path/to/dir --no-browser
+
+# Cache thumbnails/metadata on disk instead of in memory
+fileviewer /path/to/dir --low-memory
 ```
 
 ## CLI Options
@@ -90,15 +96,16 @@ fileviewer /path/to/dir --no-browser
 | `--host HOST` | `127.0.0.1` | Host to bind to |
 | `--port PORT` | `8001` | Port to listen on |
 | `--write` | off | Enable file write operations |
+| `--low-memory` | off | Cache thumbnails/metadata on disk (OS temp dir) instead of in memory |
 | `--user USER` | — | Username for authentication |
 | `--password PASS` | — | Password for authentication |
 | `--no-browser` | off | Do not open browser on startup |
 
 ## Tech Stack
 
-**Backend:** Python 3.10+, FastAPI, Uvicorn, Polars, Pillow, py7zr, rarfile
+**Backend:** Python 3.10+, FastAPI, Uvicorn, Polars, Pillow, py7zr, rarfile, mutagen (optional: `ffmpeg` on `PATH` for video thumbnails and burning subtitle streams to `.vtt`)
 
-**Frontend:** Vue 3, Vuetify 3, CodeMirror 6, Vite
+**Frontend:** Vue 3, Vuetify 3, CodeMirror 6, Artplayer, Vite
 
 ## Development
 
