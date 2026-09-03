@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response, FileResponse
 from PIL import Image
 
-from fileviewer.config import validate_path, validate_abs_path
+from fileviewer.config import validate_path, validate_abs_path, is_low_memory
 from fileviewer.kernel.cache import cached, async_cached, trim_memory
 
 PLUGIN_ID = "image"
@@ -50,6 +50,25 @@ _decode_semaphore = asyncio.Semaphore(_DECODE_CONCURRENCY)
 _MAX_PSD_LAYER_DIM = 4096
 _MAX_PSD_FULL_DIM = 8000
 
+# In low-memory mode, don't even attempt a thumbnail for pathologically large images —
+# concurrency limits and JPEG draft decoding reduce the damage, but a handful of these
+# in one directory can still spike memory well past what a 300px thumbnail is worth.
+# 4096x4096 (~16.8MP) is well above typical photo resolution; only applies when
+# --low-memory is active.
+_LOW_MEMORY_MAX_THUMBNAIL_PIXELS = int(os.environ.get("FILE_VIEWER_LOW_MEMORY_MAX_PIXELS", str(4096 * 4096)))
+
+
+class ThumbnailTooLargeError(Exception):
+    pass
+
+
+def _check_thumbnail_size(w: int, h: int) -> None:
+    if is_low_memory() and w * h > _LOW_MEMORY_MAX_THUMBNAIL_PIXELS:
+        raise ThumbnailTooLargeError(
+            f"{w}x{h} ({w * h} px) exceeds the low-memory thumbnail limit "
+            f"({_LOW_MEMORY_MAX_THUMBNAIL_PIXELS} px)"
+        )
+
 
 def _downscale_to_fit(img: Image.Image, max_dim: int) -> Image.Image:
     w, h = img.size
@@ -87,6 +106,7 @@ def _generate_thumbnail(path: str, size: int, mtime: float) -> bytes:
     if path.lower().endswith('.psd'):
         return _psd_thumbnail(path, size)
     with Image.open(path) as img:
+        _check_thumbnail_size(*img.size)
         _draft_for_thumbnail(img, size)
         return _pil_to_jpeg(img, size)
 
@@ -102,12 +122,16 @@ def _draft_for_thumbnail(img: Image.Image, size: int) -> None:
 def _psd_thumbnail(path: str, size: int) -> bytes:
     try:
         with Image.open(path) as img:
+            _check_thumbnail_size(*img.size)
             _draft_for_thumbnail(img, size)
             return _pil_to_jpeg(img, size)
+    except ThumbnailTooLargeError:
+        raise
     except Exception:
         pass
     from psd_tools import PSDImage
     psd = PSDImage.open(path)
+    _check_thumbnail_size(psd.width, psd.height)
     img = _downscale_to_fit(psd.composite(), _MAX_PSD_LAYER_DIM)
     return _pil_to_jpeg(img, size)
 
@@ -160,6 +184,7 @@ async def _url_thumbnail(url: str, size: int) -> bytes:
 
 def _pil_to_jpeg_from_bytes(data: bytes, size: int) -> bytes:
     with Image.open(io.BytesIO(data)) as img:
+        _check_thumbnail_size(*img.size)
         _draft_for_thumbnail(img, size)
         return _pil_to_jpeg(img, size)
 
@@ -240,7 +265,7 @@ async def get_thumbnail(request: Request, path: str = Query(...), size: int = Qu
         try:
             return Response(content=await _url_thumbnail(path, size), media_type="image/jpeg",
                             headers={"Cache-Control": "public, max-age=31536000, immutable"})
-        except ValueError as e:
+        except (ValueError, ThumbnailTooLargeError) as e:
             raise HTTPException(status_code=422, detail=str(e))
         except Exception:
             raise HTTPException(status_code=502, detail="Failed to fetch remote image")
@@ -260,6 +285,8 @@ async def get_thumbnail(request: Request, path: str = Query(...), size: int = Qu
         trim_memory()
         return Response(content=data, media_type="image/jpeg",
                         headers={"Cache-Control": "no-cache", "ETag": etag})
+    except ThumbnailTooLargeError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to generate thumbnail")
 
