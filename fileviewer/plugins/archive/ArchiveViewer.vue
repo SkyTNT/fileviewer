@@ -158,7 +158,7 @@ function fileIcon(name) {
   if (['mp3','wav','flac','ogg','m4a'].includes(ext))  return 'mdi-music-note'
   if (['json','jsonl'].includes(ext))                  return 'mdi-code-json'
   if (['pdf'].includes(ext))                           return 'mdi-file-pdf-box'
-  if (['zip','tar','gz','bz2','xz','7z'].includes(ext))return 'mdi-archive-outline'
+  if (['zip','tar','gz','bz2','xz','7z','rar'].includes(ext))return 'mdi-archive-outline'
   return 'mdi-file-outline'
 }
 

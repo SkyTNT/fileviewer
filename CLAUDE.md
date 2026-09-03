@@ -19,7 +19,7 @@ pnpm run build      # build to fileviewer/static/
 **Backend:**
 ```bash
 pip install -e .              # install CLI in editable mode
-pip install -e ".[archive]"   # include py7zr for archive support
+pip install -e ".[archive]"   # include py7zr + rarfile for archive support
 fileviewer /path --port 8001 --write  # run the app
 ```
 
@@ -64,7 +64,7 @@ index.js        # frontend: kernel plugin initialization
 manifest.js     # frontend: plugin metadata
 ```
 
-Notable backend plugins: `fs_local` (filesystem I/O), `explorer` (core browser UI), `auth`, `archive` (ZIP/TAR/7Z via py7zr), `dataframe` (CSV/Parquet/JSON/JSONL via Polars), `image` (viewer + full editor + PSD layers), `media` (audio/video streaming), `hex`, `midi` (MIDI playback/editing with Web Audio synth), `upload`.
+Notable backend plugins: `fs_local` (filesystem I/O), `explorer` (core browser UI), `auth`, `archive` (ZIP/TAR/7Z via py7zr, RAR via rarfile — extract-only, needs an `unrar`/`unar`/`bsdtar`/`7z` binary on `PATH`), `dataframe` (CSV/Parquet/JSON/JSONL via Polars), `image` (viewer + full editor + PSD layers), `media` (audio/video streaming), `hex`, `midi` (MIDI playback/editing with Web Audio synth), `upload`.
 
 Frontend-only plugins: `bookmarks` (saved directories, localStorage), `explorer`, `file-types`, `fs-ops`, `keyboard`, `layout-list`, `layout-waterfall`, `layout-switcher`, `network`, `notification`, `open-with`, `task-panel`, `theme`, `ui-kit`, `window-manager`.
 

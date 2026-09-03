@@ -57,7 +57,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-archive = ["py7zr"]
+archive = ["py7zr", "rarfile"]
 
 [project.scripts]
 fileviewer = "fileviewer.cli:main"

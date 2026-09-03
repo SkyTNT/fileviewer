@@ -19,6 +19,11 @@ try:
     ARCHIVE_EXTENSIONS.add(".7z")
 except ImportError:
     pass
+try:
+    import rarfile as _rarfile  # noqa
+    ARCHIVE_EXTENSIONS.add(".rar")
+except ImportError:
+    pass
 
 _router_module = None
 

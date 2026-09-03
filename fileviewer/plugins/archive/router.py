@@ -21,6 +21,12 @@ try:
 except ImportError:
     HAS_7Z = False
 
+try:
+    import rarfile
+    HAS_RAR = True
+except ImportError:
+    HAS_RAR = False
+
 import pyzipper
 
 _ARCHIVE_EXTS: dict[str, str] = {
@@ -35,10 +41,38 @@ _ARCHIVE_EXTS: dict[str, str] = {
 }
 if HAS_7Z:
     _ARCHIVE_EXTS['.7z'] = '7z'
+if HAS_RAR:
+    _ARCHIVE_EXTS['.rar'] = 'rar'
 
 _RANDOM_ACCESS = {'zip'}
 if HAS_7Z:
     _RANDOM_ACCESS.add('7z')
+if HAS_RAR:
+    _RANDOM_ACCESS.add('rar')
+
+# RAR is read-only — rarfile has no writer (RAR creation needs the proprietary
+# rar.exe), so 'rar' is never added to the creatable-format set in /create or
+# /capabilities.
+_RAR_PASSWORD_ERRORS = ()
+if HAS_RAR:
+    _RAR_PASSWORD_ERRORS = (rarfile.PasswordRequired, rarfile.RarWrongPassword)
+
+
+def _open_rar(p: pathlib.Path, pwd: str | None):
+    """Open a RAR archive and apply a password if given.
+
+    With header-encrypted RAR archives (WinRAR's "encrypt file names" option),
+    rarfile's default errors="stop" mode swallows the parse failure and
+    infolist() silently comes back empty instead of raising — so an
+    unattended caller would see "0 entries" rather than "password required".
+    Raise PasswordRequired explicitly for that case.
+    """
+    rf = rarfile.RarFile(p)
+    if pwd:
+        rf.setpassword(pwd)
+    elif rf.needs_password() and not rf.infolist():
+        raise rarfile.PasswordRequired('Password required')
+    return rf
 
 
 def _file_size(p: pathlib.Path) -> int:
@@ -127,6 +161,28 @@ def _list_7z(p: pathlib.Path, pwd: str | None) -> list[dict]:
         raise HTTPException(400, f'Invalid 7Z file: {e}')
 
 
+def _list_rar(p: pathlib.Path, pwd: str | None) -> list[dict]:
+    try:
+        with _open_rar(p, pwd) as rf:
+            out = []
+            for info in rf.infolist():
+                dt = datetime(*info.date_time) if info.date_time else None
+                nm = pathlib.PurePosixPath(info.filename).name or info.filename
+                out.append(_entry(nm, info.filename, info.file_size or 0,
+                                  info.compress_size or 0, info.is_dir(), dt))
+            return out
+    except _RAR_PASSWORD_ERRORS:
+        raise HTTPException(422, 'Password required or incorrect')
+    except rarfile.RarCannotExec:
+        raise HTTPException(400, 'RAR support requires an external tool (unrar, unar, bsdtar, or 7-Zip) '
+                                  'installed on the server')
+    except rarfile.Error as e:
+        msg = str(e).lower()
+        if 'password' in msg:
+            raise HTTPException(422, 'Password required or incorrect')
+        raise HTTPException(400, f'Invalid RAR file: {e}')
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get('/info')
@@ -152,6 +208,12 @@ def get_info(path: str = Query(...), password: str | None = Query(None)):
             try:
                 with py7zr.SevenZipFile(p, 'r') as z:
                     encrypted = z.needs_password()
+            except Exception:
+                pass
+        elif fmt == 'rar' and HAS_RAR:
+            try:
+                with rarfile.RarFile(p) as rf:
+                    encrypted = rf.needs_password()
             except Exception:
                 pass
 
@@ -214,6 +276,31 @@ def get_info(path: str = Query(...), password: str | None = Query(None)):
                 yield _sse({'type': 'error', 'message': f'Invalid 7Z file: {e}'})
                 return
 
+        elif fmt == 'rar' and HAS_RAR:
+            try:
+                with _open_rar(p, password) as rf:
+                    for info in rf.infolist():
+                        dt = datetime(*info.date_time) if info.date_time else None
+                        nm = pathlib.PurePosixPath(info.filename).name or info.filename
+                        yield _sse({'type': 'entry', **_entry(
+                            nm, info.filename, info.file_size or 0,
+                            info.compress_size or 0, info.is_dir(), dt)})
+                        count += 1
+            except _RAR_PASSWORD_ERRORS:
+                yield _sse({'type': 'error', 'code': 'password_required', 'message': 'Password required or incorrect'})
+                return
+            except rarfile.RarCannotExec:
+                yield _sse({'type': 'error', 'message': 'RAR support requires an external tool (unrar, unar, '
+                                                          'bsdtar, or 7-Zip) installed on the server'})
+                return
+            except rarfile.Error as e:
+                msg = str(e).lower()
+                if 'password' in msg:
+                    yield _sse({'type': 'error', 'code': 'password_required', 'message': 'Password required or incorrect'})
+                    return
+                yield _sse({'type': 'error', 'message': f'Invalid RAR file: {e}'})
+                return
+
         yield _sse({'type': 'done', 'entry_count': count})
 
     return _sse_resp(gen())
@@ -247,6 +334,8 @@ def check_conflicts(req: ConflictCheckRequest):
             entries_list = _list_tar(archive_path)
         elif fmt == '7z':
             entries_list = _list_7z(archive_path, req.password)
+        elif fmt == 'rar':
+            entries_list = _list_rar(archive_path, req.password)
         else:
             raise HTTPException(400, f'Unsupported format: {fmt}')
     except HTTPException:
@@ -318,6 +407,23 @@ def get_entry(
         except HTTPException:
             raise
         except Exception as e:
+            msg = str(e).lower()
+            if 'password' in msg:
+                raise HTTPException(422, 'Password required or incorrect')
+            raise HTTPException(400, str(e))
+
+    elif fmt == 'rar':
+        try:
+            with _open_rar(p, password) as rf:
+                content = rf.read(entry_clean)
+        except rarfile.NoRarEntry:
+            raise HTTPException(404, 'Entry not found')
+        except _RAR_PASSWORD_ERRORS:
+            raise HTTPException(422, 'Password required or incorrect')
+        except rarfile.RarCannotExec:
+            raise HTTPException(400, 'RAR support requires an external tool (unrar, unar, bsdtar, or 7-Zip) '
+                                      'installed on the server')
+        except rarfile.Error as e:
             msg = str(e).lower()
             if 'password' in msg:
                 raise HTTPException(422, 'Password required or incorrect')
@@ -433,6 +539,8 @@ def extract(req: ExtractRequest, _: None = Depends(require_write)):
                 yield from _do_extract_tar(archive_path, dest_path, req.entries, cs, cancelled)
             elif fmt == '7z':
                 yield from _do_extract_7z(archive_path, dest_path, req.password, req.entries, cs, cancelled)
+            elif fmt == 'rar':
+                yield from _do_extract_rar(archive_path, dest_path, req.password, req.entries, cs, cancelled)
             else:
                 yield _sse({'type': 'error', 'message': f'Unsupported format: {fmt}'})
         except Exception as e:
@@ -696,6 +804,68 @@ def _do_extract_7z(arc, dest, pwd, filt, strategy='overwrite', cancelled: thread
             except Exception as e:
                 yield _sse({'type': 'error', 'done': done, 'total': total,
                             'name': m.filename, 'message': str(e)})
+
+
+def _do_extract_rar(arc, dest, pwd, filt, strategy='overwrite', cancelled: threading.Event | None = None):
+    try:
+        with _open_rar(arc, pwd) as rf:
+            members = rf.infolist()
+            if filt is not None:
+                members = [m for m in members if _matches(m.filename, filt)]
+            total = len(members)
+            bytes_total = sum(m.file_size or 0 for m in members if not m.is_dir())
+            bytes_done = 0
+
+            for i, m in enumerate(members):
+                if cancelled is not None and cancelled.is_set():
+                    break
+                if m.is_dir():
+                    dir_path = (dest / pathlib.PurePosixPath(m.filename)).resolve()
+                    try:
+                        dir_path.relative_to(dest.resolve())
+                        dir_path.mkdir(parents=True, exist_ok=True)
+                    except ValueError:
+                        pass  # skip traversal attempt
+                    yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.filename,
+                                'bytes_done': bytes_done, 'bytes_total': bytes_total})
+                    continue
+
+                if strategy == 'overwrite':
+                    try:
+                        rf.extract(m, path=str(dest))
+                        bytes_done += m.file_size or 0
+                        yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.filename,
+                                    'bytes_done': bytes_done, 'bytes_total': bytes_total})
+                    except Exception as e:
+                        yield _sse({'type': 'error', 'done': i + 1, 'total': total,
+                                    'name': m.filename, 'message': str(e)})
+                else:
+                    out = _resolve_dest(dest, m.filename, strategy)
+                    if out is None:
+                        yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.filename,
+                                    'bytes_done': bytes_done, 'bytes_total': bytes_total})
+                        continue
+                    try:
+                        data = rf.read(m)
+                        out.parent.mkdir(parents=True, exist_ok=True)
+                        out.write_bytes(data)
+                        bytes_done += m.file_size or 0
+                        yield _sse({'type': 'progress', 'done': i + 1, 'total': total, 'name': m.filename,
+                                    'bytes_done': bytes_done, 'bytes_total': bytes_total})
+                    except Exception as e:
+                        yield _sse({'type': 'error', 'done': i + 1, 'total': total,
+                                    'name': m.filename, 'message': str(e)})
+    except _RAR_PASSWORD_ERRORS:
+        yield _sse({'type': 'error', 'code': 'password_required', 'message': 'Password required or incorrect'})
+    except rarfile.RarCannotExec:
+        yield _sse({'type': 'error', 'message': 'RAR support requires an external tool (unrar, unar, bsdtar, '
+                                                  'or 7-Zip) installed on the server'})
+    except rarfile.Error as e:
+        msg = str(e).lower()
+        if 'password' in msg:
+            yield _sse({'type': 'error', 'code': 'password_required', 'message': 'Password required or incorrect'})
+        else:
+            yield _sse({'type': 'error', 'message': str(e)})
 
 
 # ── Create ────────────────────────────────────────────────────────────────────
