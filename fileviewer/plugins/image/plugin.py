@@ -1,5 +1,6 @@
 import asyncio
 import io
+import os
 import struct
 from pathlib import Path
 
@@ -8,7 +9,7 @@ from fastapi.responses import Response, FileResponse
 from PIL import Image
 
 from fileviewer.config import validate_path, validate_abs_path
-from fileviewer.kernel.cache import cached, async_cached
+from fileviewer.kernel.cache import cached, async_cached, trim_memory
 
 PLUGIN_ID = "image"
 
@@ -36,6 +37,26 @@ PSD_BLEND_MODES = {
 
 _http_client = None
 router = APIRouter()
+
+# Decoding a full-resolution image (or PSD composite) can transiently hold tens of MB
+# of raw pixel data; asyncio.to_thread has no concurrency cap of its own, so without
+# this a directory of large photos loading thumbnails in parallel can spike memory by
+# gigabytes. Bound how many decodes run at once instead.
+_DECODE_CONCURRENCY = max(1, int(os.environ.get("FILE_VIEWER_IMAGE_CONCURRENCY", "4")))
+_decode_semaphore = asyncio.Semaphore(_DECODE_CONCURRENCY)
+
+# Cap resolution when materializing PSD composites: a flattened preview or a single
+# layer can be far larger than any screen needs, and PSD canvases/layers can be huge.
+_MAX_PSD_LAYER_DIM = 4096
+_MAX_PSD_FULL_DIM = 8000
+
+
+def _downscale_to_fit(img: Image.Image, max_dim: int) -> Image.Image:
+    w, h = img.size
+    if max(w, h) <= max_dim:
+        return img
+    scale = max_dim / max(w, h)
+    return img.resize((max(1, round(w * scale)), max(1, round(h * scale))), Image.LANCZOS)
 
 
 @cached("image_dims", maxsize=4096, disk_size_limit_mb=8)
@@ -66,18 +87,28 @@ def _generate_thumbnail(path: str, size: int, mtime: float) -> bytes:
     if path.lower().endswith('.psd'):
         return _psd_thumbnail(path, size)
     with Image.open(path) as img:
+        _draft_for_thumbnail(img, size)
         return _pil_to_jpeg(img, size)
+
+
+def _draft_for_thumbnail(img: Image.Image, size: int) -> None:
+    """For JPEG, ask the decoder to decode at a reduced resolution instead of full-size
+    then downscale — avoids materializing the full-resolution pixel buffer just to
+    immediately throw most of it away in thumbnail()."""
+    if img.format == "JPEG":
+        img.draft("RGB", (size, size))
 
 
 def _psd_thumbnail(path: str, size: int) -> bytes:
     try:
         with Image.open(path) as img:
+            _draft_for_thumbnail(img, size)
             return _pil_to_jpeg(img, size)
     except Exception:
         pass
     from psd_tools import PSDImage
     psd = PSDImage.open(path)
-    img = psd.composite()
+    img = _downscale_to_fit(psd.composite(), _MAX_PSD_LAYER_DIM)
     return _pil_to_jpeg(img, size)
 
 
@@ -121,18 +152,23 @@ async def _fetch_url(url: str) -> tuple[bytes, str]:
 @async_cached("image_url_thumbnails", maxsize=128, disk_size_limit_mb=128)
 async def _url_thumbnail(url: str, size: int) -> bytes:
     data, _ = await _fetch_url(url)
-    return await asyncio.to_thread(_pil_to_jpeg_from_bytes, data, size)
+    async with _decode_semaphore:
+        result = await asyncio.to_thread(_pil_to_jpeg_from_bytes, data, size)
+    trim_memory()
+    return result
 
 
 def _pil_to_jpeg_from_bytes(data: bytes, size: int) -> bytes:
     with Image.open(io.BytesIO(data)) as img:
+        _draft_for_thumbnail(img, size)
         return _pil_to_jpeg(img, size)
 
 
 def _psd_to_png_bytes(path: str) -> bytes:
     with Image.open(path) as img:
+        img = _downscale_to_fit(img.convert('RGBA'), _MAX_PSD_FULL_DIM)
         buf = io.BytesIO()
-        img.convert('RGBA').save(buf, 'PNG')
+        img.save(buf, 'PNG')
         return buf.getvalue()
 
 
@@ -178,6 +214,7 @@ def _extract_psd_layers_sync(path: str) -> dict:
             img = layer.composite()
             if img is None:
                 continue
+            img = _downscale_to_fit(img, _MAX_PSD_LAYER_DIM)
             blend_name = layer.blend_mode.name if hasattr(layer.blend_mode, 'name') else 'NORMAL'
             buf = io.BytesIO()
             img.convert('RGBA').save(buf, 'PNG')
@@ -218,7 +255,9 @@ async def get_thumbnail(request: Request, path: str = Query(...), size: int = Qu
         etag = f'"{mtime}"'
         if request.headers.get("if-none-match") == etag:
             return Response(status_code=304)
-        data = await asyncio.to_thread(_generate_thumbnail, str(file_path), size, mtime)
+        async with _decode_semaphore:
+            data = await asyncio.to_thread(_generate_thumbnail, str(file_path), size, mtime)
+        trim_memory()
         return Response(content=data, media_type="image/jpeg",
                         headers={"Cache-Control": "no-cache", "ETag": etag})
     except Exception:
@@ -241,7 +280,9 @@ async def get_full_image(path: str = Query(...)):
         raise HTTPException(status_code=404, detail="File not found")
     if file_path.suffix.lower() == ".psd":
         try:
-            data = await asyncio.to_thread(_psd_to_png_bytes, str(file_path))
+            async with _decode_semaphore:
+                data = await asyncio.to_thread(_psd_to_png_bytes, str(file_path))
+            trim_memory()
             return Response(content=data, media_type="image/png", headers={"Cache-Control": "no-cache"})
         except Exception:
             raise HTTPException(status_code=500, detail="Failed to render PSD")
@@ -255,7 +296,9 @@ async def get_psd_layers(path: str = Query(...)):
     if file_path is None or file_path.suffix.lower() != '.psd':
         raise HTTPException(status_code=400, detail="Not a valid PSD file")
     try:
-        result = await asyncio.to_thread(_extract_psd_layers_sync, str(file_path))
+        async with _decode_semaphore:
+            result = await asyncio.to_thread(_extract_psd_layers_sync, str(file_path))
+        trim_memory()
         return result
     except ImportError:
         raise HTTPException(status_code=500, detail="psd-tools is not installed. Run: pip install psd-tools")

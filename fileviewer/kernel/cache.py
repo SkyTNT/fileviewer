@@ -5,8 +5,10 @@ In low-memory mode (`FILE_VIEWER_LOW_MEMORY`), cached values are instead kept in
 size-bounded disk cache under the OS temp directory, so large thumbnail/metadata
 caches don't grow the process's resident memory.
 """
+import ctypes
 import functools
 import importlib.metadata
+import platform
 import shutil
 import tempfile
 from pathlib import Path
@@ -16,6 +18,36 @@ from fileviewer.config import is_low_memory
 CACHE_ROOT = Path(tempfile.gettempdir()) / "fileviewer-cache"
 
 _version_checked = False
+
+_libc = None
+if platform.system() == "Linux":
+    try:
+        _libc = ctypes.CDLL("libc.so.6")
+    except OSError:
+        pass
+
+
+def trim_memory() -> None:
+    """Ask glibc to release freed heap back to the OS.
+
+    After decoding a large image, glibc's malloc often keeps the freed arena space
+    around instead of returning it (its mmap threshold grows dynamically, so large
+    frees just get pooled for reuse) — so RSS creeps up across requests even though
+    nothing is actually leaked at the Python level. Only worth the syscall in
+    low-memory mode, where bounded RSS is the whole point; call after any
+    large-buffer decode (image/PSD thumbnails, full-res renders).
+    """
+    global _libc
+    if _libc is None or not is_low_memory():
+        return
+    try:
+        _libc.malloc_trim(0)
+    except AttributeError:
+        # `libc.so.6` opened but has no malloc_trim export — e.g. it's actually musl
+        # (Alpine and similar), which has no `libc.so.6` soname of its own but can still
+        # resolve that name to something else, and doesn't implement this glibc-only
+        # extension at all. Disable permanently rather than retrying every call.
+        _libc = None
 
 
 def _current_version() -> str:
