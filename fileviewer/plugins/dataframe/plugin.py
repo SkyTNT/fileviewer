@@ -19,6 +19,9 @@ JSON_EXTENSIONS    = {".json"}
 CSV_EXTENSIONS     = {".csv"}
 IMAGE_EXTENSIONS   = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".svg"}
 
+MAX_SAFE_INT = 2 ** 53 - 1
+MIN_SAFE_INT = -MAX_SAFE_INT
+
 _http_client = None
 
 
@@ -121,6 +124,10 @@ def get_data(
         for row in data:
             for k, v in row.items():
                 if isinstance(v, float) and not math.isfinite(v):
+                    row[k] = str(v)
+                elif isinstance(v, int) and not isinstance(v, bool) and not (MIN_SAFE_INT <= v <= MAX_SAFE_INT):
+                    # JS numbers are IEEE-754 doubles; integers beyond +/-2^53 lose precision
+                    # when parsed by the frontend, so send them as strings instead.
                     row[k] = str(v)
         return {"total": total, "page": page, "page_size": page_size,
                 "columns": chunk.columns, "dtypes": [str(dt) for dt in chunk.dtypes], "data": data}
